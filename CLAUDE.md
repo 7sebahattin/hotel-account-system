@@ -280,7 +280,7 @@ Index: `(company_id, entry_date)`, `(source_type, source_id)`.
 | id | bigint PK |
 | user_id | FK users null |
 | user_name | varchar(150) — snapshot |
-| event | varchar(30) — `created`, `updated`, `deleted`, `login`, `login_failed`, `logout`, `cancelled`, `exported` |
+| event | varchar(30) — `created`, `updated`, `deleted`, `restored`, `login`, `logout`, `login_failed`, `cancelled`, `exported`, `permission_changed` |
 | auditable_type | varchar(50) — morph map |
 | auditable_id | bigint null |
 | old_values | json null |
@@ -346,7 +346,22 @@ Pozitif = firma bize borçlu. **Önbelleklenmiş `balance` kolonu V1'de yoktur.*
 3. **Query kapsamı** — Personel listelerinde `created_by` daraltması
 4. **Blade `@can`** — finansal alan/kolonların gizlenmesi
 
-`Gate::before` ile `admin` rolü her yetkiyi geçer. Tek istisna: **audit log silme yetkisi hiç kimsede yoktur.**
+`Gate::before` ile `admin` rolü yetki kontrollerini geçer — ancak **yalnızca argümansız
+yetki kontrolleri için** (ör. `can:users.manage` middleware'i).
+
+**Model/kayıt argümanı taşıyan Policy yetenekleri kısa devre YAPILMAZ.** Bu kritik bir
+ayrımdır: blanket `Gate::before`, admin için tüm Policy'leri devre dışı bırakır ve
+"kullanıcı kendi hesabını silemez", "sistem rolü silinemez" gibi kayıt bazlı kurallar
+admin'de hiç çalışmaz. Bu davranış testle doğrulanmıştır.
+
+Buradan çıkan kural: **erişimi kaybettirebilecek iş kuralları Policy'ye ek olarak
+Service katmanında da uygulanır.** Policy kullanıcı arayüzünü ve HTTP'yi korur;
+Service son savunmadır.
+
+İki mutlak istisna:
+- **Denetim kaydı hiç kimse tarafından değiştirilemez/silinemez** — admin dahil.
+  `Gate::before` bu yeteneklerde kesin `false` döner.
+- Son aktif admin pasifleştirilemez/silinemez/rolü alınamaz (§7.5).
 
 ### 7.2 Yetki adları
 
@@ -562,10 +577,14 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 
 Sıra bağlayıcıdır; **Ledger, Stays ve Payments'tan önce yapılır.**
 
+**AuditLog Gün 11'den Gün 2'ye alınmıştır.** Denetim kaydını sonradan eklemek geçmiş
+veriyi kurtarmaz; giriş/çıkış, kullanıcı ve yetki değişiklikleri ilk günden itibaren
+kaydedilmelidir.
+
 | Gün | İş | Bitti sayılma kriteri |
 |---|---|---|
 | 1 | Laravel iskeleti, modül autoload, Tailwind/Vite, layout, **cPanel'e ilk deploy** | Boş sayfa canlıda açılıyor |
-| 2 | Auth + Users + Roles/Permissions + seeder | 3 rolle giriş yapılıyor, menüler farklı |
+| 2 | Users + Roles/Permissions + **AuditLog altyapısı** + seeder | 3 rolle giriş yapılıyor, menüler farklı, her giriş/CRUD loglanıyor |
 | 3 | Companies CRUD + arama | Gerçek firma listesi girilebiliyor |
 | 4 | **Ledger çekirdeği + testleri** (ekransız) | §12'deki 9 cari testi yeşil |
 | 5–6 | Stays CRUD + cari entegrasyonu | Konaklama → doğru debit |
@@ -573,7 +592,7 @@ Sıra bağlayıcıdır; **Ledger, Stays ve Payments'tan önce yapılır.**
 | 8 | Cari ekstre + firma bakiye listesi + yazdırma | Ekstre elle hesapla birebir tutuyor |
 | 9 | Dashboard (role duyarlı) | Personel finansal kart görmüyor |
 | 10 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
-| 11 | Basic Audit Log + PWA | Her CRUD loglanıyor, ana ekrana eklenebiliyor |
+| 11 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
 | 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
 | 13 | Yetki testleri, güvenlik sertleştirme, yedekleme cron'u | Rol matrisi testleri yeşil |
 | 14 | Canlıya alma, kullanıcı eğitimi, paralel kullanım başlangıcı | Patron ve personel gerçek veri giriyor |
@@ -633,7 +652,13 @@ Canlı dizin yerleşimi:
 └── backups/
 ```
 
+**Deploy yöntemi: GitHub Actions + FTPS. SSH erişimi zorunlu kabul edilmez.**
+Ayrıntı, gerekli GitHub Secrets listesi ve workflow taslağı: `docs/deploy-github-actions.md`.
+`develop` → staging, `main` → production; ayrı hedefler, ayrı veritabanı.
+
 Kurallar:
+- `.env` repoda tutulmaz ve deploy sırasında **asla üzerine yazılmaz**.
+- `storage/app/` (kullanıcı yüklemeleri) ve `bootstrap/cache/` deploy tarafından silinmez.
 - `.env`, `storage/`, `vendor/` **asla** `public_html` altında olmaz. Deploy sonrası `https://site/.env` isteğinin 403/404 döndüğü doğrulanır.
 - `vendor/` sunucuda `composer install` ile değil, CI'da build edilip yüklenir (bellek limiti).
 - Vite build çıktısı (`public/build`) CI'da üretilir, repoya commit edilmez.
@@ -646,8 +671,16 @@ Kurallar:
 
 ## 16. Git Akışı
 
-- Geliştirme dalı: `claude/hotel-accounting-app-architecture-ud52jk`
-- `main`'e doğrudan push yok.
+Dal yapısı:
+
+| Dal | Rolü |
+|---|---|
+| `main` | production — yalnızca yayına çıkan sürüm |
+| `develop` | staging / entegrasyon dalı |
+| `feature/*` | geliştirme dalları; `develop`'tan açılır, `develop`'a döner |
+
+- **Yeni geliştirme doğrudan `main`'e commit edilmez.**
+- `main`'e yalnızca `develop` üzerinden gelinir.
 - Commit mesajları Türkçe, kısa ve emir kipinde; tip ön ekli:
   `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
   Örnek: `feat: tahsilat iptalinde ters cari kaydı`

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Http\Requests;
 
 use App\Models\User;
+use App\Modules\AuditLog\Services\AuditLogger;
 use Illuminate\Auth\Events\Lockout;
-use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -41,27 +41,33 @@ class LoginRequest extends FormRequest
      * bilinçlidir: aksi halde yalnızca e-posta girerek bir hesabın var olup
      * olmadığı öğrenilebilirdi.
      *
+     * Her başarısız deneme denetim kaydına yazılır (CLAUDE.md §8).
+     *
      * @throws ValidationException
      */
-    public function authenticate(): void
+    public function authenticate(AuditLogger $auditLogger): void
     {
-        $this->ensureIsNotRateLimited();
+        $email = $this->string('email')->value();
+
+        $this->ensureIsNotRateLimited($auditLogger, $email);
 
         $credentials = $this->only('email', 'password');
 
         if (! Auth::validate($credentials)) {
             RateLimiter::hit($this->throttleKey());
+            $auditLogger->logFailedLogin($email);
 
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
         }
 
-        /** @var Authenticatable&User $user */
+        /** @var User $user */
         $user = Auth::getProvider()->retrieveByCredentials($credentials);
 
         if (! $user->is_active) {
             RateLimiter::hit($this->throttleKey());
+            $auditLogger->logFailedLogin($email);
 
             throw ValidationException::withMessages([
                 'email' => __('auth.inactive'),
@@ -76,13 +82,15 @@ class LoginRequest extends FormRequest
     /**
      * @throws ValidationException
      */
-    protected function ensureIsNotRateLimited(): void
+    protected function ensureIsNotRateLimited(AuditLogger $auditLogger, string $email): void
     {
         if (! RateLimiter::tooManyAttempts($this->throttleKey(), self::MAX_ATTEMPTS)) {
             return;
         }
 
         event(new Lockout($this));
+
+        $auditLogger->logFailedLogin($email);
 
         $seconds = RateLimiter::availableIn($this->throttleKey());
 

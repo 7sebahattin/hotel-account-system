@@ -1,0 +1,46 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Authorization\Database\Seeders;
+
+use App\Modules\Authorization\Enums\Permission as PermissionEnum;
+use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\Authorization\Models\Role;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
+
+/**
+ * CLAUDE.md §7.2 yetkilerini ve §7.3 rol matrisini kurar.
+ *
+ * Yeniden çalıştırılabilir: mevcut rol/yetkiler korunur, matris yeniden senkronlanır.
+ * Kullanıcıların rol atamaları bu seeder'dan etkilenmez.
+ */
+class RolePermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        foreach (PermissionEnum::values() as $name) {
+            Permission::findOrCreate($name, 'web');
+        }
+
+        // Yeni oluşturulan yetkiler spatie'nin önbelleğine yansısın; aksi halde
+        // syncPermissions() henüz görmediği yetki için PermissionDoesNotExist atar.
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        foreach (RoleName::cases() as $roleName) {
+            $role = Role::findOrCreate($roleName->value, 'web');
+
+            $role->forceFill(['is_system' => true])->save();
+
+            $role->syncPermissions(
+                array_map(fn (PermissionEnum $p) => $p->value, $roleName->permissions())
+            );
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+}

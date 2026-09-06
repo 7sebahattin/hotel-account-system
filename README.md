@@ -31,6 +31,20 @@ Varsayılan yönetici hesabı `.env` üzerinden ayarlanır
 (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`); tanımlanmazsa
 `admin@example.com` / `degistir-beni` kullanılır. **Canlıda mutlaka değiştirin.**
 
+## Claude Code on the web
+
+`.claude/hooks/session-start.sh` her oturum başında MariaDB'yi ayağa kaldırır,
+test veritabanlarını Türkçe collation ile oluşturur ve bağımlılıkları kontrol eder.
+Hook yalnızca yerel geliştirme/test ortamına dokunur; hiçbir hosting işlemi yapmaz.
+
+## Dallar
+
+| Dal | Rolü |
+|---|---|
+| `main` | production |
+| `develop` | staging / entegrasyon |
+| `feature/*` | geliştirme |
+
 ## Komutlar
 
 ```bash
@@ -52,4 +66,5 @@ Bkz. `phpunit.xml` ve CLAUDE.md §12.
 
 - [CLAUDE.md](./CLAUDE.md) — bağlayıcı proje kılavuzu
 - [docs/deploy-cpanel.md](./docs/deploy-cpanel.md) — cPanel dağıtım rehberi
+- [docs/deploy-github-actions.md](./docs/deploy-github-actions.md) — FTPS deploy mimarisi ve GitHub Secrets
 - [docs/kararlar.md](./docs/kararlar.md) — mimari kararlar ve gerekçeleri

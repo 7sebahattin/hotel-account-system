@@ -15,6 +15,10 @@
             </a>
 
             @auth
+                <div class="hidden md:block">
+                    @include('partials.nav')
+                </div>
+
                 <div class="flex items-center gap-3">
                     <span class="hidden text-sm text-slate-600 sm:inline">
                         {{ auth()->user()->name }}
@@ -31,6 +35,12 @@
             @endauth
         </div>
     </header>
+
+    @auth
+        <div class="border-b border-slate-200 bg-white px-4 pb-2 md:hidden sm:px-6">
+            @include('partials.nav')
+        </div>
+    @endauth
 
     <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
         @include('partials.flash')

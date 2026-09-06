@@ -65,3 +65,54 @@ StyleCI yerine Pint kullanılıyor.
 fazları geldiğinde oluşturulur.
 **Gerekçe:** CLAUDE.md §3.3 ve §4.1 — kullanılmayan klasör/dosya açmak yasak.
 `Core` şu anda yalnızca `ModuleServiceProvider` taban sınıfını barındırır.
+
+## K-009 · AuditLog Gün 11'den Gün 2'ye alındı
+**Bağlam:** CLAUDE.md §8 başarısız girişlerin loglanmasını istiyordu ama §14 AuditLog'u
+Gün 11'e koyuyordu; yani Gün 2–10 arasındaki tüm giriş ve yetki değişiklikleri kayıtsız kalacaktı.
+**Karar:** AuditLog altyapısı Users/Roles ile aynı fazda kuruldu.
+**Gerekçe:** Denetim kaydını sonradan eklemek geçmiş veriyi kurtarmaz. Maliyeti bir tablo,
+bir servis ve bir trait.
+
+## K-010 · `Gate::before` yalnızca argümansız yetki kontrollerinde kısa devre yapar
+**Bağlam:** CLAUDE.md §7.1 "admin her yetkiyi geçer" diyordu. Bunun düz uygulaması
+admin için **tüm Policy'leri** devre dışı bıraktı: test sırasında admin kendi hesabını
+silebildi ve sistem rolünü silme çağrısı Policy'yi atladı.
+**Karar:** `Gate::before` yalnızca argümansız yetki kontrollerini (ör. `can:users.manage`)
+kısa devre yapar. Model/kayıt argümanı taşıyan Policy yetenekleri normal akışta değerlendirilir.
+Denetim kaydının değiştirilmesi/silinmesi kesin `false` döner.
+**Ek kural:** Erişim kaybettirebilecek iş kuralları Policy'ye ek olarak Service katmanında
+da uygulanır (`SelfActionException`, `LastActiveAdminException`). Policy arayüzü ve HTTP'yi
+korur; Service son savunmadır.
+**Gerekçe:** Blanket `Gate::before` sessiz bir güvenlik açığıdır — en yetkili rolde en az
+koruma sağlar. İki test bunu somut olarak yakaladı.
+**Sonuç:** CLAUDE.md §7.1 güncellendi.
+
+## K-011 · Bir kullanıcı tek role sahiptir
+**Karar:** `UserService::assignRole()` `syncRoles([$role])` kullanır; rol değişimi eskisini kaldırır.
+**Gerekçe:** 20'den az kullanıcılı bir işletmede çoklu rol birleşimi yetki matrisini
+anlaşılmaz kılar. Admin gerektiğinde özel rol tanımlayabilir.
+**Geri alınabilir:** Çoklu rol gerekirse `syncRoles` → `assignRole` yeterli; şema değişmez.
+
+## K-012 · Denetim kaydı üç katmanda korunur
+**Karar:** (1) `audit_logs` tablosunda `updated_at` yok; (2) `AuditLog` modeli `update()` ve
+`delete()` çağrılarında exception fırlatır; (3) Policy ve `Gate::before` admin dahil herkese
+`false` döner; (4) yazma yapan hiçbir HTTP ucu yoktur.
+**Gerekçe:** CLAUDE.md'nin en katı kuralı; tek bir katmana güvenilmez. Dördü de testle doğrulandı.
+
+## K-013 · Seed verisi ortama göre değişir
+**Karar:** Rol/yetki matrisi her ortamda seed edilir. Admin hesabı `.env` üzerinden gelir.
+`patron@example.com` ve `personel@example.com` örnek hesapları **yalnızca production dışında** oluşturulur.
+**Gerekçe:** Canlıda varsayılan şifreli demo hesap bırakmak açık kapıdır.
+
+## K-014 · Deploy SSH'ya bağlı değil; FTPS + GitHub Actions
+**Karar:** Derleme GitHub Actions runner'ında, aktarım FTPS ile. `.env` ve `storage/app/`
+deploy tarafından hiç dokunulmaz. Ayrıntı: `docs/deploy-github-actions.md`.
+**Açık kalan:** SSH olmadan `migrate --force` nasıl tetiklenecek? cPanel cron + işaret dosyası
+(önerilen) veya token korumalı HTTP ucu. Karar verilmeden workflow etkinleştirilmeyecek.
+
+## K-015 · Session-start hook yalnızca yerel ortamı hazırlar
+**Karar:** `.claude/hooks/session-start.sh` MariaDB'yi kurar/başlatır, test veritabanlarını
+Türkçe collation ile oluşturur, composer/npm bağımlılıklarını ve frontend derlemesini kontrol eder,
+migration'ları uygular.
+**Sınır:** Hook hiçbir production veya hosting işlemi yapmaz — deploy yok, uzak veritabanı yok,
+dış servis çağrısı yok. Yalnızca `CLAUDE_CODE_REMOTE=true` iken çalışır.
