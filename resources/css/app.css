@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../../app/Modules/**/Resources/views/**/*.blade.php';
+
+@theme {
+    /*
+        Sistem font yığını: derleme anında veya tarayıcıda hiçbir dış servise
+        (Google/Bunny Fonts) istek atılmaz. CI ve cPanel deploy'u ağdan bağımsız kalır.
+    */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+}

@@ -23,8 +23,8 @@ Kullanıcılar: otel sahibi (Patron), yönetici (Admin), resepsiyon/muhasebe (Pe
 
 | Katman | Seçim |
 |---|---|
-| Dil | PHP 8.2+ |
-| Framework | Laravel (en güncel LTS/stabil) |
+| Dil | PHP 8.3+ (geliştirme ortamı: 8.4) |
+| Framework | **Laravel 13** |
 | Veritabanı | MySQL 8 / MariaDB 10.6+ |
 | Şablon | Blade |
 | CSS | Tailwind CSS |
@@ -153,7 +153,7 @@ app/Modules/Payments/
 └── Tests/
 ```
 
-Autoload: `composer.json` içinde `"App\\Modules\\": "app/Modules/"`.
+Autoload: `composer.json`'daki mevcut `"App\\": "app/"` eşlemesi `App\Modules\*` sınıflarını zaten kapsar. Ayrıca `"App\\Modules\\"` girdisi **eklenmez** — gereksizdir ve Composer'da "ambiguous class resolution" uyarısı üretir.
 Her modülün ServiceProvider'ı kendi route, view namespace, migration ve policy kayıtlarını yapar; `config/app.php` (veya `bootstrap/providers.php`) içinde kayıtlıdır.
 
 ### 4.2 `Core` modülü
@@ -232,7 +232,7 @@ Genel kurallar:
 | created_at / updated_at | | |
 | deleted_at | soft delete | **eklendi** — hard delete yasağı için gerekli |
 
-> `deleted_at`, kullanıcı alan listesinde yoktu; "finansal kayıtlar hard delete edilmesin" kuralını uygulayabilmek için eklendi. İstenmezse yerine `cancelled_at`/`cancelled_by` modeline geçilir.
+> `deleted_at` **onaylandı**. Cariye işlenmiş bir konaklamanın silinmesi/iptali, aynı `DB::transaction()` içinde ters ledger kaydı üretmek **zorundadır** — soft delete tek başına yeterli değildir.
 
 Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`.
 
@@ -318,7 +318,7 @@ WHERE company_id = ? AND currency = ?
 ```
 Pozitif = firma bize borçlu. **Önbelleklenmiş `balance` kolonu V1'de yoktur.**
 
-**L5.** Bakiye **para birimi bazında** hesaplanır. Farklı para birimleri **asla toplanmaz**. V1'de kur çevrimi yoktur; çok para birimli firma varsa ekstre para birimine göre gruplanır.
+**L5.** Bakiye **para birimi bazında** hesaplanır. **TRY, EUR ve GBP bakiyeleri kesinlikle tek toplamda birleştirilmez.** V1'de otomatik kur servisi ve kur çevrimi yoktur; çok para birimli firmanın ekstresi para birimine göre gruplanır ve her grup kendi bakiyesini gösterir.
 
 **L6.** Cariye yazan her işlem, kaynak kaydıyla **aynı `DB::transaction()`** içinde olur. Konaklama kaydedilip cari kaydı düşmemesi mümkün olmamalıdır.
 
@@ -524,6 +524,8 @@ Test yazılmadan merge edilmeyecek alanlar:
 
 Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 
+**Testler SQLite'ta değil, gerçek MySQL/MariaDB üzerinde koşar** (`phpunit.xml`, `hotel_account_test`). Gerekçe: SQLite'ta gerçek `DECIMAL` yoktur (NUMERIC affinity → float), `utf8mb4_turkish_ci` collation ve `RESTRICT` foreign key davranışı taklit edilemez. Cari bakiye ve Türkçe arama testleri ancak canlı ortamla aynı motorda anlam taşır.
+
 ---
 
 ## 13. Kodlama Standartları
@@ -534,7 +536,9 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 - Yetki **sadece** Policy sınıflarında. Controller içinde `if ($user->role === 'admin')` yazılmaz.
 - Model `$fillable` dar tutulur; `$guarded = []` yasak.
 - PHP enum'ları: `PaymentMethod`, `Currency`, `AuditEvent`. Serbest string sabitleri kullanılmaz.
-- Para hesabı: SQL'de `SUM()`, PHP'de `bcadd`/`bcsub`/`bccomp` veya `Money` sınıfı. **Float aritmetiği yasak.**
+- Para hesabı: SQL'de `SUM()`, PHP'de `Core\Support\Money`. **Float aritmetiği yasak.**
+  `Money` tutarı **tamsayı kuruş** olarak tutar; toplama/çıkarma/karşılaştırma tam sayı aritmetiğiyle yapılır. Veritabanında alan `DECIMAL(15,2)` kalır.
+  **`bcmath` kullanılmaz** — eklenti her ortamda bulunmayabilir (bu projenin geliştirme ortamında yoktur) ve tamsayı kuruş yaklaşımı aynı kesinliği sıfır bağımlılıkla verir.
 - Model cast: `'amount' => 'decimal:2'`, `'check_in_date' => 'date'`.
 - N+1 yok: listelerde `with()` zorunlu. `Model::preventLazyLoading(!app()->isProduction())` açık.
 - Kuyruk/queue V1'de kullanılmaz.
@@ -570,14 +574,51 @@ Sıra bağlayıcıdır; **Ledger, Stays ve Payments'tan önce yapılır.**
 | 9 | Dashboard (role duyarlı) | Personel finansal kart görmüyor |
 | 10 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
 | 11 | Basic Audit Log + PWA | Her CRUD loglanıyor, ana ekrana eklenebiliyor |
-| 12 | Mevcut Excel verisinin aktarımı (tek seferlik artisan komutu) | Açılış bakiyeleri sisteme girdi |
+| 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
 | 13 | Yetki testleri, güvenlik sertleştirme, yedekleme cron'u | Rol matrisi testleri yeşil |
 | 14 | Canlıya alma, kullanıcı eğitimi, paralel kullanım başlangıcı | Patron ve personel gerçek veri giriyor |
 
 Her gün sonu: testler yeşil → `pint` + `phpstan` temiz → commit → staging'e deploy.
 
-### Veri göçü notu
-Mevcut Excel verisi tek seferlik bir `artisan` komutu ile aktarılır (`app/Modules/Core/Console/ImportLegacyExcel.php`). Bu bir modül veya kalıcı özellik değildir; V1 sonrası silinebilir. Açılış bakiyeleri, `source_type = 'opening'` yerine **firma başına tek bir konaklama/manuel debit satırı** olarak değil, göç komutunun ürettiği `ledger_entries` satırlarıyla girilir — bu senaryo netleşmeden kod yazılmaz, kullanıcıya sorulur.
+### 14.1 Excel Veri Göçü (karar verildi)
+
+Mevcut Excel geçmişi **mümkün olduğunca tam** aktarılır. Yalnızca açılış bakiyesi aktarımı yapılmaz.
+
+**Import prensipleri:**
+
+1. Her **geçerli konaklama satırı** → bir `stay` kaydı oluşturur.
+2. Her `stay` → firma cari defterine **debit** hareketi üretir.
+3. **Ödeme tutarı ve ödeme tarihi bulunan her kayıt** → ayrı bir `payment` kaydı oluşturur.
+4. Her `payment` → firma cari defterine **credit** hareketi üretir.
+5. Tahsilat, V1'de belirli bir konaklama ile **zorunlu olarak eşleştirilmez** (allocation yok).
+6. Excel'deki **KALAN BAKİYE alanı import EDİLMEZ.** Yalnızca mutabakat/kontrol amacıyla okunur.
+7. Yeni bakiye **ledger üzerinden yeniden hesaplanır** (`SUM(debit) - SUM(credit)`).
+8. **Açılış/devir bakiyesi satırı üretilmez.** `source_type = 'opening'` gibi bir tip yoktur.
+
+**Sayfa (sheet) özel kuralları:**
+
+- **`ALACAKLAR` sayfası bir şirket sayfası değildir.** İçinde farklı şirketler bulunur;
+  ayrı mapping ve ayrı import kuralı gerektirir. Diğer sayfalarla aynı mantıkla işlenemez.
+- **`BIRDIE HOLIDAY` / `BIRDIE HOLIDAY YENİ` ve `YALIN DENTAL`** gibi sayfalarda
+  farklı para birimi kolonları vardır; her biri özel mapping gerektirir.
+  Para birimi kolonundan gelen değer `stays.currency` / `payments.currency` alanına
+  doğrudan yazılır — **çevrim yapılmaz** (§6/L5).
+
+**Kod yerleşimi:**
+
+- Import kodu, uygulamanın normal domain servislerinden **ayrı tutulur**.
+  `StayService`, `PaymentService` ve `LedgerService` içinde **hiçbir import'a özel dal bulunmaz**.
+- Import yalnızca **CLI üzerinden, kontrollü biçimde** çalıştırılır; HTTP route'u yoktur.
+- Import, cari kayıtlarını yine `LedgerService` üzerinden yazar — böylece §6'daki
+  değişmezler (append-only, tek yönlü debit/credit, transaction bütünlüğü) import için de geçerlidir.
+- Bu kod kalıcı bir modül değildir; V1 sonrası kaldırılabilir.
+
+**Mutabakat zorunluluğu:**
+
+Import tamamlandığında, her firma için hesaplanan ledger bakiyesi ile Excel'deki
+KALAN BAKİYE karşılaştırılır ve **fark raporu** üretilir. Fark varsa import kabul
+edilmez; önce fark açıklanır. Bu rapor olmadan Excel bırakılmaz.
+
 
 ---
 
