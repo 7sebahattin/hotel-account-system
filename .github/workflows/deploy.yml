@@ -46,10 +46,16 @@ permissions:
 
 env:
   TARGET_DOMAIN: lemon.derspros.com.tr
-  # FTP kökü chroot'lu DEĞİLSE beklenen tek geçerli hedef.
-  EXPECTED_ABSOLUTE_DIR: /home/derspros/lemon-app/
-  # FTP kullanıcısı /home/derspros altına hapsedilmişse beklenen tek geçerli hedef.
-  EXPECTED_CHROOT_DIR: /lemon-app/
+  # Beklenen TEK geçerli hedef.
+  #
+  # FileZilla ile doğrulandı: ana FTP hesabı /home/derspros altına
+  # chroot'ludur — uzak kökte lemon-app, lemon.derspros.com.tr,
+  # nuvernatrade.com … doğrudan görünür. Bu yüzden Lemon uygulamasının
+  # yolu köke göre /lemon-app/ olur.
+  #
+  # Bu değer, FTP hesabı değişirse BİLİNÇLİ olarak güncellenmelidir
+  # (tek satır, gözden geçirilebilir). Guard başka hiçbir değeri kabul etmez.
+  EXPECTED_DIR: /lemon-app/
   NODE_VERSION: '22'
 
 jobs:
@@ -77,19 +83,16 @@ jobs:
             exit 1
           fi
 
-          # 1) Tam eşleşme: yalnızca iki biçim kabul edilir.
-          #    Diğer her değer — hesap kökü, public_html, başka alan adı klasörü —
+          # 1) Tam eşleşme: doğrulanmış TEK değer kabul edilir.
+          #    Diğer her değer — FTP kökü, public_html, başka alan adı klasörü —
           #    bu kontrolden geçemez.
-          case "$APP_DIR" in
-            "$EXPECTED_ABSOLUTE_DIR"|"$EXPECTED_CHROOT_DIR") ;;
-            *)
-              echo "::error::LEMON_APP_DIR tanınmıyor. Yalnızca şu iki biçim kabul edilir:"
-              echo "::error::  $EXPECTED_ABSOLUTE_DIR   (FTP kökü chroot'lu DEĞİLSE)"
-              echo "::error::  $EXPECTED_CHROOT_DIR                 (FTP kökü /home/derspros ise)"
-              echo "::error::Başka bir değer, hesaptaki diğer siteleri etkileyebileceği için reddedilir."
-              fail=1
-              ;;
-          esac
+          if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+            echo "::error::LEMON_APP_DIR beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+            echo "::error::(Ana FTP hesabı /home/derspros altına chroot'ludur; Lemon uygulaması köke göre burada durur.)"
+            echo "::error::Başka bir değer, hesaptaki diğer siteleri etkileyebileceği için reddedilir."
+            echo "::error::FTP hesabı değiştiyse workflow'daki EXPECTED_DIR bilinçli olarak güncellenmelidir."
+            fail=1
+          fi
 
           # 2) Bağımsız ikinci kontrol seti. Yukarıdaki tam eşleşme bir gün
           #    gevşetilirse bunlar yine de yasak hedefleri yakalar.

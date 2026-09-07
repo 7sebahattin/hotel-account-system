@@ -598,6 +598,7 @@ gizli dosya erişim engeli ve güvenlik başlıkları (`X-Content-Type-Options`,
 şablonda X-XSRF-Token kuralı yoktu, o da kaybolmadı.
 
 ## K-064 · Hedef dizin doğrulaması fail-closed ve iki biçimle sınırlı
+> **Güncellendi: K-067 ile tek değere daraltıldı.** Aşağıdaki iki biçimli hâli tarihsel kayıttır.
 **Bağlam:** Hesapta `public_html` (derspros.com.tr) ve en az dört başka canlı site klasörü var.
 **Karar:** `guard` işi yalnızca iki değeri kabul eder: `/home/derspros/lemon-app/` (chroot yok)
 veya `/lemon-app/` (FTP kökü `/home/derspros` ise). Başka her değerde **iş durur**.
@@ -624,3 +625,30 @@ symlink, (C) git ile ileri düzeltme.
 (§6/L1) ve migration'lar ileri alınmıştır; şema değiştiren bir deploy öncesi ayrıca
 `mysqldump` alınmalıdır.
 **Uygulama:** ilk gerçek deploy öncesi, ayrı bir turda. Bu turda hiçbir şey kurulmadı.
+
+## K-067 · FTP kökü doğrulandı; guard tek hedef değerine daraltıldı
+**Bağlam:** K-064'te hedef dizin için iki biçim kabul ediliyordu, çünkü FTP hesabının
+chroot davranışı bilinmiyordu ve tahmin edilmemişti (`docs/deploy-lemon.md` §12 bir
+açık soruydu).
+**Doğrulama (kullanıcı, FileZilla):** ana FTP hesabına bağlanıldı, "TLS bağlantısı kuruldu";
+uzak kökte `lemon-app`, `lemon.derspros.com.tr`, `nuvernatrade.com` klasörleri **doğrudan**
+göründü. Yani hesap `/home/derspros` altına chroot'ludur ve Lemon uygulamasının yolu köke
+göre `/lemon-app/`'tir. Salt okunur listeleme; hiçbir dosya yüklenmedi/silinmedi/değiştirilmedi.
+**Karar:**
+1. `deploy.yml` içindeki `EXPECTED_DIR` **tek değer** olur: `/lemon-app/`.
+   `/home/derspros/lemon-app/` biçimi kaldırıldı — kabul kümesi ne kadar darsa yanlış
+   hedefe yazma olasılığı o kadar küçüktür.
+2. `LEMON_APP_DIR` variable'ının değeri kesinleşti: `/lemon-app/`.
+3. Bağımsız ikinci kontrol seti (sonu `/`, `..` yok, `public_html` yok, diğer alan adı
+   klasörleri yok, son dizin adı `lemon-app`) **aynen korunur**; tek eşleşme bir gün
+   gevşetilse bile yasak hedefler yakalanmaya devam eder.
+4. FTP hesabı değişirse `EXPECTED_DIR` **bilinçli olarak** güncellenir — tek satır,
+   gözden geçirilebilir bir değişiklik. Guard başka hiçbir değeri kabul etmez.
+**Yan bulgu — kalan yapısal risk:** ana FTP hesabı chroot'lu olduğu için hesaptaki tüm
+sitelere yazabilir; koruma yalnızca workflow düzeyindedir. Yapısal çözüm, cPanel'den
+yalnızca `/home/derspros/lemon-app` dizinine erişebilen **ayrı bir FTP hesabı** açmaktır.
+Bunun sonucu: o hesapta hedef `/lemon-app/` değil `/` olur ve `EXPECTED_DIR` ile
+"son dizin adı `lemon-app`" kontrolü yeniden düşünülmelidir. Bu yüzden bugün
+**uygulanmadı**, yalnızca önerildi (`docs/deploy-lemon.md` §12).
+**Deploy durumu değişmedi:** `DEPLOY_ENABLED` yok, varsayılan `dry-run`, yalnızca
+`workflow_dispatch`. Bu turda dry-run dahil hiçbir workflow çalıştırılmadı.

@@ -1,8 +1,10 @@
 # Lemon Deploy Hazırlığı — lemon.derspros.com.tr
 
 > **Durum: hazırlık. Hiçbir deploy yapılmadı.**
-> Hosting'e bağlanılmadı, FTP testi yapılmadı, production veritabanı
-> oluşturulmadı, cPanel'de hiçbir ayar değiştirilmedi.
+> Bu depodan/CI'dan hosting'e bağlanılmadı, hiçbir dosya yüklenmedi, silinmedi
+> veya değiştirilmedi; production veritabanı oluşturulmadı, cPanel'de hiçbir
+> ayar değiştirilmedi. FTP kökü ve FTPS desteği kullanıcı tarafından bir FTP
+> istemcisiyle **yalnızca dizin listeleyerek** doğrulanmıştır (§12).
 > `.github/workflows/deploy.yml` bu hâliyle **gerçek aktarım yapamaz** (§9).
 
 ## 0. Hedef ortam
@@ -14,6 +16,7 @@
 | Lemon DocumentRoot (**mevcut**) | `/home/derspros/lemon.derspros.com.tr` — henüz değiştirilmedi |
 | Lemon DocumentRoot (**hedef**) | `/home/derspros/lemon-app/public` — cPanel'den ELLE ayarlanacak (§11 Aşama 4) |
 | Laravel kökü | `/home/derspros/lemon-app/` |
+| FTP kökü (**doğrulandı**) | `/home/derspros` — ana FTP hesabı buraya chroot'lu. Deploy hedefi köke göre `/lemon-app/` (§12) |
 | Ana site DocumentRoot | `/home/derspros/public_html` |
 | PHP | 8.3 |
 | Aktarım | GitHub Actions → FTPS |
@@ -123,7 +126,7 @@ kontrol edebilir.
 
 | Variable | Değer |
 |---|---|
-| `LEMON_APP_DIR` | `/home/derspros/lemon-app/` — FTP kökü chroot'luysa `/lemon-app/`. **Sonunda `/` zorunlu.** Başka hiçbir değer kabul edilmez (§4.1). |
+| `LEMON_APP_DIR` | **`/lemon-app/`** — FTP kökü `/home/derspros` olduğu için köke göre yol (§12). **Sonunda `/` zorunlu.** Guard başka hiçbir değeri kabul etmez (§4.1). |
 | `TARGET_PHP_VERSION` | `8.3` |
 | `DEPLOY_ENABLED` | **Şimdi oluşturulmaz.** Gerçek deploy açılana kadar yok. |
 
@@ -161,13 +164,19 @@ bir daha hiçbir deploy onlara dokunmaz.
 ### 4.1 Hedef dizin doğrulaması — FAIL-CLOSED
 
 Hesapta **birden fazla canlı site** vardır. Yanlış bir `server-dir`, onların
-dosyalarını etkileyebilir. Workflow'un `guard` işi bu yüzden **yalnızca iki
-değeri** kabul eder ve başka her şeyde durur:
+dosyalarını etkileyebilir. FTP kökü doğrulandığı için (§12) workflow'un `guard`
+işi artık **tek bir değeri** kabul eder ve başka her şeyde durur:
 
-| Kabul edilen | Ne zaman |
+| Kabul edilen tek değer | Neden |
 |---|---|
-| `/home/derspros/lemon-app/` | FTP kökü `/` ise (chroot yok) |
-| `/lemon-app/` | FTP kullanıcısı `/home/derspros` altına hapsedilmişse |
+| `/lemon-app/` | Ana FTP hesabı `/home/derspros` altına chroot'lu; Lemon uygulaması köke göre burada durur |
+
+Daha önce `/home/derspros/lemon-app/` biçimi de kabul ediliyordu; FTP kökü
+belirsiz olduğu için iki olasılık açık tutulmuştu. Belirsizlik ortadan
+kalktığından ikinci biçim **kaldırıldı** — kabul edilen değer kümesi ne kadar
+darsa yanlış hedefe yazma olasılığı o kadar küçüktür. FTP hesabı ileride
+değişirse workflow'daki `EXPECTED_DIR` **bilinçli olarak** güncellenir: tek
+satır, gözden geçirilebilir bir değişiklik.
 
 Tam eşleşmenin yanı sıra **bağımsız ikinci bir kontrol seti** daha çalışır —
 tam eşleşme bir gün gevşetilse bile yasak hedefler yakalanır:
@@ -360,7 +369,7 @@ sorulacaktır (hosting'den yetki istemek / korumayı yeniden tasarlamak).
 Gerçek deploy ayrıca `confirm_target` alanına `lemon.derspros.com.tr` yazılmasını
 ister — yanlışlıkla tıklamayı engeller.
 
-Ek kapılar: hedef dizin kalıp doğrulaması (§0), artifact temizlik kontrolü (§4),
+Ek kapılar: hedef dizin doğrulaması (§4.1), artifact temizlik kontrolü (§4),
 `composer check-platform-reqs` (§1).
 
 ---
@@ -412,14 +421,14 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
    Çıktıyı iletin. **Bu doğrulanmadan production migration çalıştırılmaz.**
 5. **PHP eklentileri:** `mbstring, pdo_mysql, intl, zip, gd, xml, ctype,
    fileinfo, openssl, tokenizer` etkin mi?
-6. **FTP kökünü belirleyin** (§13): FTP istemcisiyle bağlanıp kök dizinde ne
-   göründüğüne bakın — `/home/derspros` içeriği mi, yoksa doğrudan
-   `public_html`, `lemon-app` gibi klasörler mi? Buna göre `LEMON_APP_DIR`
-   değerini seçin (§4.1'deki iki biçimden biri).
-7. **FTPS destekleniyor mu?** Hosting explicit FTPS (AUTH TLS) sunuyor mu?
-   Sunmuyorsa bildirin — düz FTP'de parola ağ üzerinden açık gider.
-8. **GitHub variable'ları:** `LEMON_APP_DIR` ve `TARGET_PHP_VERSION=8.3`
-   oluşturun. **`DEPLOY_ENABLED`'ı OLUŞTURMAYIN.**
+6. ~~**FTP kökünü belirleyin**~~ — **TAMAMLANDI** (§12). FileZilla ile ana FTP
+   hesabına bağlanıldı; uzak kökte `lemon-app`, `lemon.derspros.com.tr`,
+   `nuvernatrade.com` klasörleri doğrudan göründü. Kök = `/home/derspros`,
+   dolayısıyla `LEMON_APP_DIR = /lemon-app/`.
+7. ~~**FTPS destekleniyor mu?**~~ — **TAMAMLANDI.** Bağlantıda "TLS bağlantısı
+   kuruldu" doğrulandı; workflow `protocol: ftps` (explicit AUTH TLS) kullanır.
+8. **GitHub variable'ları:** `LEMON_APP_DIR=/lemon-app/` ve
+   `TARGET_PHP_VERSION=8.3` oluşturun. **`DEPLOY_ENABLED`'ı OLUŞTURMAYIN.**
 
 ### Aşama 2 — Dry-run
 
@@ -447,19 +456,44 @@ kalır ve tek bir anahtar çevirmeyle yeni uygulamaya geçer.
 
 ---
 
-## 12. FTP kökü — doğrulanması gereken nokta
+## 12. FTP kökü — ÇÖZÜLDÜ ✅
 
-`server-dir` değerinin gerçekte neye karşılık geldiği **henüz bilinmiyor**:
-FTP kullanıcısı `/home/derspros` altına hapsedilmişse (chroot) mutlak yol
-çalışmaz, göreli yol gerekir.
+> Bu bölüm daha önce bir **açık soru** idi: `server-dir` değerinin gerçekte
+> neye karşılık geldiği bilinmiyordu ve tahmin edilmemişti.
 
-**Bu turda hosting'e bağlanılmadığı için doğrulanamadı ve tahmin edilmedi.**
-`/home/derspros/lemon-app/` değeri körlemesine doğru kabul EDİLMEMİŞTİR:
-workflow her iki biçimi de tanır (§4.1) ve tanımadığı bir değerde durur.
+**Doğrulama (kullanıcı tarafından, FileZilla ile):** ana FTP hesabına bağlanıldı,
+bağlantı başarılı ve **"TLS bağlantısı kuruldu"**. Uzak sitenin kökünde (`/`)
+doğrudan `lemon-app`, `lemon.derspros.com.tr`, `nuvernatrade.com` gibi klasörler
+görünüyor.
 
-Doğrulama yolu: bir FTP istemcisiyle bağlanıp kök dizinde ne göründüğüne bakmak
-(Aşama 1/6). Dry-run çıktısı da bunu gösterir — bu yüzden ilk çalıştırma
-zorunlu olarak dry-run'dır.
+**Sonuç:**
+
+- Ana FTP hesabı `/home/derspros` altına **chroot'ludur**; mutlak yol
+  (`/home/derspros/lemon-app/`) FTP oturumunda geçerli değildir.
+- Lemon uygulamasının deploy hedefi köke göre **`/lemon-app/`** olur.
+- **FTPS (explicit AUTH TLS) desteklenmektedir**; workflow'daki
+  `protocol: ftps` seçimi doğrulanmış oldu.
+
+Buna dayanarak `guard` işi tek değere daraltıldı (§4.1) ve `LEMON_APP_DIR`
+variable'ının değeri kesinleşti (§3). Hiçbir dosya yüklenmedi, silinmedi veya
+değiştirilmedi; bu doğrulama yalnızca bir dizin listeleme işlemidir.
+
+### Kalan yapısal risk — ayrı FTP hesabı önerisi
+
+Ana FTP hesabı `/home/derspros` altına chroot'lu olduğu için **hesaptaki tüm
+sitelere yazabilir.** Guard bunu workflow düzeyinde engeller, ama koruma
+yazılımsaldır: parola sızarsa veya guard bir gün gevşetilirse teknik bir engel
+kalmaz.
+
+**Yapısal sertleştirme (öneri, uygulanmadı):** cPanel → FTP Accounts üzerinden
+yalnızca `/home/derspros/lemon-app` dizinine erişebilen **ayrı bir FTP hesabı**
+oluşturmak. O hesapla bağlanıldığında kök doğrudan uygulama dizini olur ve
+başka bir siteye ulaşmak protokol düzeyinde imkânsız hâle gelir.
+
+Bunun bir sonucu vardır: yeni hesapta hedef `/lemon-app/` değil **`/`** olur;
+`EXPECTED_DIR` ve `LEMON_APP_DIR` bilinçli olarak güncellenmelidir. Guard'daki
+"son dizin adı `lemon-app` olmalı" kontrolü de o senaryoda anlamını yitirir ve
+yeniden düşünülmelidir. Bu yüzden **bugün değiştirilmedi**; kararı size bırakıyorum.
 
 ---
 
@@ -493,8 +527,10 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 
 ## 14. Bu turda YAPILMAYANLAR
 
-- Hosting'e bağlanılmadı, FTP testi yapılmadı
-- Hiçbir dosya yüklenmedi, silinmedi, değiştirilmedi
+- Bu depodan/CI'dan hosting'e bağlanılmadı, deploy veya dry-run çalıştırılmadı
+- Hiçbir dosya yüklenmedi, silinmedi, değiştirilmedi — FTP kökü doğrulaması
+  kullanıcının FTP istemcisinde salt okunur dizin listelemesiydi (§12)
+- Ayrı (dizine kısıtlı) FTP hesabı oluşturulmadı; yalnızca önerildi (§12)
 - Workflow çalıştırılmadı
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
