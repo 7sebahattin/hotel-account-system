@@ -85,9 +85,17 @@ fi
 # --------------------------------------------------------- Bağımlılıklar
 if [ ! -f vendor/autoload.php ] || [ composer.lock -nt vendor/autoload.php ]; then
     log "Composer bağımlılıkları kuruluyor…"
-    COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-progress --quiet
+    # Bu ortamda GitHub zipball indirmeleri proxy tarafından engellenir; source'u
+    # olmayan paketlerde composer install kısmen başarısız olabilir. Aşağıdaki
+    # onarım adımı eksik kalanları git ile getirir.
+    COMPOSER_ALLOW_SUPERUSER=1 composer install --no-interaction --no-progress --quiet \
+        || log "composer install kısmen başarısız — git ile onarılacak"
 else
     log "Composer bağımlılıkları güncel"
+fi
+
+if php "$(dirname "$0")/fetch-blocked-packages.php"; then
+    COMPOSER_ALLOW_SUPERUSER=1 composer dump-autoload --quiet 2>/dev/null || true
 fi
 
 if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then

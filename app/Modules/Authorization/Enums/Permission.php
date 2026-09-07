@@ -21,6 +21,7 @@ enum Permission: string
     case CompaniesCreate = 'companies.create';
     case CompaniesUpdate = 'companies.update';
     case CompaniesDelete = 'companies.delete';
+    case CompaniesRestore = 'companies.restore';
 
     case StaysView = 'stays.view';
     case StaysCreate = 'stays.create';
@@ -46,8 +47,8 @@ enum Permission: string
         return match ($this) {
             self::UsersView, self::UsersManage => 'Kullanıcılar',
             self::RolesManage => 'Roller ve Yetkiler',
-            self::CompaniesView, self::CompaniesCreate,
-            self::CompaniesUpdate, self::CompaniesDelete => 'Firmalar',
+            self::CompaniesView, self::CompaniesCreate, self::CompaniesUpdate,
+            self::CompaniesDelete, self::CompaniesRestore => 'Firmalar',
             self::StaysView, self::StaysCreate,
             self::StaysUpdate, self::StaysDelete => 'Konaklamalar',
             self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
@@ -68,6 +69,7 @@ enum Permission: string
             self::CompaniesCreate => 'Firma ekle',
             self::CompaniesUpdate => 'Firma düzenle',
             self::CompaniesDelete => 'Firma sil',
+            self::CompaniesRestore => 'Silinmiş firmayı geri al',
             self::StaysView => 'Konaklamaları görüntüle',
             self::StaysCreate => 'Konaklama ekle',
             self::StaysUpdate => 'Konaklama düzenle',

@@ -53,7 +53,9 @@ class RoleService
     public function create(string $name, array $permissions): Role
     {
         return DB::transaction(function () use ($name, $permissions): Role {
-            $role = Role::create(['name' => $name, 'guard_name' => 'web', 'is_system' => false]);
+            // Role::create() spatie'de Contracts\Role döndürür; query()->create()
+            // proje modelinin kendi tipini verir.
+            $role = Role::query()->create(['name' => $name, 'guard_name' => 'web', 'is_system' => false]);
 
             $this->applyPermissions($role, $permissions);
 

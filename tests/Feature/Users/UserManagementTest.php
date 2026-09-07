@@ -7,6 +7,7 @@ namespace Tests\Feature\Users;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Models\AuditLog;
+use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Users\Exceptions\SelfActionException;
 use App\Modules\Users\Services\UserService;
@@ -199,8 +200,13 @@ class UserManagementTest extends TestCase
             $encoded = json_encode([$log->old_values, $log->new_values], JSON_THROW_ON_ERROR);
 
             $this->assertStringNotContainsString('cok-gizli-sifre-1', $encoded);
-            $this->assertArrayNotHasKey('password', $log->new_values ?? []);
-            $this->assertArrayNotHasKey('remember_token', $log->new_values ?? []);
+
+            // Anahtar korunur (şifre değişti bilgisi görünür), değer maskelenir.
+            foreach (['password', 'remember_token'] as $hassas) {
+                if (array_key_exists($hassas, $log->new_values ?? [])) {
+                    $this->assertSame(AuditLogger::MASK, $log->new_values[$hassas]);
+                }
+            }
         }
     }
 }

@@ -23,6 +23,19 @@ class AuditLogger
      *
      * @var array<int, string>
      */
+    /** Maskelenen alanın yerine yazılan işaret. Değerin kendisi asla kaydedilmez. */
+    public const MASK = '***';
+
+    /**
+     * Denetim anlık görüntüsünde bir metin değerinin azami uzunluğu.
+     *
+     * notes gibi uzun alanlar denetim tablosunu kontrolsüz büyütür. Sınır
+     * YALNIZCA denetim kaydına uygulanır; gerçek kayıt hiçbir zaman kesilmez.
+     */
+    public const MAX_VALUE_LENGTH = 500;
+
+    public const TRUNCATED_SUFFIX = '… (kısaltıldı)';
+
     private const MASKED = [
         'password',
         'remember_token',
@@ -42,11 +55,12 @@ class AuditLogger
         ?User $user = null,
         ?string $subjectLabel = null,
     ): AuditLog {
-        $user ??= Auth::user();
+        $user = $this->actor($user);
 
         return AuditLog::query()->create([
             'user_id' => $user?->getKey(),
-            'user_name' => $user?->name ?? $subjectLabel,
+            // ?? zaten null zincirini bastırır; ?-> gereksiz olurdu.
+            'user_name' => $user->name ?? $subjectLabel,
             'event' => $event,
             'auditable_type' => $subject?->getMorphClass(),
             'auditable_id' => $subject?->getKey(),
@@ -71,7 +85,22 @@ class AuditLogger
     }
 
     /**
-     * Hassas alanları kaldırır. Şifre alanı hash'li olsa bile loglanmaz.
+     * Oturum açmış kullanıcı. Misafir isteklerinde (ör. başarısız giriş) null döner.
+     */
+    private function actor(?User $user): ?User
+    {
+        if ($user !== null) {
+            return $user;
+        }
+
+        return Auth::check() ? Auth::user() : null;
+    }
+
+    /**
+     * Hassas alanların DEĞERİNİ maskeler, anahtarını korur.
+     *
+     * Anahtar korunur ki "şifre değiştirildi" bilgisi denetim kaydında görünsün;
+     * değer hiçbir zaman yazılmaz — hash'li hali bile.
      *
      * @param  array<string, mixed>|null  $values
      * @return array<string, mixed>|null
@@ -82,7 +111,32 @@ class AuditLogger
             return null;
         }
 
-        return array_diff_key($values, array_flip(self::MASKED));
+        foreach (self::MASKED as $key) {
+            if (array_key_exists($key, $values)) {
+                $values[$key] = self::MASK;
+            }
+        }
+
+        return $this->shorten($values);
+    }
+
+    /**
+     * Uzun metin değerlerini denetim anlık görüntüsü için kısaltır.
+     *
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private function shorten(array $values): array
+    {
+        foreach ($values as $key => $value) {
+            if (! is_string($value) || mb_strlen($value) <= self::MAX_VALUE_LENGTH) {
+                continue;
+            }
+
+            $values[$key] = mb_substr($value, 0, self::MAX_VALUE_LENGTH).self::TRUNCATED_SUFFIX;
+        }
+
+        return $values;
     }
 
     private function truncate(?string $value, int $length): ?string

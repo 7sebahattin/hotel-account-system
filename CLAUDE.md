@@ -370,7 +370,7 @@ Service son savunmadır.
 ```
 users.view, users.manage
 roles.manage
-companies.view, companies.create, companies.update, companies.delete
+companies.view, companies.create, companies.update, companies.delete, companies.restore
 stays.view, stays.create, stays.update, stays.delete
 payments.view, payments.create, payments.cancel
 ledger.view            # tek firmanın ekstresi
@@ -392,6 +392,7 @@ Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse s
 | companies.create | ✅ | ✅ | ✅ |
 | companies.update | ✅ | ✅ | ⚠️ kendi kaydı + süre |
 | companies.delete | ✅ | ✅ | ❌ |
+| companies.restore | ✅ | ❌ | ❌ |
 | stays.view | ✅ | ✅ | ✅ |
 | stays.create | ✅ | ✅ | ✅ |
 | stays.update | ✅ | ✅ | ⚠️ kendi kaydı + süre |
@@ -478,7 +479,18 @@ Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
 - Varsayılan sayfa boyutu 25, izinli değerler 25/50/100.
 - Sıralama alanları **beyaz liste** ile sınırlanır (SQL injection ve rastgele kolon sızıntısına karşı).
 - Filtreler sayfa yenilendiğinde korunur (query string).
-- Arama: firma adı, vergi no, misafir adı, referans no üzerinde `LIKE`. Fulltext V1'de yok.
+- Arama: firma adı, vergi no, telefon, yetkili, şehir üzerinde `LIKE`. Fulltext V1'de yok.
+- **Türkçe arama kuralı (ölçülerek karar verildi):** Türkçe'de büyük harfe çevirim çift
+  yönlüdür (i↔İ, ı↔I) ve firma verisi çoğunlukla tümü büyük harfle girilir. Hiçbir tek
+  collation her iki yönü de çözmez: `utf8mb4_turkish_ci` ile "ilgaz" araması `ILGAZ`
+  kaydını, `utf8mb4_unicode_ci` ile "çınar" araması `ÇINAR` kaydını bulamaz.
+  Bu yüzden arama karşılaştırmasında her iki tarafta noktalı/noktasız i tek karaktere
+  indirgenir (`REPLACE(REPLACE(col,'ı','i'),'İ','i') COLLATE utf8mb4_unicode_ci LIKE ?`),
+  arama terimi PHP tarafında aynı şekilde normalize edilir.
+  **Sıralama bundan etkilenmez**; `ORDER BY` kolonun `utf8mb4_turkish_ci` collation'ını
+  kullanmaya devam eder (Ç>C, ı<i, Ö>O, Ş>S, Ü>U).
+- Ortak altyapı `Core\Filters\QueryFilter` sınıfındadır; her modül kendi `Filters/`
+  klasöründe bu sınıfı genişletir ve `searchable()` / `sortable()` beyaz listelerini tanımlar.
 - Tüm liste sorguları `paginate()` kullanır — `get()` ile tüm tablo çekilmez.
 
 ---
@@ -545,7 +557,8 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 
 ## 13. Kodlama Standartları
 
-- `pint` (Laravel preset) ile formatlama; `larastan/phpstan` level 5 minimum.
+- `pint` (Laravel preset) ile formatlama; `larastan/phpstan` **level 5** (kurulu ve CI'da zorunlu).
+  Baseline dosyası ve `@phpstan-ignore` yorumu **kullanılmaz** — bulgu gizlenmez, kaynağından düzeltilir.
 - Controller **ince**: yetki → validasyon (FormRequest) → Service/Action çağrısı → redirect/view. İş mantığı controller'da olmaz.
 - Validasyon **sadece** FormRequest sınıflarında. `$request->all()` ile mass assignment yapılmaz; `$request->validated()` kullanılır.
 - Yetki **sadece** Policy sınıflarında. Controller içinde `if ($user->role === 'admin')` yazılmaz.

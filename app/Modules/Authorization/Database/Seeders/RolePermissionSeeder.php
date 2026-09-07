@@ -32,7 +32,10 @@ class RolePermissionSeeder extends Seeder
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         foreach (RoleName::cases() as $roleName) {
-            $role = Role::findOrCreate($roleName->value, 'web');
+            $role = Role::query()->firstOrCreate(
+                ['name' => $roleName->value, 'guard_name' => 'web'],
+                ['is_system' => true],
+            );
 
             $role->forceFill(['is_system' => true])->save();
 

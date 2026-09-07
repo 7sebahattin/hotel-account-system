@@ -116,3 +116,79 @@ Türkçe collation ile oluşturur, composer/npm bağımlılıklarını ve fronte
 migration'ları uygular.
 **Sınır:** Hook hiçbir production veya hosting işlemi yapmaz — deploy yok, uzak veritabanı yok,
 dış servis çağrısı yok. Yalnızca `CLAUDE_CODE_REMOTE=true` iken çalışır.
+
+## K-016 · SSH'sız migration: cPanel cron + işaret dosyası
+**Karar:** Deploy `storage/app/deploy-pending` işaret dosyası bırakır; cPanel cron bunu
+görünce `migrate --force` çalıştırır, sonucu loglar, başarılıysa dosyayı siler, başarısızsa korur.
+**Reddedilen:** Token korumalı HTTP migrate ucu — internete açık, migration çalıştırabilen bir uç,
+token sızarsa veritabanı şemasının uzaktan değiştirilmesine izin verir.
+**Durum:** Yalnızca karar. `finalize.php` ve deploy workflow'u deploy fazına kadar yazılmayacak.
+
+## K-017 · Türkçe aramada iki i sorunu
+**Bağlam:** Türkçe'de büyük harfe çevirim çift yönlüdür (i↔İ, ı↔I) ve firma verisi çoğunlukla
+tümü büyük harfle girilir. Ölçüm sonuçları:
+
+| Arama | `turkish_ci` | `unicode_ci` | `uca1400_ai_ci` |
+|---|:--:|:--:|:--:|
+| "ilgaz" → `ILGAZ` kaydı | ✗ | ✓ | ✓ |
+| "çınar" → `ÇINAR` kaydı | ✓ | ✗ | ✗ |
+
+**Karar:** Karşılaştırmadan önce her iki tarafta noktalı/noktasız i tek karaktere indirgenir:
+`REPLACE(REPLACE(col,'ı','i'),'İ','i') COLLATE utf8mb4_unicode_ci LIKE ?`; terim PHP tarafında
+`str_replace(['ı','İ'], 'i', ...)` ile normalize edilir.
+**Sıralama etkilenmez:** `ORDER BY` kolonun `utf8mb4_turkish_ci` collation'ını kullanmaya devam eder.
+**Maliyet:** İfade indeks kullanmaz — ancak `LIKE '%...%'` zaten kullanmıyordu, ek kayıp yok.
+**Sonuç:** CLAUDE.md §9 güncellendi; iki yönü de doğrulayan testler yazıldı.
+
+## K-018 · `companies.restore` ayrı bir yetkidir
+**Karar:** Silme ve geri alma ayrıldı. Admin her ikisine, Patron yalnızca silmeye sahiptir.
+Silinmiş firmaları listeleme de `companies.restore` yetkisine bağlıdır — Personel ve Patron
+silinmiş kayıtları görmez.
+**Gerekçe:** Kullanıcı kararı (Patron silebilir, geri alamaz). Rol adı yerine yetki kullanmak
+CLAUDE.md §7.2 isimlendirmesine uyar ve Admin'in ileride bu yetkiyi özel bir role vermesini mümkün kılar.
+**Sonuç:** CLAUDE.md §7.2 ve §7.3 güncellendi (yetki sayısı 19 → 20).
+
+## K-019 · PHPStan level 5, baseline yok
+**Karar:** `larastan/larastan` v3.11.0 + `phpstan/phpstan` 2.2.13, level 5, CI'da zorunlu adım.
+İlk çalıştırmada 38 bulgu çıktı; hepsi kaynağından düzeltildi — baseline dosyası veya
+`@phpstan-ignore` yorumu kullanılmadı.
+**Düzeltilenler:** model kolonları için `@property` blokları, spatie `Contracts\Role` yerine proje
+modeli tipi (`Role::byName()`, `Role::query()->create()`), trait closure'larında `self` tipi,
+`registerModelEvent('restored')`, `env()` çağrılarının `config/hotel.php`'ye taşınması,
+`??` solunda gereksiz `?->` kullanımı.
+
+## K-020 · Bu container'da bazı composer paketleri git ile getirilir
+**Bağlam:** Claude Code on the web ortamında GitHub zipball indirmeleri (api.github.com, codeload)
+proxy tarafından 403 ile engellenir; `git clone` çalışır. `phpstan/phpstan` paketinin packagist'te
+**source tanımı yoktur**, yalnızca zipball vardır — bu yüzden `composer install` bu ortamda tamamlanamaz.
+**Karar:** `.claude/hooks/fetch-blocked-packages.php`, composer.lock'taki sürümü git ile getirip
+`vendor/composer/installed.json`'a kaydeder. Yalnızca `vendor/` dizinini değiştirir; `composer.json`
+ve `composer.lock` dokunulmaz.
+**Kapsam:** Ortama özgü onarım. CI ve geliştirici makinelerinde normal `composer install` çalışır,
+script hiçbir şey yapmaz.
+
+## K-021 · Şifre değişikliği denetim kaydında görünür, değer görünmez
+**Bağlam:** Maskelenen alanlar denetim kaydından tamamen çıkarılıyordu; bu durumda admin bir
+kullanıcının şifresini değiştirdiğinde denetim kaydı "güncellendi" diyor ama neyin değiştiğini göstermiyordu.
+**Karar:** Maskeleme artık **anahtarı korur, değeri `***` ile değiştirir**. Böylece "şifre değiştirildi"
+bilgisi denetlenebilir; şifrenin kendisi veya hash'i hiçbir zaman yazılmaz.
+**Kapsam:** `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`.
+E-posta ile şifre sıfırlama V1'de yoktur; admin kullanıcı düzenleme ekranından yeni şifre belirler.
+
+## K-022 · Denetim anlık görüntüsünde uzunluk sınırı
+**Karar:** Denetim kaydına yazılan metin değerleri 500 karakterle sınırlıdır; aşan değerin sonuna
+`… (kısaltıldı)` eklenir.
+**Sınır yalnızca denetim kaydına uygulanır** — gerçek `companies.notes` kaydı tam uzunlukta saklanır.
+**Gerekçe:** `notes` gibi uzun alanlar `audit_logs` tablosunu kontrolsüz büyütür.
+
+## K-023 · Demo hesaplar yalnızca local ve testing ortamında
+**Karar:** `patron@example.com` / `personel@example.com` hesapları yalnızca
+`app()->environment(['local','testing'])` iken oluşturulur. Staging ve production'da
+oluşturulmaz. Admin hesabı `config('hotel.seed.*')` üzerinden gelir.
+**Değişiklik:** Önceki koşul yalnızca production'ı dışlıyordu; staging'de demo hesap oluşabilirdi.
+
+## K-024 · Cari hareketi olan firmanın silinememesi ertelendi
+**Durum:** CLAUDE.md §5.2 bu kuralı gerektirir ancak `ledger_entries` tablosu henüz yoktur.
+**Karar:** Kural Gün 4'te `CompanyService::delete()` içinde `LedgerService` üzerinden uygulanacaktır.
+Bugün taklit bir kontrol yazılmamıştır — sahte kontrol, gerçek koruma varmış izlenimi verirdi.
+Karar `CompanyService` sınıf yorumunda da kayıtlıdır.

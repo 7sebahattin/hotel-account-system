@@ -3,6 +3,7 @@
 use App\Modules\AuditLog\Providers\AuditLogServiceProvider;
 use App\Modules\Auth\Providers\AuthServiceProvider;
 use App\Modules\Authorization\Providers\AuthorizationServiceProvider;
+use App\Modules\Companies\Providers\CompaniesServiceProvider;
 use App\Modules\Users\Providers\UsersServiceProvider;
 use App\Providers\AppServiceProvider;
 
@@ -13,5 +14,6 @@ return [
     AuditLogServiceProvider::class,
     AuthorizationServiceProvider::class,
     AuthServiceProvider::class,
+    CompaniesServiceProvider::class,
     UsersServiceProvider::class,
 ];

@@ -28,7 +28,7 @@ class RolePermissionMatrixTest extends TestCase
     public function uc_sistem_rolu_olusturulur_ve_silinemez_isaretlidir(): void
     {
         foreach (RoleName::cases() as $roleName) {
-            $role = Role::findByName($roleName->value);
+            $role = Role::byName($roleName->value);
 
             $this->assertTrue($role->isSystem(), "{$roleName->value} sistem rolü olmalı");
         }
@@ -39,7 +39,7 @@ class RolePermissionMatrixTest extends TestCase
     #[Test]
     public function admin_tum_yetkilere_sahiptir(): void
     {
-        $role = Role::findByName(RoleName::Admin->value);
+        $role = Role::byName(RoleName::Admin->value);
 
         $this->assertEqualsCanonicalizing(
             Permission::values(),
@@ -50,7 +50,7 @@ class RolePermissionMatrixTest extends TestCase
     #[Test]
     public function patron_kullanici_ve_rol_yonetemez_ama_finansal_veriyi_gorur(): void
     {
-        $role = Role::findByName(RoleName::Patron->value);
+        $role = Role::byName(RoleName::Patron->value);
         $granted = $role->permissions->pluck('name')->all();
 
         foreach ([Permission::UsersView, Permission::UsersManage, Permission::RolesManage] as $forbidden) {
@@ -72,7 +72,7 @@ class RolePermissionMatrixTest extends TestCase
     #[Test]
     public function personel_finansal_toplamlari_ve_yonetim_yetkilerini_gormez(): void
     {
-        $role = Role::findByName(RoleName::Personel->value);
+        $role = Role::byName(RoleName::Personel->value);
         $granted = $role->permissions->pluck('name')->all();
 
         foreach ([
@@ -104,6 +104,6 @@ class RolePermissionMatrixTest extends TestCase
         $this->seedRoles();
 
         $this->assertSame(3, Role::query()->count());
-        $this->assertSame(count(Permission::cases()), Role::findByName(RoleName::Admin->value)->permissions->count());
+        $this->assertSame(count(Permission::cases()), Role::byName(RoleName::Admin->value)->permissions->count());
     }
 }

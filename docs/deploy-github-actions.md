@@ -183,12 +183,30 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<alan>/vendor/autoload.php     
 
 Herhangi biri 200 dönerse deploy **geri alınır**.
 
-## 6. AÇIK KARAR: SSH olmadan migration nasıl çalıştırılacak?
+## 6. KARAR VERİLDİ: cPanel cron + işaret dosyası
 
 `php artisan migrate --force`, `config:cache`, `route:cache` ve `view:cache`
 sunucuda çalışmak zorundadır. SSH yoksa iki seçenek vardır:
 
-### Seçenek A — cPanel cron + işaret dosyası (önerilen)
+### Seçilen yöntem — cPanel cron + işaret dosyası
+
+**Karar (Gün 3):** Seçenek A uygulanacaktır. İnternete açık migrate/finalize
+HTTP ucu **oluşturulmayacaktır.** Akış:
+
+1. GitHub Actions deploy sonunda `storage/app/deploy-pending` işaret dosyasını bırakır.
+2. cPanel cron dosyayı kontrol eder.
+3. Gerekiyorsa `php artisan migrate --force` çalıştırır.
+4. Sonucu günlüğe yazar.
+5. **Başarılıysa** işaret dosyası silinir.
+6. **Başarısızsa** işaret dosyası korunur ve hata günlüğe yazılır (bir sonraki
+   cron tekrar dener; sorun görünür kalır).
+
+Bu bölüm yalnızca mimari karardır — `finalize.php` ve deploy workflow'u
+**henüz yazılmamıştır** ve deploy fazına kadar yazılmayacaktır.
+
+<details><summary>Değerlendirilen seçenekler</summary>
+
+### Seçenek A — cPanel cron + işaret dosyası (seçildi)
 
 Deploy, `storage/app/deploy-pending` dosyasını bırakır. cPanel'de dakikada bir
 çalışan bir cron bu dosyayı kontrol eder:
@@ -215,8 +233,11 @@ migration'ları çalıştırır.
   veritabanı şeması uzaktan değiştirilebilir.
 - ❌ Uzun süren migration'da HTTP zaman aşımı riski
 
-**Öneri: Seçenek A.** Bu karar verilmeden deploy workflow'u etkinleştirilmemelidir;
-`finalize.php` de bu karardan önce yazılmayacaktır.
+</details>
+
+Seçenek B (token korumalı HTTP ucu) **reddedilmiştir**: internete açık, migration
+çalıştırabilen bir uç, token sızması hâlinde veritabanı şemasının uzaktan
+değiştirilmesine izin verir.
 
 ## 7. İlk kurulumda sunucuda elle yapılacaklar
 

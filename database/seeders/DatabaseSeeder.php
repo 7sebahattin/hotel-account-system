@@ -25,14 +25,16 @@ class DatabaseSeeder extends Seeder
         // İlk yönetici hesabı. Canlıda şifre .env üzerinden verilmelidir.
         $this->ensureUser(
             $users,
-            (string) env('SEED_ADMIN_EMAIL', 'admin@example.com'),
-            (string) env('SEED_ADMIN_NAME', 'Sistem Yöneticisi'),
-            (string) env('SEED_ADMIN_PASSWORD', 'degistir-beni'),
+            (string) config('hotel.seed.admin_email'),
+            (string) config('hotel.seed.admin_name'),
+            (string) config('hotel.seed.admin_password'),
             RoleName::Admin,
         );
 
-        // Patron ve Personel örnek hesapları yalnızca geliştirme/test içindir.
-        if (app()->environment('production')) {
+        // Örnek Patron/Personel hesapları YALNIZCA local ve testing ortamında
+        // oluşturulur. Staging ve production'da varsayılan şifreli demo hesap
+        // bırakmak açık kapıdır.
+        if (! app()->environment(['local', 'testing'])) {
             return;
         }
 

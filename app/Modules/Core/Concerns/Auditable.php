@@ -6,8 +6,6 @@ namespace App\Modules\Core\Concerns;
 
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Modelin created / updated / deleted / restored olaylarını denetim kaydına yazar.
@@ -18,7 +16,9 @@ trait Auditable
 {
     public static function bootAuditable(): void
     {
-        static::created(function (Model $model): void {
+        // Closure parametreleri `self` ile tiplenir: trait içinde `self`,
+        // trait'i kullanan sınıfa çözülür (User, Role, Company...).
+        static::created(function (self $model): void {
             app(AuditLogger::class)->log(
                 AuditEvent::Created,
                 $model,
@@ -26,7 +26,7 @@ trait Auditable
             );
         });
 
-        static::updated(function (Model $model): void {
+        static::updated(function (self $model): void {
             $changes = $model->auditableValues($model->getChanges());
 
             // Yalnızca gürültü alanları değiştiyse (ör. updated_at) kayıt açma.
@@ -42,16 +42,15 @@ trait Auditable
             );
         });
 
-        static::deleted(function (Model $model): void {
+        static::deleted(function (self $model): void {
             app(AuditLogger::class)->log(AuditEvent::Deleted, $model);
         });
 
-        // 'restored' olayı yalnızca SoftDeletes kullanan modellerde tanımlıdır.
-        if (in_array(SoftDeletes::class, class_uses_recursive(static::class), true)) {
-            static::restored(function (Model $model): void {
-                app(AuditLogger::class)->log(AuditEvent::Restored, $model);
-            });
-        }
+        // static::restored() yalnızca SoftDeletes trait'i ile gelir; olayı doğrudan
+        // kaydetmek her modelde çalışır ve SoftDeletes yoksa hiç tetiklenmez.
+        static::registerModelEvent('restored', function (self $model): void {
+            app(AuditLogger::class)->log(AuditEvent::Restored, $model);
+        });
     }
 
     /**

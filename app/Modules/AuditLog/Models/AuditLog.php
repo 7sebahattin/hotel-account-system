@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
@@ -15,6 +16,20 @@ use RuntimeException;
  *
  * updated_at kolonu yoktur; update() ve delete() çağrıları exception fırlatır.
  * Yazma yalnızca AuditLogger servisi üzerinden yapılır.
+ *
+ * @property int $id
+ * @property int|null $user_id
+ * @property string|null $user_name
+ * @property AuditEvent $event
+ * @property string|null $auditable_type
+ * @property int|null $auditable_id
+ * @property array<string, mixed>|null $old_values
+ * @property array<string, mixed>|null $new_values
+ * @property string|null $ip_address
+ * @property string|null $user_agent
+ * @property string|null $url
+ * @property Carbon $created_at
+ * @property-read User|null $user
  */
 class AuditLog extends Model
 {

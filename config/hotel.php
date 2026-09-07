@@ -31,4 +31,20 @@ return [
 
     'currencies' => ['TRY', 'EUR', 'GBP'],
 
+    /*
+    |--------------------------------------------------------------------------
+    | İlk yönetici hesabı (seeder)
+    |--------------------------------------------------------------------------
+    |
+    | env() yalnızca config dosyalarında çağrılır; config önbelleğe alındığında
+    | uygulama kodundan env() null döner.
+    |
+    */
+
+    'seed' => [
+        'admin_email' => env('SEED_ADMIN_EMAIL', 'admin@example.com'),
+        'admin_name' => env('SEED_ADMIN_NAME', 'Sistem Yöneticisi'),
+        'admin_password' => env('SEED_ADMIN_PASSWORD', 'degistir-beni'),
+    ],
+
 ];

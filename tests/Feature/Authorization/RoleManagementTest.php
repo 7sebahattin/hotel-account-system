@@ -39,7 +39,7 @@ class RoleManagementTest extends TestCase
             'permissions' => [Permission::LedgerView->value, Permission::ExportExcel->value],
         ])->assertRedirect(route('roles.index'));
 
-        $role = Role::findByName('muhasebe');
+        $role = Role::byName('muhasebe');
 
         $this->assertFalse($role->isSystem());
         $this->assertEqualsCanonicalizing(
@@ -51,7 +51,7 @@ class RoleManagementTest extends TestCase
     #[Test]
     public function sistem_rolu_silinemez(): void
     {
-        $role = Role::findByName(RoleName::Admin->value);
+        $role = Role::byName(RoleName::Admin->value);
 
         $this->expectException(SystemRoleException::class);
 
@@ -62,7 +62,7 @@ class RoleManagementTest extends TestCase
     public function sistem_rolu_http_uzerinden_de_silinemez(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);
-        $role = Role::findByName(RoleName::Personel->value);
+        $role = Role::byName(RoleName::Personel->value);
 
         $this->actingAs($admin)
             ->delete(route('roles.destroy', $role))
@@ -74,7 +74,7 @@ class RoleManagementTest extends TestCase
     #[Test]
     public function sistem_rolunun_adi_degistirilemez(): void
     {
-        $role = Role::findByName(RoleName::Patron->value);
+        $role = Role::byName(RoleName::Patron->value);
 
         $this->expectException(SystemRoleException::class);
 
@@ -84,7 +84,7 @@ class RoleManagementTest extends TestCase
     #[Test]
     public function sistem_rolunun_yetkileri_duzenlenebilir(): void
     {
-        $role = Role::findByName(RoleName::Personel->value);
+        $role = Role::byName(RoleName::Personel->value);
 
         $this->roles->update($role, $role->name, [Permission::CompaniesView->value]);
 
@@ -123,7 +123,7 @@ class RoleManagementTest extends TestCase
     public function yetki_degisikligi_denetim_kaydina_yazilir(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);
-        $role = Role::findByName(RoleName::Personel->value);
+        $role = Role::byName(RoleName::Personel->value);
         AuditLog::query()->delete();
 
         $this->actingAs($admin)->put(route('roles.update', $role), [
@@ -144,7 +144,7 @@ class RoleManagementTest extends TestCase
     #[Test]
     public function yetki_degismediyse_denetim_kaydi_acilmaz(): void
     {
-        $role = Role::findByName(RoleName::Personel->value);
+        $role = Role::byName(RoleName::Personel->value);
         $mevcut = $role->permissions->pluck('name')->all();
         AuditLog::query()->delete();
 

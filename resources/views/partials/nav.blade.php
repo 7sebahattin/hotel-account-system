@@ -1,6 +1,7 @@
 @php
     $links = [
         ['route' => 'home',         'label' => 'Ana sayfa', 'can' => null],
+        ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => \App\Modules\Authorization\Enums\Permission::CompaniesView->value],
         ['route' => 'users.index',  'label' => 'Kullanıcılar', 'can' => \App\Modules\Authorization\Enums\Permission::UsersView->value],
         ['route' => 'roles.index',  'label' => 'Roller', 'can' => \App\Modules\Authorization\Enums\Permission::RolesManage->value],
         ['route' => 'audit.index',  'label' => 'Denetim kaydı', 'can' => \App\Modules\Authorization\Enums\Permission::AuditView->value],
