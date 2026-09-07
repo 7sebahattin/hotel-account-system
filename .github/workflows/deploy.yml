@@ -1,0 +1,380 @@
+name: Deploy (Lemon)
+
+# ============================================================================
+# BU WORKFLOW BU HÂLİYLE GERÇEK DEPLOY YAPAMAZ.
+#
+# İKİ ÇALIŞMA BİÇİMİ VARDIR VE KİLİTLER YALNIZCA İKİNCİSİNE UYGULANIR:
+#
+#   mode = dry-run  (varsayılan)  → GÜVENLİ, HER ZAMAN ÇALIŞTIRILABİLİR
+#     • DEPLOY_ENABLED GEREKMEZ
+#     • confirm_target GEREKMEZ (yazılırsa yalnızca bilgilendirme amaçlı bakılır)
+#     • FTPS bağlantısı kurulur, hedef ve aktarım planı doğrulanır
+#     • HİÇBİR DOSYA oluşturulmaz, değiştirilmez veya silinmez
+#       (doğrulandı: @samkirkland/ftp-deploy — createFolder/uploadFile/
+#        removeFile/removeFolder ve durum dosyası yazımı `dryRun` ile kapalıdır)
+#     • TEK istisna: hedef dizinin KENDİSİ sunucuda yoksa `ensureDir` onu
+#       oluşturabilir. Boş bir dizinden ibarettir, dosya yazılmaz, silinmez.
+#       Hedefimiz (/lemon-app/) zaten mevcut olduğu için pratikte no-op'tur.
+#
+#   mode = deploy   (gerçek aktarım) → DÖRT KİLİT BİRDEN AÇILMALI
+#     1. Yalnızca `workflow_dispatch` ile elle tetiklenir. push/PR tetiklemesi YOKTUR.
+#     2. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
+#        Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
+#     3. `confirm_target` alanına hedef alan adı birebir yazılmalı.
+#     4. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
+#
+#   Karar iki kez, birbirinden bağımsız hesaplanır (guard işi + aktarım işi).
+#   İkisi aynı sonuca varmazsa iş durur. Fail-closed: 'true' dışındaki her
+#   şey dry-run demektir.
+#
+# MİMARİ A (kesinleşti — docs/deploy-lemon.md §2):
+#   Laravel kökü  : /home/derspros/lemon-app/
+#   DocumentRoot  : /home/derspros/lemon-app/public   ← cPanel'den ELLE ayarlanır
+#
+# Bu workflow TEK hedefe yazar: Laravel kökü. `public/` o ağacın parçası
+# olduğu için ayrı bir DocumentRoot aktarımı YOKTUR ve Laravel'in kendi
+# `public/index.php` dosyası olduğu gibi kullanılır.
+#
+# DocumentRoot değişikliğini bu workflow YAPMAZ ve YAPAMAZ.
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run = hiçbir şey yazılmaz, DEPLOY_ENABLED gerekmez (önerilen ilk çalıştırma)'
+        type: choice
+        options: [dry-run, deploy]
+        default: dry-run
+        required: true
+      confirm_target:
+        description: 'YALNIZCA mode=deploy için zorunlu — hedef alan adını birebir yazın. dry-run''da boş bırakın.'
+        type: string
+        default: ''
+        required: false
+
+concurrency:
+  group: deploy-lemon
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TARGET_DOMAIN: lemon.derspros.com.tr
+  # Beklenen TEK geçerli hedef.
+  #
+  # FileZilla ile doğrulandı: ana FTP hesabı /home/derspros altına
+  # chroot'ludur — uzak kökte lemon-app, lemon.derspros.com.tr,
+  # nuvernatrade.com … doğrudan görünür. Bu yüzden Lemon uygulamasının
+  # yolu köke göre /lemon-app/ olur.
+  #
+  # Bu değer, FTP hesabı değişirse BİLİNÇLİ olarak güncellenmelidir
+  # (tek satır, gözden geçirilebilir). Guard başka hiçbir değeri kabul etmez.
+  EXPECTED_DIR: /lemon-app/
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------- 1. GUARD
+  guard:
+    name: Güvenlik kontrolleri
+    runs-on: ubuntu-latest
+    outputs:
+      live: ${{ steps.decide.outputs.live }}
+    steps:
+      # Hesapta derspros.com.tr ve BAŞKA CANLI SİTELER vardır. Yanlış bir hedef,
+      # onların dosyalarını etkileyebilir. Bu adım FAIL-CLOSED çalışır: şüpheli
+      # veya tanınmayan her değerde iş durur.
+      #
+      # Değerler loglanmaz; yalnızca geçti/kaldı ve hangi biçimin beklendiği yazılır.
+      - name: Hedef dizin Lemon uygulamasına mı ait
+        env:
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+        run: |
+          set -u
+          fail=0
+
+          if [ -z "${APP_DIR:-}" ]; then
+            echo "::error::LEMON_APP_DIR repository variable tanımlı değil. Boş hedefle deploy YAPILMAZ."
+            exit 1
+          fi
+
+          # 1) Tam eşleşme: doğrulanmış TEK değer kabul edilir.
+          #    Diğer her değer — FTP kökü, public_html, başka alan adı klasörü —
+          #    bu kontrolden geçemez.
+          if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+            echo "::error::LEMON_APP_DIR beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+            echo "::error::(Ana FTP hesabı /home/derspros altına chroot'ludur; Lemon uygulaması köke göre burada durur.)"
+            echo "::error::Başka bir değer, hesaptaki diğer siteleri etkileyebileceği için reddedilir."
+            echo "::error::FTP hesabı değiştiyse workflow'daki EXPECTED_DIR bilinçli olarak güncellenmelidir."
+            fail=1
+          fi
+
+          # 2) Bağımsız ikinci kontrol seti. Yukarıdaki tam eşleşme bir gün
+          #    gevşetilirse bunlar yine de yasak hedefleri yakalar.
+          case "$APP_DIR" in
+            */) ;;
+            *) echo "::error::Hedef '/' ile bitmeli (FTP-Deploy-Action bunu şart koşar)."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            *..*) echo "::error::Hedef üst dizine çıkış içeriyor."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            */public_html/*|*/public_html/) echo "::error::Hedef ana sitenin (public_html) altında."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            *derspros.com.tr/*|*nuvernatrade.com/*|*nymagro.com/*)
+              echo "::error::Hedef başka bir alan adı klasörünü gösteriyor."; fail=1 ;;
+          esac
+          # Son dizin adı kesinlikle lemon-app olmalı.
+          case "$APP_DIR" in
+            */lemon-app/) ;;
+            *) echo "::error::Hedefin son dizini 'lemon-app' olmalı."; fail=1 ;;
+          esac
+
+          [ "$fail" -eq 0 ] && echo "Hedef dizin kontrolleri geçti (Lemon uygulama kökü)."
+          exit $fail
+
+      # DRY-RUN İLE DEPLOY ARASINDAKİ FARK BURADA TANIMLIDIR.
+      #
+      # dry-run yolu bilinçli olarak KİLİTSİZDİR: güvenli doğrulamayı
+      # engellemek, kilidin amacı değildir. Yazma yetkisini kısıtlayan şey
+      # `mode` değil, aktarım adımına geçen `dry-run` bayrağıdır (aşağıda
+      # ikinci kez, bağımsız olarak hesaplanır).
+      - name: Çalışma biçimine karar ver
+        id: decide
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm_target }}
+          ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+        run: |
+          set -u
+
+          # ---------------------------------------------------------- DRY-RUN
+          if [ "$MODE" != "deploy" ]; then
+            echo "live=false" >> "$GITHUB_OUTPUT"
+            echo "Çalışma biçimi: DRY-RUN."
+            echo "  • DEPLOY_ENABLED gerekmez ve okunmaz."
+            echo "  • confirm_target gerekmez."
+            echo "  • Sunucuya hiçbir dosya yazılmaz, değiştirilmez, silinmez."
+            # confirm_target dry-run'da bir kilit DEĞİLDİR; yalnızca yanlış
+            # doldurulmuşsa kullanıcıyı uyarırız (işi durdurmaz).
+            if [ -n "${CONFIRM:-}" ] && [ "$CONFIRM" != "$TARGET_DOMAIN" ]; then
+              echo "::warning::confirm_target dolu ama hedef alan adıyla eşleşmiyor. Dry-run'da yok sayıldı."
+            fi
+            exit 0
+          fi
+
+          # ----------------------------------------------------- GERÇEK DEPLOY
+          # Dört kilit de açık olmalı. Herhangi biri kapalıysa iş durur —
+          # sessizce dry-run'a düşülmez, çünkü kullanıcı deploy istemiştir.
+          fail=0
+
+          if [ "${ENABLED:-}" != "true" ]; then
+            echo "::error::Gerçek deploy kapalı. DEPLOY_ENABLED repository variable'ı 'true' değil."
+            echo "::error::Bu bilinçli bir kilittir; açmadan önce docs/deploy-lemon.md §9 okunmalıdır."
+            echo "::error::Güvenli doğrulama için mode=dry-run kullanın — o yol bu değişkeni gerektirmez."
+            fail=1
+          fi
+
+          if [ "$CONFIRM" != "$TARGET_DOMAIN" ]; then
+            echo "::error::Onay metni hedef alan adıyla eşleşmiyor. Gerçek deploy için tam olarak yazın: $TARGET_DOMAIN"
+            fail=1
+          fi
+
+          # Hedef dizin kontrolü önceki adımda da yapıldı; gerçek deploy yolunda
+          # bilinçli olarak TEKRAR edilir. Bir adım gelecekte gevşetilirse diğeri kalır.
+          if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+            echo "::error::LEMON_APP_DIR gerçek deploy için beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+
+          echo "live=true" >> "$GITHUB_OUTPUT"
+          echo "Çalışma biçimi: GERÇEK DEPLOY (dört kilit de açık)."
+
+  # ---------------------------------------------------------------- 2. BUILD
+  build:
+    name: Üretim derlemesi (PHP ${{ vars.TARGET_PHP_VERSION || '8.3' }})
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Hosting'in PHP sürümü kullanılır (CLAUDE.md §2). Daha yeni bir sürümle
+      # derlemek, sunucuda fatal error veren bir vendor/ ağacı üretir.
+      - name: PHP kurulumu
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ vars.TARGET_PHP_VERSION || '8.3' }}
+          extensions: mbstring, pdo_mysql, intl, zip, gd, xml, ctype, fileinfo, openssl, tokenizer
+          coverage: none
+
+      - name: composer.json / composer.lock tutarlılığı
+        run: composer validate --strict --no-check-publish
+
+      - name: Composer bağımlılıkları (üretim)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
+
+      # Kritik kapı: derlenen vendor/ gerçekten hedef PHP sürümünde çalışıyor mu?
+      - name: Hedef PHP sürümü uyumluluğu
+        run: composer check-platform-reqs --no-dev
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Frontend derlemesi
+        run: |
+          npm ci
+          npm run build
+
+      - name: Derleme çıktısı oluştu mu
+        run: |
+          test -f public/build/manifest.json \
+            || { echo "::error::Vite çıktısı bulunamadı (public/build/manifest.json)."; exit 1; }
+          test -f vendor/autoload.php \
+            || { echo "::error::vendor/autoload.php bulunamadı."; exit 1; }
+          # Mimari A: Laravel'in KENDİ giriş dosyası kullanılır, uyarlanmış bir
+          # kopya değil. Bu satır, dosyanın kazara değiştirilmediğini doğrular.
+          grep -q "__DIR__.'/../vendor/autoload.php'" public/index.php \
+            || { echo "::error::public/index.php standart Laravel giriş dosyası değil."; exit 1; }
+
+      # Geliştirme dosyaları artifact'a taşınmaz.
+      - name: Aktarılacak dosyaları hazırla
+        run: |
+          rm -rf .git .github .claude tests docs node_modules
+          rm -f phpunit.xml pint.json phpstan.neon package.json package-lock.json \
+                vite.config.js README.md CLAUDE.md AGENTS.md .editorconfig .gitattributes .gitignore
+          # .env ASLA aktarılmaz. Zaten .gitignore'da; yine de kesin olarak siliyoruz.
+          rm -f .env .env.* || true
+          # storage/ ve bootstrap/cache/ SUNUCUDA yaşar; artifact'a hiç girmez.
+          # Bunlar kullanıcı verisi, oturum, günlük ve önbellek taşır.
+          rm -rf storage bootstrap/cache
+
+      - name: Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemon-release
+          path: .
+          include-hidden-files: true
+          retention-days: 5
+
+  # --------------------------------------------------------------- 3. DEPLOY
+  deploy:
+    name: FTPS aktarımı
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sürüm dosyalarını indir
+        uses: actions/download-artifact@v4
+        with:
+          name: lemon-release
+          path: release
+
+      - name: Aktarım öncesi son kontrol
+        run: |
+          test ! -e release/.env || { echo "::error::.env artifact içinde — aktarım durduruldu."; exit 1; }
+          test ! -d release/.git || { echo "::error::.git artifact içinde — aktarım durduruldu."; exit 1; }
+          test ! -d release/tests || { echo "::error::tests/ artifact içinde — aktarım durduruldu."; exit 1; }
+          test ! -d release/storage || { echo "::error::storage/ artifact içinde — production verisi ezilebilirdi."; exit 1; }
+          test ! -d release/bootstrap/cache || { echo "::error::bootstrap/cache/ artifact içinde."; exit 1; }
+          test ! -d release/node_modules || { echo "::error::node_modules/ artifact içinde."; exit 1; }
+          test -f release/public/index.php || { echo "::error::public/index.php artifact'ta yok."; exit 1; }
+          echo "Artifact temiz."
+
+      # Aktarım işi, guard işinin çıktısına KÖRÜ KÖRÜNE güvenmez: aynı kararı
+      # kendi girdilerinden bağımsız olarak yeniden hesaplar ve iki sonuç
+      # uyuşmazsa durur. Böylece guard çıktısının kaybolması, boş gelmesi ya da
+      # ileride yanlışlıkla değiştirilmesi tek başına gerçek aktarım açamaz.
+      #
+      # Fail-closed: 'true' dışındaki HER değer dry-run demektir.
+      - name: Çalışma biçimini bağımsız doğrula
+        id: mode
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm_target }}
+          ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+          GUARD_LIVE: ${{ needs.guard.outputs.live }}
+        run: |
+          set -u
+          live=false
+          if [ "$MODE" = "deploy" ] \
+             && [ "${ENABLED:-}" = "true" ] \
+             && [ "$CONFIRM" = "$TARGET_DOMAIN" ] \
+             && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
+            live=true
+          fi
+
+          if [ "$live" != "${GUARD_LIVE:-false}" ]; then
+            echo "::error::guard işi ile aktarım işi çalışma biçiminde anlaşamadı."
+            echo "::error::Bu beklenmedik bir durumdur; fail-closed olarak durduruldu."
+            exit 1
+          fi
+
+          echo "live=$live" >> "$GITHUB_OUTPUT"
+          if [ "$live" = "true" ]; then
+            echo "GERÇEK AKTARIM: sunucuya yazılacak."
+          else
+            echo "DRY-RUN: FTPS bağlantısı kurulacak, plan raporlanacak, hiçbir dosya yazılmayacak/silinmeyecek."
+          fi
+
+      # TEK aktarım: Laravel kökü. DocumentRoot bu ağacın içindeki public/
+      # dizinidir (Mimari A), bu yüzden ikinci bir aktarım YOKTUR.
+      #
+      # `dangerous-clean-slate` ASLA kullanılmaz: hedef dizinin TÜM içeriğini,
+      # exclude edilmiş öğeler dahil siler.
+      # `exclude` verildiğinde varsayılan liste EZİLİR; bu yüzden .git ve
+      # node_modules kalıpları burada tekrar yazılmıştır.
+      - name: Laravel kökünü gönder
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftps            # explicit FTPS (AUTH TLS) — düz FTP değil
+          local-dir: ./release/
+          server-dir: ${{ vars.LEMON_APP_DIR }}
+          state-name: .ftp-deploy-lemon-app.json
+          # Yazma yetkisini belirleyen TEK bayrak budur ve bağımsız olarak
+          # doğrulanmış karardan gelir. 'true' değilse dry-run'dır.
+          dry-run: ${{ steps.mode.outputs.live != 'true' }}
+          dangerous-clean-slate: false
+          log-level: standard
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/.github/**
+            **/.claude/**
+            **/tests/**
+            **/docs/**
+            **/storage/**
+            **/bootstrap/cache/**
+            .env
+            .env.*
+            phpunit.xml
+            pint.json
+            phpstan.neon
+            package.json
+            package-lock.json
+            vite.config.js
+            README.md
+            CLAUDE.md
+
+      - name: Özet
+        run: |
+          if [ "${{ steps.mode.outputs.live }}" = "true" ]; then
+            echo "Gerçek aktarım tamamlandı."
+            echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
+            echo "(zaten ayarlıysa bir şey yapılmaz) ve docs/deploy-lemon.md §7 doğrulaması koşulmalı."
+          else
+            echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya oluşturulmadı, değiştirilmedi veya silinmedi."
+            echo "Gerçek aktarım için: DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
+          fi
