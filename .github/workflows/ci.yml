@@ -32,15 +32,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Üretim runtime'ı PHP 8.3'tür (CLAUDE.md §2). Testler hedef sürümde koşar;
+      # daha yeni bir sürümde test etmek, sunucuda çalışmayan kodu yeşil gösterir.
       - name: PHP kurulumu
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '8.3'
           extensions: mbstring, pdo_mysql, intl, zip, gd, xml, ctype, fileinfo
           coverage: none
 
       - name: Composer bağımlılıkları
         uses: ramsey/composer-install@v3
+
+      # Kilitlenen bağımlılıkların tamamı hedef PHP sürümünde çalışabiliyor mu?
+      - name: Hedef PHP sürümü uyumluluğu
+        run: composer check-platform-reqs
 
       - name: Node kurulumu
         uses: actions/setup-node@v4

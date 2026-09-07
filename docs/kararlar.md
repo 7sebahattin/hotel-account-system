@@ -523,3 +523,53 @@ Mimari A seçilirse ikinci aktarım adımı kaldırılacaktır.
 paylaşmasına ve geriye dönük ayrıştırma işine yol açar.
 **Otomatik push deployment hiçbir dal için etkinleştirilmedi.** Onay verilse bile
 öneri `workflow_dispatch`'te kalmaktır: paylaşımlı hostingde geri alma pahalıdır.
+
+## K-060 · Uygulama PHP 8.3'e kilitlendi (K-057 blocker'ı çözüldü)
+**Bağlam:** Hosting'de PHP 8.4 kurulu ama **alan adı bazlı PHP izolasyonu kapalı**;
+sürüm yalnızca hesabın tamamı için değiştirilebiliyor ve aynı hesapta başka aktif
+siteler var. Global yükseltme onları da etkilerdi. Bu yüzden K-057'nin "Çözüm A"sı
+(hosting'i 8.4'e almak) uygulanabilir değil; **Çözüm B seçildi.**
+
+**Yapılan:** `composer.json` → `config.platform.php = "8.3.0"`, kilit yeniden çözüldü.
+
+**Yama sürümü neden `8.3.0`:** `8.3.0` ve `8.3.99` ile çözüm birebir aynı çıktı
+(ölçüldü — bu ağaçtaki hiçbir paket belirli bir 8.3 yamasına bağlı değil).
+Eşit sonuçta en muhafazakârı seçildi: hosting hangi 8.3.x yamasını çalıştırırsa
+çalıştırsın kilit geçerlidir.
+
+**Değişen paketler (114 → 115):**
+- **16 düşüş, hepsi Symfony 8.1.x → 7.4.x (LTS):** clock, console, css-selector,
+  error-handler, event-dispatcher, finder, http-foundation, http-kernel, mailer,
+  mime, process, routing, string, translation, uid, var-dumper
+- **3 küçük yükseliş:** league/commonmark 2.10.0→2.10.1, laravel/pao, laravel/pint
+- **1 yeni:** symfony/polyfill-php83 (7.4 paketlerinin bağımlılığı)
+- **0 kaldırma.** Laravel v13.30.1 ve spatie/laravel-permission 8.3.0 DEĞİŞMEDİ.
+
+**Doğrulama:**
+- `composer why-not php 8.3` → "There is no installed package depending on 'php'
+  in versions not matching 8.3"
+- Kilitte (dev dahil) PHP 8.4+ isteyen paket kalmadı
+- `composer validate --strict` geçti, `composer audit` güvenlik uyarısı vermedi
+- Laravel 13 zaten `symfony/* ^7.4.0 || ^8.0.0` kabul ediyor — uyumluluk korunuyor
+
+**Üç kapı, farkın sessizce üretime sızmasını engeller:**
+1. `config.platform.php` — 8.4 isteyen paket kilide giremez
+2. `phpstan.neon` → `phpVersion: 80300` — 8.4'e özgü işlev/sözdizimi analizde kırılır
+3. CI ve deploy build'i PHP 8.3 kullanır + `composer check-platform-reqs`
+
+**Sınır:** `composer check-platform-reqs` ÇALIŞAN PHP'yi denetler, `config.platform`
+değerini değil. Bu yüzden 8.3 kanıtı `why-not php 8.3` + CI'ın gerçek 8.3
+koşusundan gelir.
+
+## K-061 · Faker Türkçe verisi arama testlerini rastgele kırıyordu
+**Bulgu:** `CompanyListingTest::all_caps_kaydedilmis_firma_kucuk_harfle_bulunur`
+aralıklı olarak kırılıyordu. Kök neden: faker'ın tr_TR **isim** listesinde 'Çınar'
+var (`Person.php`), `CompanyFactory` de `contact_person`'ı oradan dolduruyor.
+`CompanyFilter::searchable()` `contact_person`'ı kapsadığı için "çınar" araması
+fazladan bir kayıt buluyordu — **uygulama doğru davranıyor**, kırılgan olan testin
+sayım beklentisiydi. Bu turdaki PHP 8.3 değişikliğiyle ilgisi yok; K-038'de
+düzeltilen `city`/'Trabzon' çakışmasıyla aynı sınıf.
+**Karar:** Test sınıfına `searchableCompany()` yardımcısı eklendi; arama iddiası
+taşıyan tüm testler ARANABİLİR alanların tamamını nötr sabitlerle doldurur.
+Test zayıflatılmadı — Türkçe i-katlama davranışı aynen doğrulanmaya devam ediyor,
+yalnızca sayım deterministik hâle geldi. 10 ardışık koşuda yeşil.

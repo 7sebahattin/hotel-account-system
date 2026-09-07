@@ -29,11 +29,36 @@ class CompanyListingTest extends TestCase
         return $response->viewData('companies')->pluck('name')->all();
     }
 
+    /**
+     * Arama testleri için firma: ARANABİLİR alanların tamamı nötr sabitlerle
+     * doldurulur.
+     *
+     * Gerekçe: `CompanyFilter::searchable()` name, tax_number, phone,
+     * contact_person ve city alanlarını kapsar; `CompanyFactory` bunları
+     * faker'ın Türkçe listelerinden rastgele doldurur ve o listelerde
+     * 'Çınar', 'Ilgaz' gibi arama terimleriyle çakışan değerler VARDIR.
+     * Böyle bir çakışmada uygulama doğru davranır (gerçekten eşleşen bir
+     * kayıt bulur) ama testin sayım beklentisi rastgele kırılır.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    private function searchableCompany(string $name, array $overrides = []): Company
+    {
+        return Company::factory()->create(array_merge([
+            'name' => $name,
+            'tax_number' => '1000000000',
+            'phone' => '0500 000 00 00',
+            'contact_person' => 'Ali Veli',
+            'city' => 'Ankara',
+            'tax_office' => 'Çankaya',
+        ], $overrides));
+    }
+
     #[Test]
     public function unvana_gore_arama_yapilir(): void
     {
-        Company::factory()->create(['name' => 'Ilgaz Turizm']);
-        Company::factory()->create(['name' => 'Bergama Seyahat']);
+        $this->searchableCompany('Ilgaz Turizm');
+        $this->searchableCompany('Bergama Seyahat');
 
         $response = $this->actingAs($this->userWithRole(RoleName::Admin))
             ->get(route('companies.index', ['q' => 'ilgaz']));
@@ -46,14 +71,10 @@ class CompanyListingTest extends TestCase
     {
         $admin = $this->userWithRole(RoleName::Admin);
 
-        // Aranabilir alanların tamamı açıkça verilir: factory'nin rastgele değerleri
-        // (fake()->city() Türkçe şehir listesinden seçer) aranan terimle çakışabiliyordu.
-        $base = ['tax_number' => '1000000000', 'phone' => '0500 000 00 00', 'contact_person' => 'Ali Veli', 'city' => 'Ankara', 'tax_office' => 'Çankaya'];
-
-        Company::factory()->create(['name' => 'A Firma', ...$base, 'tax_number' => '9876543210']);
-        Company::factory()->create(['name' => 'B Firma', ...$base, 'phone' => '0212 111 22 33']);
-        Company::factory()->create(['name' => 'C Firma', ...$base, 'contact_person' => 'Mehmet Öz']);
-        Company::factory()->create(['name' => 'D Firma', ...$base, 'city' => 'Trabzon']);
+        $this->searchableCompany('A Firma', ['tax_number' => '9876543210']);
+        $this->searchableCompany('B Firma', ['phone' => '0212 111 22 33']);
+        $this->searchableCompany('C Firma', ['contact_person' => 'Mehmet Öz']);
+        $this->searchableCompany('D Firma', ['city' => 'Trabzon']);
 
         foreach ([
             '9876543210' => 'A Firma',
@@ -77,7 +98,7 @@ class CompanyListingTest extends TestCase
         $yazimlar = ['ILGAZ TURİZM', 'Ilgaz Turizm', 'ilgaz turizm', 'İLGAZ TURİZM', 'ılgaz turizm'];
 
         foreach ($yazimlar as $name) {
-            Company::factory()->create(['name' => $name]);
+            $this->searchableCompany($name);
         }
 
         foreach (['ilgaz', 'ILGAZ', 'Ilgaz', 'İLGAZ', 'ılgaz', 'İlgaz'] as $term) {
@@ -99,9 +120,9 @@ class CompanyListingTest extends TestCase
     #[Test]
     public function all_caps_kaydedilmis_firma_kucuk_harfle_bulunur(): void
     {
-        Company::factory()->create(['name' => 'ÇINAR TURİZM']);
-        Company::factory()->create(['name' => 'Çınar Turizm']);
-        Company::factory()->create(['name' => 'Bergama Seyahat']);
+        $this->searchableCompany('ÇINAR TURİZM');
+        $this->searchableCompany('Çınar Turizm');
+        $this->searchableCompany('Bergama Seyahat');
 
         foreach (['çınar', 'ÇINAR', 'Çınar', 'çinar'] as $term) {
             $response = $this->actingAs($this->userWithRole(RoleName::Admin))
@@ -198,8 +219,8 @@ class CompanyListingTest extends TestCase
     #[Test]
     public function arama_joker_karakterleri_metin_olarak_ele_alir(): void
     {
-        Company::factory()->create(['name' => 'Yüzde %100 Turizm']);
-        Company::factory()->create(['name' => 'Başka Firma']);
+        $this->searchableCompany('Yüzde %100 Turizm');
+        $this->searchableCompany('Başka Firma');
 
         $response = $this->actingAs($this->userWithRole(RoleName::Admin))
             ->get(route('companies.index', ['q' => '%100']));

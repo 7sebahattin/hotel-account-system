@@ -23,7 +23,7 @@ Kullanıcılar: otel sahibi (Patron), yönetici (Admin), resepsiyon/muhasebe (Pe
 
 | Katman | Seçim |
 |---|---|
-| Dil | PHP 8.3+ (geliştirme ortamı: 8.4) |
+| Dil | **PHP 8.3** — üretim runtime'ı ve resmi hedef. CI ve deploy aynı sürümü kullanır. |
 | Framework | **Laravel 13** |
 | Veritabanı | MySQL 8 / MariaDB 10.6+ |
 | Şablon | Blade |
@@ -39,6 +39,24 @@ Kullanıcılar: otel sahibi (Patron), yönetici (Admin), resepsiyon/muhasebe (Pe
 **Kullanılmayacaklar:** SPA framework (React/Vue), Livewire, Inertia, Redis, Docker tabanlı prod, harici modül paketi (`nwidart/laravel-modules`), mikroservis.
 
 Paylaşımlı hosting gerçeği: `CACHE_STORE=database`, `SESSION_DRIVER=database`, `QUEUE_CONNECTION=sync` (V1'de kuyruk kullanılmıyor).
+
+**PHP sürümü bağlayıcıdır ve 8.3'tür.** Hosting'de PHP 8.4 kurulu olsa da
+**alan adı bazlı PHP izolasyonu kapalıdır**: sürüm yalnızca hesabın tamamı için
+değiştirilebilir ve aynı hesapta başka aktif siteler vardır. Bu yüzden uygulama
+8.4'e yükseltilmez, 8.3'e kilitlenir:
+
+- `composer.json` → `config.platform.php = "8.3.0"`. Composer bağımlılıkları
+  8.3 ortamını simüle ederek çözer; 8.4 isteyen bir paket kilide giremez.
+  Yama sürümü olarak `8.3.0` seçilmiştir (en muhafazakâr: hosting'in yama
+  sürümü ne olursa olsun çalışır; `8.3.99` ile çözüm aynı çıktığı ölçülmüştür).
+- CI (`ci.yml`) ve deploy workflow'u PHP **8.3** kullanır; testler hedef
+  runtime'da koşar.
+- `phpstan.neon` → `phpVersion: 80300`. Yalnızca 8.4'te var olan bir işlev veya
+  sözdizimi kullanılırsa statik analiz sunucuda fatal error olmadan önce kırılır.
+- CI ve deploy build'i `composer check-platform-reqs` ile kilidi doğrular.
+
+Geliştirme ortamı 8.4 çalıştırabilir; bu üç kapı sayesinde fark sessizce
+üretime sızamaz.
 
 ---
 
@@ -907,12 +925,12 @@ Canlı dizin yerleşimi:
 `develop` → Lemon (kabul/staging), `main` → production; ayrı hedefler, ayrı veritabanı.
 **Otomatik push deployment hiçbir dal için etkin değildir.**
 
-> **Deploy öncesi iki blocker** (`docs/deploy-lemon.md` §1 ve §8):
-> 1. Kilitli Symfony 8.1.x bileşenleri PHP ≥ 8.4.1 istiyor; hosting'de 8.3 var.
->    Ya hosting 8.4'e alınmalı ya da `config.platform.php` 8.3'e sabitlenip
->    kilit yeniden çözülmelidir (çözümün var olduğu doğrulandı: Symfony 7.4).
-> 2. Veritabanı kullanıcısının TRIGGER yetkisi doğrulanmadan production
->    migration çalıştırılmaz.
+> **PHP sürümü blocker'ı ÇÖZÜLDÜ** — bkz. §2 ve `docs/kararlar.md` K-060.
+> Bağımlılıklar `config.platform.php = "8.3.0"` ile PHP 8.3'e kilitlendi;
+> Symfony bileşenleri 7.4 LTS'e indi. `composer why-not php 8.3` temiz.
+>
+> **Kalan tek deploy blocker'ı** (`docs/deploy-lemon.md` §8): veritabanı
+> kullanıcısının TRIGGER yetkisi doğrulanmadan production migration çalıştırılmaz.
 
 Kurallar:
 - `.env` repoda tutulmaz ve deploy sırasında **asla üzerine yazılmaz**.

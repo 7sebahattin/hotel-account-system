@@ -23,49 +23,31 @@ klasörleri ve `/home/derspros` kökü **deploy hedefi değildir**. Workflow'dak
 
 ---
 
-## 1. BLOCKER — PHP sürümü ile bağımlılıklar uyuşmuyor
+## 1. PHP sürümü — ÇÖZÜLDÜ ✅
 
-**Bu sorun çözülmeden deploy edilirse uygulama sunucuda açılmaz.**
+> Bu bölüm daha önce bir **blocker** idi: kilitli Symfony 8.1.x bileşenleri
+> PHP ≥ 8.4.1 istiyordu, hosting'de 8.3 vardı. **Artık çözülmüştür.**
 
-`composer.lock` şu anda Symfony 8.1.x bileşenlerine kilitli ve bunlar
-**PHP >= 8.4.1** istiyor. Hosting'de PHP **8.3** var.
+**Neden 8.4'e yükseltilmedi:** Hosting'de PHP 8.4 kurulu, ancak **alan adı bazlı
+PHP izolasyonu kapalı**. Sürüm yalnızca hesabın tamamı için değiştirilebiliyor ve
+aynı hesapta başka aktif siteler var; global bir değişiklik onları da etkilerdi.
 
-Ölçüm (bu depoda çalıştırıldı):
+**Yapılan:** Uygulama PHP 8.3'e kilitlendi.
 
-```
-symfony/console          v8.1.6   php: >=8.4.1
-symfony/http-foundation  v8.1.6   php: >=8.4.1
-… (19 Symfony paketi aynı durumda)
-laravel/framework        v13.30.1 php: ^8.3      ← çerçevenin kendisi 8.3'ü destekliyor
-```
+| Kapı | Nasıl |
+|---|---|
+| Bağımlılık çözümü | `composer.json` → `config.platform.php = "8.3.0"` |
+| Test | CI (`ci.yml`) PHP **8.3** kullanır |
+| Statik analiz | `phpstan.neon` → `phpVersion: 80300` |
+| Derleme | Deploy workflow'u PHP 8.3 ile derler |
+| Doğrulama | CI ve deploy build'i `composer check-platform-reqs` çalıştırır |
 
-Kilit dosyası PHP 8.4.19 üzerinde çözüldüğü için Composer, Laravel'in izin
-verdiği iki aralıktan (`^7.4.0 || ^8.0.0`) yenisini seçmiş.
+**Sonuç:** `composer why-not php 8.3` → *"There is no installed package depending
+on 'php' in versions not matching 8.3"*. 16 Symfony paketi 8.1.x'ten **7.4 LTS**'e
+indi; Laravel v13.30.1 değişmedi (`^8.3` zaten destekliyordu).
+`composer audit` → güvenlik uyarısı yok.
 
-### Çözüm A — hosting'i PHP 8.4'e almak (önerilen)
-
-cPanel → **Select PHP Version** → 8.4. Laravel 13'ün doğal hedefi budur;
-kod tarafında hiçbir değişiklik gerekmez.
-*Önce hosting'de 8.4'ün sunulup sunulmadığı kontrol edilmelidir.*
-
-### Çözüm B — bağımlılıkları PHP 8.3'e sabitlemek
-
-`composer.json` içine platform sabiti eklenir ve kilit yeniden çözülür:
-
-```json
-"config": { "platform": { "php": "8.3.99" } }
-```
-
-Doğrulandı (`composer update --dry-run`): çözüm **vardır**, 19 Symfony paketi
-7.4.x'e iner ve Laravel 13 bunu destekler.
-
-Maliyeti: 19 paket sürüm düşürür ve tüm test paketi yeniden koşturulmalıdır.
-
-**Karar sizindir; bu turda `composer.lock` değiştirilmedi.**
-
-Bu hata bir daha sessizce geçemez: workflow'un build işi hedef PHP sürümüyle
-derleme yapar ve `composer check-platform-reqs --no-dev` ile doğrular. Uyumsuzsa
-**build kırmızıya döner, aktarım hiç başlamaz.**
+Ayrıntılı paket dökümü: `docs/kararlar.md` K-060.
 
 ---
 
