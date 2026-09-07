@@ -707,3 +707,31 @@ fark yalnızca **upload** üretir, **delete üretmez**. İlk gerçek aktarım su
 önceden bulunan dosyaları silmez. İlk çalıştırmanın dry-run olması önerisi yine de
 geçerlidir — hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
 
+## K-081 · Üretimde varsayılan yönetici kimlik bilgisiyle seed YASAKTIR
+> Numara, henüz birleştirilmemiş dal(lar)daki K-071…K-080 ile çakışmasın diye seçildi.
+
+**Sorun:** `SEED_ADMIN_PASSWORD` boş bırakılırsa
+`config/hotel.php` varsayılanı devreye giriyor ve seeder `admin@example.com` /
+`degistir-beni` hesabı oluşturuyordu. Negatif testle doğrulanmıştı: parola geçerliydi.
+Belgeye yazmak yetmez — `.env` unutulursa kapı açık kalır.
+**Karar — koruma iki katmanlı:**
+1. `config/hotel.php` artık e-posta ve parola için **varsayılan vermiyor**; env yoksa
+   `null` döner. Güvensiz değerin config'te durması, "ayarlanmış" gibi görünmesine yol açıyordu.
+2. `DatabaseSeeder::guardProductionCredentials()` local/testing DIŞINDAKİ her ortamda
+   çalışır ve şu dört durumda `RuntimeException` fırlatır: parola boş, parola geliştirme
+   varsayılanı (`degistir-beni`), e-posta boş, e-posta geliştirme varsayılanı
+   (`admin@example.com`).
+**Kapsam `production` değil `! local/testing`:** dosyada zaten demo hesapları aynı koşulla
+sınırlayan bir kural vardı; iki farklı "üretim" tanımı taşımak yerine tek tanım kullanıldı.
+`staging` de korunur.
+**Fail-closed:** guard `RolePermissionSeeder`'dan hemen sonra, **hiçbir kullanıcı
+yazılmadan** çalışır. Testle doğrulandı: guard tetiklendiğinde `users` tablosu boş kalır.
+Yarım kalan tek şey rol/yetki tablolarıdır; o seeder idempotenttir, yeniden çalıştırmak güvenlidir.
+**Geliştirici deneyimi korundu:** varsayılanlar `DatabaseSeeder` sabitlerine taşındı ve
+yalnızca local/testing'de uygulanır. `php artisan migrate:fresh --seed` `.env` olmadan
+da çalışmaya devam eder.
+**Doğrulama:** 12 yeni test (`tests/Feature/Security/ProductionSeedGuardTest.php`) +
+gerçek CLI provası: `APP_ENV=production php artisan db:seed --force` `SEED_ADMIN_*`
+olmadan RuntimeException verdi ve `users` tablosunda 0 kayıt kaldı; güçlü parolayla
+tek admin oluştu. Toplam test 454 → 466, hepsi yeşil.
+
