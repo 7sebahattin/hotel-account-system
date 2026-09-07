@@ -906,14 +906,19 @@ edilmez; önce fark açıklanır. Bu rapor olmadan Excel bırakılmaz.
 
 ## 15. Dağıtım (cPanel)
 
-Canlı dizin yerleşimi:
+Canlı dizin yerleşimi — **Mimari A** (`docs/deploy-lemon.md` §2):
 
 ```
 /home/kullanici/
-├── app/              # Laravel kökü — web'den ERİŞİLEMEZ (.env, storage, vendor burada)
-├── public_html/      # DocumentRoot → ../app/public içeriğine yönlenir
+├── lemon-app/            # Laravel kökü — web'den ERİŞİLEMEZ (.env, storage, vendor burada)
+│   └── public/           # ← DocumentRoot BURAYI gösterir (cPanel'den elle ayarlanır)
+│       └── index.php     # Laravel'in KENDİ giriş dosyası — uyarlanmaz, hacklenmez
+├── public_html/          # BAŞKA sitenin DocumentRoot'u — deploy hedefi DEĞİLDİR
 └── backups/
 ```
+
+Hesapta birden fazla canlı site vardır. Deploy'un **tek** hedefi Laravel köküdür;
+workflow'un `guard` işi başka her hedefi fail-closed reddeder.
 
 **Deploy yöntemi: GitHub Actions + FTPS. SSH erişimi zorunlu kabul edilmez.**
 

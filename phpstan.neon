@@ -15,7 +15,3 @@ parameters:
         - database
         - routes
         - tests
-
-    # deploy/ uygulama kodu değil, cPanel sunucusuna kopyalanan tekil şablonlardır.
-    excludePaths:
-        - deploy

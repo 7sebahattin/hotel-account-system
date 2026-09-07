@@ -22,23 +22,23 @@ Deploy yöntemi bunlara göre belirlenir:
 
 Laravel kökü **web'den erişilemeyen** bir dizinde durur:
 
+> **Güncel ve bağlayıcı yerleşim `docs/deploy-lemon.md` §2'dedir (Mimari A).**
+> Aşağıdaki genel şema onunla çelişirse deploy-lemon.md geçerlidir.
+
 ```
 /home/<kullanici>/
-├── app/                 # Laravel kökü — .env, storage, vendor BURADA
+├── <uygulama>/          # Laravel kökü — .env, storage, vendor BURADA
 │   ├── .env
 │   ├── artisan
-│   ├── public/          # gerçek public dizini
-│   └── ...
-├── public_html/         # DocumentRoot (staging için: staging.<alan>/)
-│   ├── index.php        # -> deploy/public_html-index.php
-│   ├── .htaccess        # -> deploy/public_html-htaccess
-│   ├── build/           # Vite çıktısı (kopya veya symlink)
-│   ├── manifest.json, sw.js, icons/
-│   └── storage -> ../app/storage/app/public
+│   └── public/          # ← DocumentRoot BURAYA yönlendirilir
+│       ├── index.php    # Laravel'in KENDİ dosyası, değiştirilmez
+│       └── .htaccess    # HTTPS zorunluluğu + güvenlik başlıkları
 └── backups/
 ```
 
-`deploy/` klasöründeki şablonlar `public_html` içine kopyalanır.
+DocumentRoot doğrudan Laravel'in `public/` dizinini gösterdiği için ayrı bir
+giriş dosyası şablonu **gerekmez**; `deploy/public_html-*.php` şablonları bu
+nedenle depodan kaldırılmıştır.
 
 ## 3. İlk kurulum adımları
 

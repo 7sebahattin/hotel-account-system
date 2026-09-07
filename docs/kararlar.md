@@ -573,3 +573,54 @@ düzeltilen `city`/'Trabzon' çakışmasıyla aynı sınıf.
 taşıyan tüm testler ARANABİLİR alanların tamamını nötr sabitlerle doldurur.
 Test zayıflatılmadı — Türkçe i-katlama davranışı aynen doğrulanmaya devam ediyor,
 yalnızca sayım deterministik hâle geldi. 10 ardışık koşuda yeşil.
+
+## K-062 · Mimari A kesinleşti; Mimari B kaldırıldı
+**Karar:** cPanel'de `lemon.derspros.com.tr` alan adının Document Root alanının
+değiştirilebildiği doğrulandı. Laravel kökü `/home/derspros/lemon-app/`, DocumentRoot
+`/home/derspros/lemon-app/public` olacak. **Mimari B (ayrık public dizini) kullanılmayacak.**
+**Kaldırılanlar:** `deploy/public_html-index.php`, `deploy/public_html-htaccess` ve boşalan
+`deploy/` dizini; `phpstan.neon`'daki artık geçersiz `excludePaths: deploy` girdisi;
+workflow'daki ikinci (DocumentRoot) FTP aktarım adımı; `LEMON_DOCROOT` repository variable'ı.
+**Kazanç:** Laravel'in kendi `public/index.php` dosyası hiç değiştirilmiyor; `public_path()`,
+`asset()` ve `storage:link` doğal çalışıyor; deploy tek hedefe yazıyor.
+**Ek doğrulama:** Build adımı `public/index.php` içinde standart
+`require __DIR__.'/../vendor/autoload.php'` satırını arıyor — dosya kazara uyarlanırsa
+build kırmızıya döner.
+
+## K-063 · `.htaccess` sertleştirmesi Laravel'in public/.htaccess dosyasına taşındı
+**Sorun:** Kaldırılan `deploy/public_html-htaccess` şablonunda, Laravel'in stok
+`public/.htaccess` dosyasında **bulunmayan** üç şey vardı: HTTPS zorunluluğu (CLAUDE.md §15),
+gizli dosya erişim engeli ve güvenlik başlıkları (`X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`). Mimari A'da servis edilen dosya Laravel'inki olduğu için bunlar
+**sessizce kaybolacaktı.**
+**Karar:** Sertleştirme `public/.htaccess` içine taşındı. Laravel'in kendi kuralları
+(Authorization, X-XSRF-Token, trailing slash, front controller, MultiViews) aynen korundu —
+şablonda X-XSRF-Token kuralı yoktu, o da kaybolmadı.
+
+## K-064 · Hedef dizin doğrulaması fail-closed ve iki biçimle sınırlı
+**Bağlam:** Hesapta `public_html` (derspros.com.tr) ve en az dört başka canlı site klasörü var.
+**Karar:** `guard` işi yalnızca iki değeri kabul eder: `/home/derspros/lemon-app/` (chroot yok)
+veya `/lemon-app/` (FTP kökü `/home/derspros` ise). Başka her değerde **iş durur**.
+Tam eşleşmenin yanı sıra bağımsız ikinci bir kontrol seti çalışır: sonu `/`, `..` yok,
+`public_html` yok, diğer alan adı klasörleri yok, son dizin adı `lemon-app`.
+Değer boşsa iş hemen durur — tanımsız değişken yüzünden hesap köküne yazmak imkânsızdır.
+**Doğrulama:** 14 senaryo yerelde sınandı; yalnızca iki meşru biçim geçti, hesaptaki tüm
+diğer site klasörleri ve `/`, `/home/derspros/`, `..` içeren yollar reddedildi.
+**`dangerous-clean-slate` hiçbir koşulda kullanılmaz.**
+
+## K-065 · DocumentRoot değişikliği EN SON yapılır
+**Sorun:** `/home/derspros/lemon-app/public` bugün boştur. DocumentRoot şimdi değiştirilirse
+Lemon alan adı, ilk gerçek deploy tamamlanana kadar 403/404 verir.
+**Karar sırası:** dizin+`.env`+DB hazırlığı → dry-run → ilk gerçek deploy → sunucuda
+`key:generate`/`migrate`/`storage:link`/cache → **ancak o zaman** cPanel'den DocumentRoot
+değişikliği → §7 güvenlik doğrulaması.
+**GitHub Actions bu değişikliği yapmaz ve yapamaz** — cPanel erişimi yoktur.
+
+## K-066 · Rollback: analiz edildi, kurulmadı
+**Değerlendirilen üç yol:** (A) deploy öncesi elle klasör yedeği, (B) sürümlü dizin +
+symlink, (C) git ile ileri düzeltme.
+**Öneri: A + C.** B elendi çünkü FTPS ile güvenilir symlink kurulamıyor ve SSH yok.
+**Kritik ayrım:** dosya yedeği veritabanını geri almaz. `ledger_entries` append-only'dir
+(§6/L1) ve migration'lar ileri alınmıştır; şema değiştiren bir deploy öncesi ayrıca
+`mysqldump` alınmalıdır.
+**Uygulama:** ilk gerçek deploy öncesi, ayrı bir turda. Bu turda hiçbir şey kurulmadı.

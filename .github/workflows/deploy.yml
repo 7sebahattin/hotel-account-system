@@ -9,10 +9,17 @@ name: Deploy (Lemon)
 #   2. Varsayılan çalışma biçimi `dry-run`'dır: bağlanır, ne yapacağını raporlar,
 #      hiçbir şey yazmaz/silmez.
 #   3. Gerçek aktarım ayrıca `DEPLOY_ENABLED` repository variable'ının `true`
-#      olmasını ister. Bu değişken HENÜZ OLUŞTURULMAMIŞTIR; oluşturulana kadar
-#      `mode: deploy` seçilse bile iş güvenle durur.
+#      olmasını ister. Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
 #
-# Kurulum ve açma adımları: docs/deploy-lemon.md
+# MİMARİ A (kesinleşti — docs/deploy-lemon.md §2):
+#   Laravel kökü  : /home/derspros/lemon-app/
+#   DocumentRoot  : /home/derspros/lemon-app/public   ← cPanel'den ELLE ayarlanır
+#
+# Bu workflow TEK hedefe yazar: Laravel kökü. `public/` o ağacın parçası
+# olduğu için ayrı bir DocumentRoot aktarımı YOKTUR ve Laravel'in kendi
+# `public/index.php` dosyası olduğu gibi kullanılır.
+#
+# DocumentRoot değişikliğini bu workflow YAPMAZ ve YAPAMAZ.
 # ============================================================================
 
 on:
@@ -38,8 +45,11 @@ permissions:
   contents: read
 
 env:
-  # Hedef alan adı — `confirm_target` bununla karşılaştırılır.
   TARGET_DOMAIN: lemon.derspros.com.tr
+  # FTP kökü chroot'lu DEĞİLSE beklenen tek geçerli hedef.
+  EXPECTED_ABSOLUTE_DIR: /home/derspros/lemon-app/
+  # FTP kullanıcısı /home/derspros altına hapsedilmişse beklenen tek geçerli hedef.
+  EXPECTED_CHROOT_DIR: /lemon-app/
   NODE_VERSION: '22'
 
 jobs:
@@ -50,61 +60,60 @@ jobs:
     outputs:
       live: ${{ steps.decide.outputs.live }}
     steps:
-      - name: Hedef dizinler tanımlı mı
+      # Hesapta derspros.com.tr ve BAŞKA CANLI SİTELER vardır. Yanlış bir hedef,
+      # onların dosyalarını etkileyebilir. Bu adım FAIL-CLOSED çalışır: şüpheli
+      # veya tanınmayan her değerde iş durur.
+      #
+      # Değerler loglanmaz; yalnızca geçti/kaldı ve hangi biçimin beklendiği yazılır.
+      - name: Hedef dizin Lemon uygulamasına mı ait
         env:
           APP_DIR: ${{ vars.LEMON_APP_DIR }}
-          DOCROOT: ${{ vars.LEMON_DOCROOT }}
-        run: |
-          fail=0
-          [ -n "$APP_DIR" ] || { echo "::error::LEMON_APP_DIR repository variable tanımlı değil."; fail=1; }
-          [ -n "$DOCROOT" ] || { echo "::error::LEMON_DOCROOT repository variable tanımlı değil."; fail=1; }
-          exit $fail
-
-      # Yanlış hedefe yazmak, aynı hesaptaki DİĞER SİTELERİ yok edebilir.
-      # Bu adım, hedef dizinlerin biçimini doğrular ve yasaklı kökleri reddeder.
-      # Değerler LOGLANMAZ; yalnızca geçti/kaldı bilgisi yazılır.
-      - name: Hedef dizinler güvenli mi
-        env:
-          APP_DIR: ${{ vars.LEMON_APP_DIR }}
-          DOCROOT: ${{ vars.LEMON_DOCROOT }}
         run: |
           set -u
           fail=0
 
-          check() {
-            local name="$1" dir="$2"
-
-            case "$dir" in
-              */) ;;
-              *) echo "::error::$name sonu '/' ile bitmeli (FTP-Deploy-Action bunu şart koşar)."; fail=1 ;;
-            esac
-
-            # Yasaklı hedefler: ana site ve üst dizine çıkış.
-            # NOT: kabuk `case` kalıplarında `*` eğik çizgiyi de eşler; bu yüzden
-            # "hesap kökü" kontrolü kalıpla değil, aşağıdaki derinlik ölçümüyle yapılır.
-            case "$dir" in
-              */public_html/*|*/public_html/) echo "::error::$name ana sitenin (public_html) altında — reddedildi."; fail=1 ;;
-              *..*) echo "::error::$name üst dizine çıkış içeriyor — reddedildi."; fail=1 ;;
-            esac
-
-            # En az /home/<hesap>/<uygulama-dizini>/ derinliği. Bu tek kontrol
-            # "/", "/home/" ve "/home/<hesap>/" hedeflerinin tamamını reddeder.
-            depth=$(printf '%s' "$dir" | awk -F/ '{print NF-2}')
-            if [ "$depth" -lt 3 ]; then
-              echo "::error::$name yeterince derin değil; /home/<hesap>/<dizin>/ biçiminde olmalı."
-              fail=1
-            fi
-          }
-
-          check LEMON_APP_DIR "$APP_DIR"
-          check LEMON_DOCROOT "$DOCROOT"
-
-          if [ "$APP_DIR" = "$DOCROOT" ]; then
-            echo "::error::Laravel kökü ile DocumentRoot aynı olamaz — .env ve vendor web'e açılırdı."
-            fail=1
+          if [ -z "${APP_DIR:-}" ]; then
+            echo "::error::LEMON_APP_DIR repository variable tanımlı değil. Boş hedefle deploy YAPILMAZ."
+            exit 1
           fi
 
-          [ "$fail" -eq 0 ] && echo "Hedef dizin kontrolleri geçti."
+          # 1) Tam eşleşme: yalnızca iki biçim kabul edilir.
+          #    Diğer her değer — hesap kökü, public_html, başka alan adı klasörü —
+          #    bu kontrolden geçemez.
+          case "$APP_DIR" in
+            "$EXPECTED_ABSOLUTE_DIR"|"$EXPECTED_CHROOT_DIR") ;;
+            *)
+              echo "::error::LEMON_APP_DIR tanınmıyor. Yalnızca şu iki biçim kabul edilir:"
+              echo "::error::  $EXPECTED_ABSOLUTE_DIR   (FTP kökü chroot'lu DEĞİLSE)"
+              echo "::error::  $EXPECTED_CHROOT_DIR                 (FTP kökü /home/derspros ise)"
+              echo "::error::Başka bir değer, hesaptaki diğer siteleri etkileyebileceği için reddedilir."
+              fail=1
+              ;;
+          esac
+
+          # 2) Bağımsız ikinci kontrol seti. Yukarıdaki tam eşleşme bir gün
+          #    gevşetilirse bunlar yine de yasak hedefleri yakalar.
+          case "$APP_DIR" in
+            */) ;;
+            *) echo "::error::Hedef '/' ile bitmeli (FTP-Deploy-Action bunu şart koşar)."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            *..*) echo "::error::Hedef üst dizine çıkış içeriyor."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            */public_html/*|*/public_html/) echo "::error::Hedef ana sitenin (public_html) altında."; fail=1 ;;
+          esac
+          case "$APP_DIR" in
+            *derspros.com.tr/*|*nuvernatrade.com/*|*nymagro.com/*)
+              echo "::error::Hedef başka bir alan adı klasörünü gösteriyor."; fail=1 ;;
+          esac
+          # Son dizin adı kesinlikle lemon-app olmalı.
+          case "$APP_DIR" in
+            */lemon-app/) ;;
+            *) echo "::error::Hedefin son dizini 'lemon-app' olmalı."; fail=1 ;;
+          esac
+
+          [ "$fail" -eq 0 ] && echo "Hedef dizin kontrolleri geçti (Lemon uygulama kökü)."
           exit $fail
 
       - name: Çalışma biçimine karar ver
@@ -120,7 +129,7 @@ jobs:
             exit 0
           fi
 
-          if [ "$ENABLED" != "true" ]; then
+          if [ "${ENABLED:-}" != "true" ]; then
             echo "::error::Gerçek deploy kapalı. DEPLOY_ENABLED repository variable'ı 'true' değil."
             echo "::error::Bu bilinçli bir kilittir; açmadan önce docs/deploy-lemon.md §9 okunmalıdır."
             exit 1
@@ -142,8 +151,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Hosting'in PHP sürümü kullanılır. Daha yeni bir sürümle derlemek,
-      # sunucuda fatal error veren bir vendor/ ağacı üretir.
+      # Hosting'in PHP sürümü kullanılır (CLAUDE.md §2). Daha yeni bir sürümle
+      # derlemek, sunucuda fatal error veren bir vendor/ ağacı üretir.
       - name: PHP kurulumu
         uses: shivammathur/setup-php@v2
         with:
@@ -158,7 +167,6 @@ jobs:
         run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
 
       # Kritik kapı: derlenen vendor/ gerçekten hedef PHP sürümünde çalışıyor mu?
-      # Bu adım kırmızıya dönerse deploy DURMALIDIR — sunucuda fatal error olurdu.
       - name: Hedef PHP sürümü uyumluluğu
         run: composer check-platform-reqs --no-dev
 
@@ -179,6 +187,10 @@ jobs:
             || { echo "::error::Vite çıktısı bulunamadı (public/build/manifest.json)."; exit 1; }
           test -f vendor/autoload.php \
             || { echo "::error::vendor/autoload.php bulunamadı."; exit 1; }
+          # Mimari A: Laravel'in KENDİ giriş dosyası kullanılır, uyarlanmış bir
+          # kopya değil. Bu satır, dosyanın kazara değiştirilmediğini doğrular.
+          grep -q "__DIR__.'/../vendor/autoload.php'" public/index.php \
+            || { echo "::error::public/index.php standart Laravel giriş dosyası değil."; exit 1; }
 
       # Geliştirme dosyaları artifact'a taşınmaz.
       - name: Aktarılacak dosyaları hazırla
@@ -186,9 +198,10 @@ jobs:
           rm -rf .git .github .claude tests docs node_modules
           rm -f phpunit.xml pint.json phpstan.neon package.json package-lock.json \
                 vite.config.js README.md CLAUDE.md AGENTS.md .editorconfig .gitattributes .gitignore
-          # .env ASLA aktarılmaz. Zaten .gitignore'da; yine de burada kesin olarak siliyoruz.
+          # .env ASLA aktarılmaz. Zaten .gitignore'da; yine de kesin olarak siliyoruz.
           rm -f .env .env.* || true
-          # storage/ ve bootstrap/cache/ sunucuda yaşar; artifact'a hiç girmez.
+          # storage/ ve bootstrap/cache/ SUNUCUDA yaşar; artifact'a hiç girmez.
+          # Bunlar kullanıcı verisi, oturum, günlük ve önbellek taşır.
           rm -rf storage bootstrap/cache
 
       - name: Artifact
@@ -217,10 +230,13 @@ jobs:
           test ! -d release/.git || { echo "::error::.git artifact içinde — aktarım durduruldu."; exit 1; }
           test ! -d release/tests || { echo "::error::tests/ artifact içinde — aktarım durduruldu."; exit 1; }
           test ! -d release/storage || { echo "::error::storage/ artifact içinde — production verisi ezilebilirdi."; exit 1; }
+          test ! -d release/bootstrap/cache || { echo "::error::bootstrap/cache/ artifact içinde."; exit 1; }
           test ! -d release/node_modules || { echo "::error::node_modules/ artifact içinde."; exit 1; }
+          test -f release/public/index.php || { echo "::error::public/index.php artifact'ta yok."; exit 1; }
           echo "Artifact temiz."
 
-      # Laravel kökü — web'den erişilemeyen dizine.
+      # TEK aktarım: Laravel kökü. DocumentRoot bu ağacın içindeki public/
+      # dizinidir (Mimari A), bu yüzden ikinci bir aktarım YOKTUR.
       #
       # `dangerous-clean-slate` ASLA kullanılmaz: hedef dizinin TÜM içeriğini,
       # exclude edilmiş öğeler dahil siler.
@@ -261,30 +277,12 @@ jobs:
             README.md
             CLAUDE.md
 
-      # Derlenmiş varlıklar — DocumentRoot altındaki build/ dizinine.
-      # NOT: Bu adım yalnızca B mimarisinde (ayrık public dizini) gereklidir.
-      # A mimarisinde (DocumentRoot doğrudan Laravel'in public/ dizinini
-      # gösterir) bu adım kaldırılır — bkz. docs/deploy-lemon.md §2.
-      - name: Derlenmiş varlıkları gönder
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: ${{ secrets.FTP_PORT }}
-          protocol: ftps
-          local-dir: ./release/public/build/
-          server-dir: ${{ vars.LEMON_DOCROOT }}build/
-          state-name: .ftp-deploy-lemon-build.json
-          dry-run: ${{ needs.guard.outputs.live != 'true' }}
-          dangerous-clean-slate: false
-          log-level: standard
-
       - name: Özet
         run: |
           if [ "${{ needs.guard.outputs.live }}" = "true" ]; then
-            echo "Gerçek aktarım tamamlandı. Sunucuda migration için cron işaretini ve"
-            echo "docs/deploy-lemon.md §7'deki doğrulama komutlarını çalıştırın."
+            echo "Gerçek aktarım tamamlandı."
+            echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
+            echo "(zaten ayarlıysa bir şey yapılmaz) ve docs/deploy-lemon.md §7 doğrulaması koşulmalı."
           else
             echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya değişmedi."
           fi

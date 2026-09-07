@@ -11,7 +11,9 @@
 |---|---|
 | Alan adı | `lemon.derspros.com.tr` |
 | cPanel hesap kökü | `/home/derspros` |
-| Lemon DocumentRoot (mevcut) | `/home/derspros/lemon.derspros.com.tr` |
+| Lemon DocumentRoot (**mevcut**) | `/home/derspros/lemon.derspros.com.tr` — henüz değiştirilmedi |
+| Lemon DocumentRoot (**hedef**) | `/home/derspros/lemon-app/public` — cPanel'den ELLE ayarlanacak (§11 Aşama 4) |
+| Laravel kökü | `/home/derspros/lemon-app/` |
 | Ana site DocumentRoot | `/home/derspros/public_html` |
 | PHP | 8.3 |
 | Aktarım | GitHub Actions → FTPS |
@@ -51,70 +53,52 @@ Ayrıntılı paket dökümü: `docs/kararlar.md` K-060.
 
 ---
 
-## 2. Dizin mimarisi — karar bekliyor
+## 2. Dizin mimarisi — MİMARİ A (KESİNLEŞTİ)
 
-Laravel'de web'den yalnızca `public/` erişilebilir olmalıdır. `.env`, `vendor/`,
-`storage/` ve kaynak kod DocumentRoot'un **dışında** kalmalıdır.
-
-### Mimari A — DocumentRoot'u Laravel'in `public/` dizinine almak (ÖNERİLEN)
+cPanel'de `lemon.derspros.com.tr` alan adının **Document Root alanının
+değiştirilebildiği doğrulanmıştır**. Bu yüzden Mimari A seçilmiştir.
+Mimari B (ayrık public dizini) **kullanılmayacaktır** ve ona ait şablonlar
+(`deploy/public_html-index.php`, `deploy/public_html-htaccess`) depodan
+kaldırılmıştır.
 
 ```
 /home/derspros/
 ├── lemon-app/                 ← Laravel kökü, web'den ERİŞİLEMEZ
-│   ├── .env                   (sunucuda elle oluşturulur)
-│   ├── vendor/  storage/  bootstrap/  app/  config/  routes/ …
-│   └── public/                ← DocumentRoot buraya yönlendirilir
-│       ├── index.php          (Laravel'in kendi dosyası — DEĞİŞTİRİLMEZ)
-│       ├── build/             (Vite çıktısı)
-│       └── .htaccess
-├── public_html/               ← ana site, DOKUNULMAZ
-└── lemon.derspros.com.tr/     ← kullanılmaz hâle gelir (silinmez, boş bırakılır)
+│   ├── .env                   (sunucuda elle oluşturulur, deploy dokunmaz)
+│   ├── vendor/  bootstrap/  app/  config/  routes/  database/  lang/
+│   ├── storage/               (sunucuda bir kez kurulur, deploy dokunmaz)
+│   └── public/                ← YENİ DocumentRoot
+│       ├── index.php          Laravel'in KENDİ dosyası — değiştirilmez
+│       ├── .htaccess          HTTPS zorunluluğu + güvenlik başlıkları burada
+│       ├── build/             Vite çıktısı
+│       ├── favicon.ico, robots.txt
+│       └── storage -> ../storage/app/public   (storage:link)
+│
+├── public_html/               ← ana site (derspros.com.tr) — DOKUNULMAZ
+├── lemon.derspros.com.tr/     ← ESKİ DocumentRoot; DocumentRoot taşındıktan
+│                                 sonra kullanılmaz. Deploy hedefi DEĞİLDİR.
+├── nuverna.derspros.com.tr/   ← DOKUNULMAZ
+├── nuvernatrade.com/          ← DOKUNULMAZ
+└── nymagro.com/               ← DOKUNULMAZ
 ```
 
-cPanel → Domains → `lemon.derspros.com.tr` → Document Root:
+**cPanel ayarı (elle yapılacak, bkz. §11):**
+Domains → `lemon.derspros.com.tr` → Document Root:
 `/home/derspros/lemon-app/public`
 
-- ✅ `index.php` hiç değiştirilmez, standart Laravel yerleşimi
-- ✅ `public_path()`, `asset()`, `storage:link` doğal çalışır
-- ✅ Deploy tek hedefe yazar; workflow'daki ikinci aktarım adımı kaldırılır
-- ⚠️ cPanel'de DocumentRoot değiştirme yetkisi gerekir
+### Mimari A'nın getirdikleri
 
-### Mimari B — DocumentRoot değiştirilemiyorsa
+- `public/index.php` **hiç değiştirilmez** — Laravel'in standart giriş dosyası.
+  Workflow'un build adımı bu dosyanın standart kaldığını ayrıca doğrular.
+- `public_path()`, `asset()`, `storage:link` doğal çalışır.
+- Deploy **tek hedefe** yazar; ikinci bir DocumentRoot aktarımı yoktur.
+- `.env`, `vendor/` ve `storage/` DocumentRoot'un **dışındadır** — dizin
+  yerleşiminin kendisi asıl korumadır.
 
-```
-/home/derspros/
-├── lemon-app/                     ← Laravel kökü, web'den ERİŞİLEMEZ
-└── lemon.derspros.com.tr/         ← DocumentRoot (değişmedi)
-    ├── index.php                  (deploy/public_html-index.php şablonu)
-    ├── .htaccess                  (deploy/public_html-htaccess şablonu)
-    ├── build/                     (Vite çıktısı — ayrıca aktarılır)
-    ├── favicon.ico, robots.txt
-    └── storage -> ../lemon-app/storage/app/public
-```
+### DocumentRoot'u kim değiştirir
 
-`index.php` tek satırlık bir taban yolu tanımı taşır — Laravel'in kendi
-dosyasının zaten yaptığı `require __DIR__.'/../vendor/autoload.php'` işleminin
-göreli bir varyantıdır. **Mutlak yol yazılmaz**, `bindPath` hack'i yapılmaz:
-
-```php
-$laravel = __DIR__.'/../lemon-app';
-```
-
-Maliyeti dürüstçe:
-- ⚠️ `public_path()` sunucuda **servis edilmeyen** `lemon-app/public` dizinini
-  gösterir. `storage:link` bu yüzden DocumentRoot altında elle kurulmalıdır.
-- ⚠️ Vite çıktısı iki yere gider (Laravel kökü + DocumentRoot) → ekstra adım
-- ⚠️ `public/` içine dosya yazan her yeni özellik ayrı düşünülmelidir
-
-### Neden şimdi seçilemez
-
-Workflow'un `LEMON_DOCROOT` değişkeni ve ikinci aktarım adımı **doğrudan bu
-seçime bağlıdır**. cPanel'de DocumentRoot'un değiştirilip değiştirilemediğini
-görmeden yazılacak workflow tahmine dayanır ve yanlış dizine yazma riski taşır.
-
-**Bu yüzden §11'deki ilk madde sizde: cPanel'de DocumentRoot değiştirilebiliyor
-mu?** Cevaba göre workflow'un son hâli tek bir adım eklenerek/çıkarılarak
-kesinleşir.
+**GitHub Actions DEĞİL.** Workflow'un cPanel'e erişimi yoktur ve bu değişikliği
+yapamaz. Ayar §11'deki sırayla **elle** yapılır.
 
 ---
 
@@ -137,12 +121,13 @@ Dizin yolları secret değil **variable** olarak tutulur: gizli bilgi değillerd
 ama gözden geçirilebilir ve `guard` işi hata mesajında değeri sızdırmadan
 kontrol edebilir.
 
-| Variable | Değer (mimari seçimine göre) |
+| Variable | Değer |
 |---|---|
-| `LEMON_APP_DIR` | `/home/derspros/lemon-app/` — **sonunda `/` zorunlu** |
-| `LEMON_DOCROOT` | A'da `/home/derspros/lemon-app/public/`, B'de `/home/derspros/lemon.derspros.com.tr/` |
-| `TARGET_PHP_VERSION` | `8.3` (veya §1/A seçilirse `8.4`) |
+| `LEMON_APP_DIR` | `/home/derspros/lemon-app/` — FTP kökü chroot'luysa `/lemon-app/`. **Sonunda `/` zorunlu.** Başka hiçbir değer kabul edilmez (§4.1). |
+| `TARGET_PHP_VERSION` | `8.3` |
 | `DEPLOY_ENABLED` | **Şimdi oluşturulmaz.** Gerçek deploy açılana kadar yok. |
+
+`LEMON_DOCROOT` **artık yoktur** — Mimari A'da tek hedef vardır.
 
 `APP_KEY`, veritabanı parolası ve diğer uygulama ayarları **GitHub'a konmaz**;
 sunucudaki `.env` dosyasında yaşarlar.
@@ -172,6 +157,30 @@ artifact'ın temiz olduğunu doğrular. Üç katman aynı şeyi söyler.
 
 **`storage/` ve `bootstrap/cache/` sunucuda BİR KEZ elle oluşturulur** (§11) ve
 bir daha hiçbir deploy onlara dokunmaz.
+
+### 4.1 Hedef dizin doğrulaması — FAIL-CLOSED
+
+Hesapta **birden fazla canlı site** vardır. Yanlış bir `server-dir`, onların
+dosyalarını etkileyebilir. Workflow'un `guard` işi bu yüzden **yalnızca iki
+değeri** kabul eder ve başka her şeyde durur:
+
+| Kabul edilen | Ne zaman |
+|---|---|
+| `/home/derspros/lemon-app/` | FTP kökü `/` ise (chroot yok) |
+| `/lemon-app/` | FTP kullanıcısı `/home/derspros` altına hapsedilmişse |
+
+Tam eşleşmenin yanı sıra **bağımsız ikinci bir kontrol seti** daha çalışır —
+tam eşleşme bir gün gevşetilse bile yasak hedefler yakalanır:
+
+- sonu `/` ile bitmeli
+- `..` içeremez
+- `public_html` altında olamaz
+- `derspros.com.tr`, `nuvernatrade.com`, `nymagro.com` klasörlerini gösteremez
+- son dizin adı kesinlikle `lemon-app` olmalı
+
+Değer **boşsa iş hemen durur** — tanımsız bir değişken yüzünden hesap köküne
+yazılması mümkün değildir. Hiçbir kontrol değeri loglamaz; yalnızca geçti/kaldı
+ve hangi biçimin beklendiği yazılır.
 
 ### Aracın tehlikeli davranışları
 
@@ -311,7 +320,7 @@ Ayrıca:
 
 ---
 
-## 8. Ledger TRIGGER yetkisi — ikinci blocker
+## 8. Ledger TRIGGER yetkisi — deploy öncesi TEK kalan blocker
 
 `ledger_entries` tablosunun değiştirilemezliği, uygulama katmanına ek olarak
 **veritabanı tetikleyicileriyle** korunur
@@ -322,6 +331,7 @@ Bu migration `CREATE TRIGGER` çalıştırır ve veritabanı kullanıcısının
 bazen verilmez.
 
 **Yetki doğrulanmadan production migration çalıştırılmamalıdır.**
+PHP sürümü blocker'ı çözüldükten sonra (§1) geriye kalan tek engel budur.
 
 Kontrol (cPanel → phpMyAdmin → SQL):
 
@@ -377,53 +387,119 @@ hostingde geri alma maliyeti yüksektir.
 
 ---
 
-## 11. Gerçek deploy öncesi cPanel'de yapmanız gerekenler
+## 11. Sıra — cPanel ve GitHub'da yapmanız gerekenler
 
-Sırayla:
+**DocumentRoot'u ne zaman değiştirmelisiniz?** Kritik nokta: `/home/derspros/lemon-app/public`
+bugün **boştur**. DocumentRoot'u şimdi değiştirirseniz Lemon alan adı, ilk gerçek
+deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
 
-1. **DocumentRoot değiştirilebiliyor mu?** (§2) — Domains → `lemon.derspros.com.tr`
-   → Document Root alanı düzenlenebiliyor mu? **Mimari kararı buna bağlı.**
-2. **PHP sürümü** (§1) — Select PHP Version'da **8.4 sunuluyor mu?**
-   Sunuluyorsa 8.4'e alın (Çözüm A). Sunulmuyorsa bana bildirin, Çözüm B'yi
-   uygulayayım.
-3. **PHP eklentileri:** `mbstring, pdo_mysql, intl, zip, gd, xml, ctype,
-   fileinfo, openssl, tokenizer`
-4. **Veritabanı:** Lemon için ayrı veritabanı + kullanıcı.
-   Collation **`utf8mb4_turkish_ci`** (Türkçe arama davranışı buna bağlı —
-   CLAUDE.md §9).
-5. **TRIGGER yetkisi** (§8) — `SHOW GRANTS FOR CURRENT_USER();` çıktısını bana iletin.
-6. **Dizinler:** `/home/derspros/lemon-app/` oluşturun. İçinde bir kez:
+### Aşama 1 — Dry-run'dan ÖNCE (DocumentRoot'a DOKUNMAYIN)
+
+1. **Dizinleri oluşturun:** `/home/derspros/lemon-app/` ve içinde bir kez:
    ```
    storage/app/public
    storage/framework/{cache/data,sessions,views}
    storage/logs
    bootstrap/cache
    ```
-   Yazma izni: `755` (hosting `750` istiyorsa ona uyun).
+   İzin `755` (hosting `750` istiyorsa ona uyun).
    **Bu dizinlere hiçbir deploy dokunmayacak.**
-7. **`.env`** dosyasını §5'teki şablonla oluşturun, gerçek DB bilgilerini girin.
-8. **FTP hesabının kök dizini:** FTP kullanıcısı `/home/derspros` altını
-   görebiliyor mu, yoksa belirli bir dizine mi hapsedilmiş? Buna göre
-   `LEMON_APP_DIR` mutlak yol yerine göreli olmalı olabilir.
-   **Bu bilgi olmadan `server-dir` tahmin edilemez.**
-9. **FTPS destekleniyor mu?** Hosting explicit FTPS (AUTH TLS) sunuyor mu?
-   Sunmuyorsa düz FTP ile parola açık gider — o durumda bana bildirin,
-   deploy yöntemi yeniden değerlendirilmelidir.
-10. **GitHub'da variable'ları oluşturun** (§3): `LEMON_APP_DIR`, `LEMON_DOCROOT`,
-    `TARGET_PHP_VERSION`. `DEPLOY_ENABLED`'ı **henüz oluşturmayın.**
-11. Hazır olduğunuzda workflow'u **`mode: dry-run`** ile çalıştırın ve çıktıyı
-    bana gönderin. Yalnızca dry-run temiz çıkarsa `DEPLOY_ENABLED=true`
-    oluşturulur.
+2. **`.env`** dosyasını `/home/derspros/lemon-app/.env` olarak §5'teki şablonla
+   oluşturun. Gerçek DB bilgilerini girin, `APP_KEY` satırını boş bırakın.
+3. **Veritabanı:** Lemon için ayrı veritabanı + kullanıcı, collation
+   **`utf8mb4_turkish_ci`** (Türkçe arama davranışı buna bağlı — CLAUDE.md §9).
+4. **TRIGGER yetkisi** (§8): phpMyAdmin → SQL → `SHOW GRANTS FOR CURRENT_USER();`
+   Çıktıyı iletin. **Bu doğrulanmadan production migration çalıştırılmaz.**
+5. **PHP eklentileri:** `mbstring, pdo_mysql, intl, zip, gd, xml, ctype,
+   fileinfo, openssl, tokenizer` etkin mi?
+6. **FTP kökünü belirleyin** (§13): FTP istemcisiyle bağlanıp kök dizinde ne
+   göründüğüne bakın — `/home/derspros` içeriği mi, yoksa doğrudan
+   `public_html`, `lemon-app` gibi klasörler mi? Buna göre `LEMON_APP_DIR`
+   değerini seçin (§4.1'deki iki biçimden biri).
+7. **FTPS destekleniyor mu?** Hosting explicit FTPS (AUTH TLS) sunuyor mu?
+   Sunmuyorsa bildirin — düz FTP'de parola ağ üzerinden açık gider.
+8. **GitHub variable'ları:** `LEMON_APP_DIR` ve `TARGET_PHP_VERSION=8.3`
+   oluşturun. **`DEPLOY_ENABLED`'ı OLUŞTURMAYIN.**
+
+### Aşama 2 — Dry-run
+
+9. Workflow'u **`mode: dry-run`** ile çalıştırın. Çıktıyı bana gönderin.
+   Sunucuda hiçbir dosya değişmez.
+
+### Aşama 3 — İlk gerçek deploy
+
+10. Dry-run temizse `DEPLOY_ENABLED=true` oluşturulur ve workflow
+    `mode: deploy` + `confirm_target: lemon.derspros.com.tr` ile çalıştırılır.
+11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6):
+    `php artisan key:generate --force`, `migrate --force`, `storage:link`,
+    `config:cache route:cache view:cache`.
+
+### Aşama 4 — DocumentRoot değişikliği (EN SON)
+
+12. **Ancak dosyalar sunucuda ve uygulama hazır olduğunda:**
+    cPanel → Domains → `lemon.derspros.com.tr` → Document Root:
+    `/home/derspros/lemon-app/public` → Güncelle.
+13. §7'deki güvenlik doğrulamasını koşun.
+
+**Neden en son:** DocumentRoot'u erken değiştirmek, alan adını hazır olmayan
+boş bir dizine yönlendirir. Bu sırayla Lemon, geçiş anına kadar eski hâlinde
+kalır ve tek bir anahtar çevirmeyle yeni uygulamaya geçer.
 
 ---
 
-## 12. Bu turda YAPILMAYANLAR
+## 12. FTP kökü — doğrulanması gereken nokta
+
+`server-dir` değerinin gerçekte neye karşılık geldiği **henüz bilinmiyor**:
+FTP kullanıcısı `/home/derspros` altına hapsedilmişse (chroot) mutlak yol
+çalışmaz, göreli yol gerekir.
+
+**Bu turda hosting'e bağlanılmadığı için doğrulanamadı ve tahmin edilmedi.**
+`/home/derspros/lemon-app/` değeri körlemesine doğru kabul EDİLMEMİŞTİR:
+workflow her iki biçimi de tanır (§4.1) ve tanımadığı bir değerde durur.
+
+Doğrulama yolu: bir FTP istemcisiyle bağlanıp kök dizinde ne göründüğüne bakmak
+(Aşama 1/6). Dry-run çıktısı da bunu gösterir — bu yüzden ilk çalıştırma
+zorunlu olarak dry-run'dır.
+
+---
+
+## 13. Rollback — analiz (uygulanmadı)
+
+**Bu turda rollback sistemi KURULMADI**; yalnızca değerlendirildi.
+
+FTPS senkronizasyonu **yerinde güncelleme** yapar: eski sürümün üzerine yazar.
+Bu, hata hâlinde geri dönüşü kendiliğinden mümkün kılmaz. Değerlendirilen üç yol:
+
+| Yaklaşım | Artı | Eksi |
+|---|---|---|
+| **A. Deploy öncesi elle yedek** — `lemon-app/` klasörünün cPanel File Manager ile sıkıştırılmış kopyası | Basit, ek altyapı yok, bugün uygulanabilir | Elle; unutulursa yok. Büyük dosyada yavaş |
+| **B. Sürümlü dizin + symlink** (`releases/<sha>/` + `current` symlink) | Anında geri dönüş, sıfır kesinti | FTPS ile symlink oluşturmak güvenilir değil; SSH ister — bu projede yok |
+| **C. Git ile ileri düzeltme** — hatalı commit'i düzeltip yeniden deploy | Mevcut akışa uyar, ek şey gerektirmez | Geri dönüş süresi bir CI koşusu kadar (~3 dk) |
+
+**Önerim: A + C birlikte.** Her gerçek deploy öncesi `lemon-app/` klasörünün
+yedeği alınır (dosya tarafı), veritabanı için ayrıca `mysqldump` alınır
+(CLAUDE.md §15'te zaten günlük yedek cron'u planlı). Kod hatasında C ile ileri
+düzeltme yapılır; ciddi bozulmada A geri yüklenir.
+
+**Kritik ayrım — veritabanı rollback'i ayrı bir konudur:** migration'lar
+ileri alınmıştır ve `ledger_entries` **append-only**'dir (CLAUDE.md §6/L1).
+Dosya yedeğini geri yüklemek veritabanını geri almaz. Şema değişikliği içeren
+bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
+"canlıda `migrate:rollback` yerine ileri düzeltme migration'ı" der.
+
+**Uygulama zamanı:** ilk gerçek deploy öncesi, ayrı bir turda.
+
+---
+
+## 14. Bu turda YAPILMAYANLAR
 
 - Hosting'e bağlanılmadı, FTP testi yapılmadı
 - Hiçbir dosya yüklenmedi, silinmedi, değiştirilmedi
 - Workflow çalıştırılmadı
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
-- `composer.lock` değiştirilmedi (§1 kararı sizde)
 - `finalize.php` ve production cron yazılmadı (§6)
+- Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
+- **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
+- Dry-run dahil hiçbir workflow çalıştırılmadı
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı
