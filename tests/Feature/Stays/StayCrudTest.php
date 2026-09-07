@@ -39,6 +39,7 @@ class StayCrudTest extends TestCase
             'room_no' => '204',
             'check_in_date' => '2026-09-07',
             'check_out_date' => '2026-09-10',
+            'pricing_mode' => 'total',
             'amount' => '9000,00',
             'currency' => 'TRY',
             'notes' => 'Acente rezervasyonu',
@@ -100,21 +101,18 @@ class StayCrudTest extends TestCase
     }
 
     /**
-     * Aynı gün giriş/çıkış (günübirlik kullanım) KABUL EDİLİR ve 0 gece üretir.
-     * Kural: check_out_date >= check_in_date, nights = fark.
+     * Aynı gün giriş/çıkış artık KABUL EDİLMEZ; asgari gece sayısı 1'dir.
+     * Günübirlik kullanım ileride ayrı bir iş kuralı olarak ele alınacaktır.
      */
     #[Test]
-    public function ayni_gun_giris_cikis_sifir_gece_uretir(): void
+    public function ayni_gun_giris_cikis_reddedilir(): void
     {
         $this->actingAs($this->userWithRole(RoleName::Admin))->post(
             route('stays.store'),
             $this->payload(['check_in_date' => '2026-09-07', 'check_out_date' => '2026-09-07']),
-        )->assertSessionHasNoErrors();
+        )->assertSessionHasErrors('check_out_date');
 
-        $stay = Stay::query()->firstOrFail();
-
-        $this->assertSame(0, $stay->nights);
-        $this->assertSame('9000.00', $stay->amount, 'Günübirlik kullanım da tutar taşır');
+        $this->assertSame(0, Stay::query()->count());
     }
 
     #[Test]

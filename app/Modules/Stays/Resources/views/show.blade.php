@@ -48,8 +48,27 @@
                     <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $stay->nights }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Tutar</dt>
-                    <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</dd>
+                    <dt class="text-xs uppercase tracking-wide text-mut">Ücretlendirme</dt>
+                    <dd class="mt-0.5 text-sm text-tx">{{ $stay->pricing_mode->label() }}</dd>
+                </div>
+                @if ($stay->isDailyPriced())
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-mut">Günlük ücret</dt>
+                        <dd class="mt-0.5 text-sm tabular-nums text-tx">
+                            {{ $stay->dailyRateMoney()?->format($stay->currency) }}
+                        </dd>
+                    </div>
+                @endif
+                <div>
+                    <dt class="text-xs uppercase tracking-wide text-mut">Toplam</dt>
+                    <dd class="mt-0.5 text-sm tabular-nums text-tx">
+                        {{ $stay->amountMoney()->format($stay->currency) }}
+                        @if ($stay->isDailyPriced())
+                            <span class="block text-xs text-mut">
+                                {{ $stay->nights }} gece × {{ $stay->dailyRateMoney()?->format($stay->currency) }}
+                            </span>
+                        @endif
+                    </dd>
                 </div>
                 <div class="sm:col-span-2">
                     <dt class="text-xs uppercase tracking-wide text-mut">Notlar</dt>

@@ -7,6 +7,8 @@ namespace App\Modules\Stays\Database\Factories;
 use App\Models\User;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\Money;
+use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -38,12 +40,28 @@ class StayFactory extends Factory
             'check_out_date' => $checkOut->toDateString(),
             'nights' => Stay::calculateNights($checkIn, $checkOut),
             'amount' => (string) fake()->numberBetween(500, 20000).'.00',
+            'pricing_mode' => StayPricingMode::Total->value,
+            'daily_rate' => null,
             'currency' => Currency::TRY->value,
             'notes' => null,
             'status' => StayStatus::Active->value,
             'created_by' => User::factory(),
             'updated_by' => null,
         ];
+    }
+
+    /** Günlük ücretlendirilmiş kayıt; toplam gece sayısıyla tutarlı tutulur. */
+    public function daily(string $dailyRate = '2500.00'): static
+    {
+        return $this->state(function (array $attributes) use ($dailyRate) {
+            $nights = (int) $attributes['nights'];
+
+            return [
+                'pricing_mode' => StayPricingMode::Daily->value,
+                'daily_rate' => $dailyRate,
+                'amount' => Money::fromDecimal($dailyRate)->multiply($nights)->toDecimal(),
+            ];
+        });
     }
 
     public function cancelled(): static

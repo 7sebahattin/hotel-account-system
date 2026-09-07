@@ -224,8 +224,10 @@ Genel kurallar:
 | room_no | varchar(20) null | serbest metin |
 | check_in_date | date | index |
 | check_out_date | date | `>= check_in_date` |
-| nights | unsigned int | sunucuda hesaplanır, doğrulanır |
-| amount | decimal(15,2) | toplam konaklama tutarı |
+| nights | unsigned int | sunucuda hesaplanır, doğrulanır, `>= 1` |
+| amount | decimal(15,2) | **nihai toplam** konaklama tutarı (her iki modda da) |
+| pricing_mode | varchar(10) | `total` \| `daily` — ücretin nasıl girildiği |
+| daily_rate | decimal(15,2) null | yalnızca `daily` modunda dolu |
 | currency | char(3) | default TRY |
 | notes | text null | |
 | status | varchar(20) | `active` \| `cancelled` — V1'de PMS durumu YOK |
@@ -246,7 +248,10 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 
 **Veritabanı düzeyinde değişmezler:**
 - `CHECK (amount > 0)`
-- `CHECK (check_out_date >= check_in_date)`
+- `CHECK (check_out_date > check_in_date)` — asgari 1 gece
+- `CHECK (nights >= 1)`
+- `CHECK (pricing_mode IN ('total','daily'))`
+- `CHECK ((pricing_mode='total' AND daily_rate IS NULL) OR (pricing_mode='daily' AND daily_rate IS NOT NULL AND daily_rate > 0))`
 
 ### 5.4 `payments`
 
@@ -496,11 +501,21 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
 ### Stays
 - `nights` sunucuda `check_out_date - check_in_date` olarak hesaplanır; formdan gelen değere
   **asla** güvenilmez. `check_out_date >= check_in_date` zorunludur.
-- **Aynı gün giriş/çıkış kabul edilir ve 0 gece üretir** (günübirlik kullanım). Tutar yine
-  sıfırdan büyük olmalıdır.
+- **Asgari gece sayısı 1'dir**: `check_out_date > check_in_date`. Aynı gün giriş/çıkış
+  kabul edilmez. Günübirlik (day-use) kullanım ileride ayrı bir iş kuralı olarak
+  tasarlanacaktır; V1'de PMS kapsamına girilmez (§3.2).
+- **Ücretlendirme iki modludur** (`pricing_mode`):
+  - `total` — kullanıcı nihai toplamı (`amount`) girer, `daily_rate` boştur.
+  - `daily` — kullanıcı gecelik ücreti (`daily_rate`) girer; `amount` **sunucuda**
+    `nights × daily_rate` olarak hesaplanır. Formdan gelen `amount` yok sayılır
+    (`exclude_if` ile doğrulanmış veriden düşer, servis ayrıca yeniden hesaplar).
+  Çarpım `Core\Support\Money` ile tamsayı kuruş üzerinden yapılır; float kullanılmaz.
+  `amount` her iki modda da nihai toplamdır ve cariye yazılan değer odur.
 - Kayıt oluşturulunca `LedgerService` ile **debit** kaydı (`entry_date = check_out_date`,
   açıklama: `Konaklama: {guest_name} (dd.mm.yyyy - dd.mm.yyyy)`).
-- **Finansal alanlar:** `company_id`, `check_in_date`, `check_out_date`, `amount`, `currency`.
+- **Finansal alanlar:** `company_id`, `check_in_date`, `check_out_date`, `pricing_mode`,
+  `daily_rate`, `amount`, `currency`. Mod değişimi (`daily` ↔ `total`) de finansal
+  değişikliktir.
   Bunlardan biri değişirse akış tek transaction içinde şudur:
   1. mevcut geçerli cari hareketi ters kaydedilir
   2. konaklama güncellenir
@@ -710,7 +725,7 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 - Validasyon **sadece** FormRequest sınıflarında. `$request->all()` ile mass assignment yapılmaz; `$request->validated()` kullanılır.
 - Yetki **sadece** Policy sınıflarında. Controller içinde `if ($user->role === 'admin')` yazılmaz.
 - Model `$fillable` dar tutulur; `$guarded = []` yasak.
-- PHP enum'ları: `PaymentMethod`, `Currency`, `AuditEvent`. Serbest string sabitleri kullanılmaz.
+- PHP enum'ları: `PaymentMethod`, `Currency`, `AuditEvent`, `StayPricingMode`. Serbest string sabitleri kullanılmaz.
 - Para hesabı: SQL'de `SUM()`, PHP'de `Core\Support\Money`. **Float aritmetiği yasak.**
   `Money` tutarı **tamsayı kuruş** olarak tutar; toplama/çıkarma/karşılaştırma tam sayı aritmetiğiyle yapılır. Veritabanında alan `DECIMAL(15,2)` kalır.
   **`bcmath` kullanılmaz** — eklenti her ortamda bulunmayabilir (bu projenin geliştirme ortamında yoktur) ve tamsayı kuruş yaklaşımı aynı kesinliği sıfır bağımlılıkla verir.
@@ -765,7 +780,9 @@ Mevcut Excel geçmişi **mümkün olduğunca tam** aktarılır. Yalnızca açıl
 
 **Import prensipleri:**
 
-1. Her **geçerli konaklama satırı** → bir `stay` kaydı oluşturur.
+1. Her **geçerli konaklama satırı** → bir `stay` kaydı oluşturur. Excel'deki
+   GÜN / FİYAT / TOPLAM alanları `nights` / `daily_rate` / `amount` ile doğal olarak
+   eşleşir: fiyat kolonu doluysa `pricing_mode = daily`, yalnızca toplam varsa `total`.
 2. Her `stay` → firma cari defterine **debit** hareketi üretir.
 3. **Ödeme tutarı ve ödeme tarihi bulunan her kayıt** → ayrı bir `payment` kaydı oluşturur.
 4. Her `payment` → firma cari defterine **credit** hareketi üretir.

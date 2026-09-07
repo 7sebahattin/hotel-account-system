@@ -10,6 +10,7 @@ use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
@@ -36,7 +37,10 @@ class StayService
      *
      * @var array<int, string>
      */
-    public const FINANCIAL_FIELDS = ['company_id', 'check_in_date', 'check_out_date', 'amount', 'currency'];
+    public const FINANCIAL_FIELDS = [
+        'company_id', 'check_in_date', 'check_out_date',
+        'pricing_mode', 'daily_rate', 'amount', 'currency',
+    ];
 
     public function __construct(
         private readonly LedgerService $ledger,
@@ -52,8 +56,7 @@ class StayService
 
         return DB::transaction(function () use ($data, $user): Stay {
             $stay = new Stay;
-            $stay->fill($this->fillable($data));
-            $stay->nights = $this->nightsFor($stay);
+            $this->applyInput($stay, $data);
             $stay->status = StayStatus::Active;
             $stay->created_by = $user->getKey();
             $stay->updated_by = $user->getKey();
@@ -97,8 +100,11 @@ class StayService
             $before = $this->snapshot($stay);
             $financialBefore = $this->financialSnapshot($stay);
 
+            // Aday kayıt, gerçek kayıtla AYNI hesaplamadan geçer: gece sayısı ve
+            // günlük ücretlendirmede toplam yeniden hesaplandıktan sonra
+            // karşılaştırılır. Aksi hâlde formdan gelen ham tutar karşılaştırılırdı.
             $candidate = clone $stay;
-            $candidate->fill($this->fillable($data));
+            $this->applyInput($candidate, $data);
             $financialChanged = $this->financialSnapshot($candidate) !== $financialBefore;
 
             $reversal = null;
@@ -111,8 +117,7 @@ class StayService
                 }
             }
 
-            $stay->fill($this->fillable($data));
-            $stay->nights = $this->nightsFor($stay);
+            $this->applyInput($stay, $data);
             $stay->updated_by = $user->getKey();
             $stay->save();
 
@@ -235,8 +240,47 @@ class StayService
     {
         return array_intersect_key($data, array_flip([
             'company_id', 'guest_name', 'room_no',
-            'check_in_date', 'check_out_date', 'amount', 'currency', 'notes',
+            'check_in_date', 'check_out_date',
+            'pricing_mode', 'daily_rate', 'amount', 'currency', 'notes',
         ]));
+    }
+
+    /**
+     * Kullanıcı girdisini modele uygular ve SUNUCU tarafından belirlenen
+     * alanları (gece sayısı, nihai tutar) yeniden hesaplar.
+     *
+     * `nights` ve `status` kullanıcıdan hiçbir koşulda alınmaz; günlük
+     * ücretlendirmede `amount` da alınmaz — istek gövdesine sahte bir tutar
+     * yazılsa bile burada gecelik ücret × gece sayısı ile ezilir.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function applyInput(Stay $stay, array $data): void
+    {
+        $stay->fill($this->fillable($data));
+        $stay->nights = $this->nightsFor($stay);
+        $this->resolvePricing($stay);
+    }
+
+    /** Ücretlendirme moduna göre nihai tutarı ve günlük ücreti belirler. */
+    private function resolvePricing(Stay $stay): void
+    {
+        $mode = $stay->pricing_mode ?? StayPricingMode::Total;
+        $stay->pricing_mode = $mode;
+
+        if ($mode === StayPricingMode::Total) {
+            $stay->daily_rate = null;
+
+            return;
+        }
+
+        $dailyRate = $stay->dailyRateMoney();
+
+        if ($dailyRate === null) {
+            throw new \InvalidArgumentException('Günlük ücretlendirmede gecelik tutar zorunludur.');
+        }
+
+        $stay->amount = Stay::calculateDailyAmount($dailyRate, $stay->nights)->toDecimal();
     }
 
     private function nightsFor(Stay $stay): int
@@ -259,6 +303,8 @@ class StayService
             'check_in_date' => Carbon::parse($stay->check_in_date)->toDateString(),
             'check_out_date' => Carbon::parse($stay->check_out_date)->toDateString(),
             'nights' => (int) $stay->nights,
+            'pricing_mode' => $stay->pricing_mode->value,
+            'daily_rate' => $stay->daily_rate === null ? null : Money::fromDecimal($stay->daily_rate)->toDecimal(),
             'amount' => Money::fromDecimal($stay->amount)->toDecimal(),
             'currency' => $stay->currency->value,
             'notes' => $stay->notes,

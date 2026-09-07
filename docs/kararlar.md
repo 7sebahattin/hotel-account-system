@@ -320,3 +320,36 @@ onayıyla eklenir (CLAUDE.md §2 yığında duruyor).
 sürücülendi.
 **Gerekçe:** Doğrulama aracı uygulamanın bağımlılığı değildir; `npm ci` süresini ve deploy
 yükünü artırmamalıdır.
+
+## K-041 · Konaklama ücreti iki modlu: toplam veya günlük
+**Karar:** `stays.pricing_mode` (`total` | `daily`) ve `stays.daily_rate` eklendi.
+`amount` her iki modda da NİHAİ TOPLAM'dır ve cariye yazılan değer odur; `daily`
+modunda `amount = nights × daily_rate` olarak **sunucuda** hesaplanır.
+**Güvenlik (iki katman):** İstek gövdesine sahte bir `amount` yazılsa bile kullanılmaz.
+1. `StayRequest` içinde `exclude_if:pricing_mode,daily` — alan doğrulanmış veriden düşer,
+   servise hiç ulaşmaz.
+2. `StayService::resolvePricing()` tutarı her koşulda yeniden hesaplar — servis doğrudan
+   çağrılsa (import, konsol) bile kural geçerlidir.
+Testle doğrulandı: HTTP üzerinden sahte tutar ve doğrudan servis çağrısı, ikisi de ezilir.
+**Hesap:** `Money::multiply(int)` eklendi; çarpım tamsayı kuruş üzerinden yapılır, float yok.
+
+## K-042 · 0 gece kararı geri alındı — asgari 1 gece
+**Önceki karar (K-031):** Aynı gün giriş/çıkış kabul edilir, 0 gece üretirdi.
+**Yeni karar:** `check_out_date > check_in_date`; asgari gece sayısı 1'dir.
+**Gerekçe:** Günübirlik (day-use) kullanım ayrı bir iş kuralıdır ve V1'de PMS kapsamına
+girilmiyor (CLAUDE.md §3.2). Ayrıca günlük ücretlendirmede 0 gece, sıfır tutarlı bir cari
+hareketi üretirdi — `CHECK (amount > 0)` ile çelişirdi.
+**Uygulama yerleri:** validasyon `after:check_in_date`, veritabanında `stays_date_range`
+(`>` olarak güncellendi) ve yeni `stays_nights_positive` CHECK kısıtı.
+**Geri alma:** Migration'ın `down()` metodu eski `>=` kısıtını geri koyar.
+**Not:** Tabloda 0 geceli kayıt varsa migration hata verir — bu bilinçlidir, veri sessizce
+kabul edilmez.
+
+## K-043 · Türkçe doğrulama mesajları (bulunan hata)
+**Sorun:** `APP_LOCALE=tr` ve `APP_FALLBACK_LOCALE=tr` olmasına rağmen `lang/tr/validation.php`
+yoktu. FormRequest'in `messages()` metodunda ezilmeyen her kural kullanıcıya ham çeviri
+anahtarı olarak görünüyordu: "validation.required", "validation.max.string".
+Bu, bu turdan önce de var olan bir hataydı; yeni zorunlu `pricing_mode` alanı görünür kıldı.
+**Karar:** `lang/tr/validation.php` eklendi — yalnızca projede fiilen kullanılan kurallar.
+Alan adları (`:attribute`) her FormRequest'in kendi `attributes()` metodundan gelmeye devam
+eder; dosyada `attributes` listesi tutulmaz (tek kaynak ilkesi).

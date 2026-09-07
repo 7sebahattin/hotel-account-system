@@ -115,6 +115,7 @@ class StayLedgerIntegrationTest extends TestCase
             'room_no' => '101',
             'check_in_date' => '2026-09-07',
             'check_out_date' => '2026-09-10',
+            'pricing_mode' => 'total',
             'amount' => '9000,00',
             'currency' => 'TRY',
         ])->assertSessionHasNoErrors();
@@ -141,6 +142,7 @@ class StayLedgerIntegrationTest extends TestCase
             'guest_name' => 'John Smith',
             'check_in_date' => '2026-09-07',
             'check_out_date' => '2026-09-10',
+            'pricing_mode' => 'total',
             'amount' => '9500,00',
             'currency' => 'TRY',
         ])->assertSessionHasNoErrors();

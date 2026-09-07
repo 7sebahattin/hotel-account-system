@@ -10,6 +10,7 @@ use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Stays\Database\Factories\StayFactory;
+use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $check_out_date
  * @property int $nights
  * @property string $amount
+ * @property StayPricingMode $pricing_mode
+ * @property string|null $daily_rate
  * @property Currency $currency
  * @property string|null $notes
  * @property StayStatus $status
@@ -59,6 +62,8 @@ class Stay extends Model
         'check_in_date',
         'check_out_date',
         'amount',
+        'pricing_mode',
+        'daily_rate',
         'currency',
         'notes',
     ];
@@ -74,6 +79,8 @@ class Stay extends Model
             'check_in_date' => 'date',
             'check_out_date' => 'date',
             'amount' => 'decimal:2',
+            'daily_rate' => 'decimal:2',
+            'pricing_mode' => StayPricingMode::class,
             'currency' => Currency::class,
             'status' => StayStatus::class,
             'nights' => 'integer',
@@ -88,6 +95,28 @@ class Stay extends Model
     public function amountMoney(): Money
     {
         return Money::fromDecimal($this->amount);
+    }
+
+    public function dailyRateMoney(): ?Money
+    {
+        return $this->daily_rate === null ? null : Money::fromDecimal($this->daily_rate);
+    }
+
+    public function isDailyPriced(): bool
+    {
+        return $this->pricing_mode === StayPricingMode::Daily;
+    }
+
+    /**
+     * Günlük ücretlendirmede nihai toplam (CLAUDE.md §8).
+     *
+     * Formdan gelen tutar YOK SAYILIR; toplam her zaman gecelik ücret × gece
+     * sayısı olarak yeniden hesaplanır. Çarpım tamsayı kuruş üzerinden
+     * yapılır, kayan nokta kullanılmaz.
+     */
+    public static function calculateDailyAmount(Money $dailyRate, int $nights): Money
+    {
+        return $dailyRate->multiply($nights);
     }
 
     public function isCancelled(): bool
@@ -113,7 +142,10 @@ class Stay extends Model
 
     /**
      * Gece sayısı sunucuda hesaplanır; formdan gelen değere güvenilmez.
-     * Aynı gün giriş/çıkış 0 gece üretir (günübirlik kullanım).
+     *
+     * Asgari gece sayısı 1'dir: aynı gün giriş/çıkış kabul edilmez
+     * (validasyon `after:check_in_date`, veritabanında `stays_date_range`
+     * ve `stays_nights_positive` CHECK kısıtları).
      */
     public static function calculateNights(Carbon $checkIn, Carbon $checkOut): int
     {

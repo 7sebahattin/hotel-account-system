@@ -127,4 +127,22 @@ class MoneyTest extends TestCase
         $this->assertSame('15.25', Money::fromDecimal('-15.25')->negate()->toDecimal());
         $this->assertSame('0.00', Money::zero()->negate()->toDecimal());
     }
+
+    #[Test]
+    public function tamsayi_carpim_ondalik_kaymasi_uretmez(): void
+    {
+        $this->assertSame('0.30', Money::fromDecimal('0.10')->multiply(3)->toDecimal());
+        $this->assertSame('8641.92', Money::fromDecimal('1234.56')->multiply(7)->toDecimal());
+        $this->assertSame('2999.70', Money::fromDecimal('99.99')->multiply(30)->toDecimal());
+        $this->assertSame('0.00', Money::fromDecimal('2500.00')->multiply(0)->toDecimal());
+        $this->assertSame('-50.00', Money::fromDecimal('25.00')->multiply(-2)->toDecimal());
+    }
+
+    #[Test]
+    public function carpim_decimal_sinirini_asamaz(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromDecimal('9999999999999.99')->multiply(2);
+    }
 }

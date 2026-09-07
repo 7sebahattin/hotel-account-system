@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Stays\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -23,6 +24,10 @@ class StayRequest extends FormRequest
     /**
      * `nights` ve `status` kullanıcıdan ALINMAZ; sunucu hesaplar/belirler.
      *
+     * Günlük ücretlendirmede `amount` da alınmaz: `exclude_if` ile doğrulanmış
+     * veriden tamamen düşer, böylece sahte bir tutar servise hiç ulaşmaz.
+     * Servis ayrıca tutarı her koşulda yeniden hesaplar (iki katmanlı savunma).
+     *
      * @return array<string, mixed>
      */
     public function rules(): array
@@ -32,8 +37,10 @@ class StayRequest extends FormRequest
             'guest_name' => ['required', 'string', 'max:150'],
             'room_no' => ['nullable', 'string', 'max:20'],
             'check_in_date' => ['required', 'date'],
-            'check_out_date' => ['required', 'date', 'after_or_equal:check_in_date'],
-            'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
+            'check_out_date' => ['required', 'date', 'after:check_in_date'],
+            'pricing_mode' => ['required', Rule::enum(StayPricingMode::class)],
+            'amount' => ['exclude_if:pricing_mode,daily', 'required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
+            'daily_rate' => ['exclude_if:pricing_mode,total', 'required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
             'currency' => ['required', Rule::enum(Currency::class)],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
@@ -50,7 +57,9 @@ class StayRequest extends FormRequest
             'room_no' => 'oda',
             'check_in_date' => 'giriş tarihi',
             'check_out_date' => 'çıkış tarihi',
-            'amount' => 'tutar',
+            'pricing_mode' => 'ücret giriş şekli',
+            'amount' => 'toplam tutar',
+            'daily_rate' => 'günlük ücret',
             'currency' => 'para birimi',
             'notes' => 'notlar',
         ];
@@ -62,19 +71,24 @@ class StayRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'check_out_date.after_or_equal' => 'Çıkış tarihi, giriş tarihinden önce olamaz.',
-            'amount.gt' => 'Tutar sıfırdan büyük olmalıdır.',
-            'amount.decimal' => 'Tutar en fazla iki ondalık basamak içerebilir.',
+            'check_out_date.after' => 'Çıkış tarihi, giriş tarihinden sonra olmalıdır (en az 1 gece).',
+            'amount.gt' => 'Toplam tutar sıfırdan büyük olmalıdır.',
+            'amount.decimal' => 'Toplam tutar en fazla iki ondalık basamak içerebilir.',
+            'daily_rate.required' => 'Günlük ücretlendirmede gecelik tutar zorunludur.',
+            'daily_rate.gt' => 'Günlük ücret sıfırdan büyük olmalıdır.',
+            'daily_rate.decimal' => 'Günlük ücret en fazla iki ondalık basamak içerebilir.',
         ];
     }
 
     /** Türkçe klavyede ondalık ayırıcı virgüldür; noktaya çevrilir. */
     protected function prepareForValidation(): void
     {
-        if ($this->has('amount') && is_string($this->input('amount'))) {
-            $this->merge([
-                'amount' => str_replace([' ', ','], ['', '.'], trim($this->input('amount'))),
-            ]);
+        foreach (['amount', 'daily_rate'] as $field) {
+            $value = $this->input($field);
+
+            if (is_string($value)) {
+                $this->merge([$field => str_replace([' ', ','], ['', '.'], trim($value))]);
+            }
         }
     }
 }

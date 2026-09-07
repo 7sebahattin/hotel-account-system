@@ -52,6 +52,7 @@ class StayPermissionTest extends TestCase
             'guest_name' => 'John Smith',
             'check_in_date' => '2026-09-07',
             'check_out_date' => '2026-09-10',
+            'pricing_mode' => 'total',
             'amount' => '9000.00',
             'currency' => 'TRY',
         ], $overrides);

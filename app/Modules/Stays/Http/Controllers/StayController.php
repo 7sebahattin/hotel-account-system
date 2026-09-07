@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
@@ -48,6 +49,7 @@ class StayController extends Controller
         return view('stays::create', [
             'companies' => $this->companyOptions(),
             'currencies' => Currency::cases(),
+            'pricingModes' => StayPricingMode::cases(),
             'selectedCompanyId' => $request->integer('company_id') ?: null,
         ]);
     }
@@ -77,6 +79,7 @@ class StayController extends Controller
             'stay' => $stay,
             'companies' => $this->companyOptions(),
             'currencies' => Currency::cases(),
+            'pricingModes' => StayPricingMode::cases(),
         ]);
     }
 

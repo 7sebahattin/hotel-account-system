@@ -78,6 +78,20 @@ final readonly class Money implements Stringable
         return self::fromMinorUnits($this->minorUnits - $other->minorUnits);
     }
 
+    /**
+     * Tam sayı çarpanla çarpar — gecelik ücret × gece sayısı gibi.
+     *
+     * Kuruş cinsinden tam sayı çarpımıdır; kayan nokta hatası oluşmaz.
+     */
+    public function multiply(int $factor): self
+    {
+        if ($factor !== 0 && abs($this->minorUnits) > intdiv(self::MAX_MINOR_UNITS, abs($factor))) {
+            throw new InvalidArgumentException('Tutar DECIMAL(15,2) sınırını aşıyor.');
+        }
+
+        return self::fromMinorUnits($this->minorUnits * $factor);
+    }
+
     public function negate(): self
     {
         return new self(-$this->minorUnits);
