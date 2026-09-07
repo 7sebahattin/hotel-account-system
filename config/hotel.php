@@ -41,12 +41,17 @@ return [
     | env() yalnızca config dosyalarında çağrılır; config önbelleğe alındığında
     | uygulama kodundan env() null döner.
     |
+    | E-posta ve parola için BURADA VARSAYILAN VERİLMEZ; değer yoksa null kalır.
+    | Geliştirme kolaylığı sağlayan varsayılanlar DatabaseSeeder'dadır ve orada
+    | yalnızca local/testing ortamında uygulanır. Üretimde eksik ya da varsayılan
+    | kimlik bilgisi seeder'ı durdurur (DatabaseSeeder::guardProductionCredentials).
+    |
     */
 
     'seed' => [
-        'admin_email' => env('SEED_ADMIN_EMAIL', 'admin@example.com'),
+        'admin_email' => env('SEED_ADMIN_EMAIL'),
         'admin_name' => env('SEED_ADMIN_NAME', 'Sistem Yöneticisi'),
-        'admin_password' => env('SEED_ADMIN_PASSWORD', 'degistir-beni'),
+        'admin_password' => env('SEED_ADMIN_PASSWORD'),
     ],
 
 ];

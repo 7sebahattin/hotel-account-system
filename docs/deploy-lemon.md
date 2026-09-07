@@ -274,8 +274,9 @@ MAIL_MAILER=log
 MAIL_FROM_ADDRESS="noreply@lemon.derspros.com.tr"
 MAIL_FROM_NAME="${APP_NAME}"
 
-# İlk yönetici hesabı — db:seed BUNLARI okur (§6.3).
-# Boş bırakılırsa seeder admin@example.com / "degistir-beni" oluşturur: AÇIK KAPI.
+# İlk yönetici hesabı — db:seed BUNLARI okur (§6.3). ZORUNLU.
+# Boş bırakılır veya geliştirme varsayılanları girilirse seeder RuntimeException
+# fırlatır ve hiçbir kullanıcı oluşturmaz (K-081). Parola: openssl rand -base64 24
 SEED_ADMIN_EMAIL=
 SEED_ADMIN_NAME="Sistem Yöneticisi"
 SEED_ADMIN_PASSWORD=
@@ -461,11 +462,19 @@ geriye hiçbir kalıcı yürütme yolu bırakmaz.
 - Parola `User` modelindeki `'password' => 'hashed'` cast'i ile **bcrypt'lenerek**
   yazılır; hiçbir yerde düz metin tutulmaz veya loglanmaz.
 
-> **BLOCKER — varsayılan parola açık kapısı.** `SEED_ADMIN_PASSWORD` `.env`'de
-> **boş bırakılırsa** `config/hotel.php` varsayılanı devreye girer ve seeder
-> `admin@example.com` / `degistir-beni` hesabı oluşturur. Negatif test yapıldı:
-> bu parola gerçekten geçerli. **`db:seed` çalıştırılmadan önce `.env`'de
-> `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` mutlaka doldurulmalıdır.**
+> **Varsayılan parola açık kapısı — KAPATILDI ✅** (K-081). Bu bir blocker'dı:
+> `.env` eksik doldurulursa seeder `admin@example.com` / `degistir-beni` hesabı
+> oluşturuyordu. Artık **kod engelliyor**:
+>
+> `DatabaseSeeder::guardProductionCredentials()`, local/testing dışındaki her ortamda
+> (production **ve** staging) şu dört durumda `RuntimeException` fırlatır ve
+> **hiçbir kullanıcı yazılmadan durur**: parola boş, parola `degistir-beni`,
+> e-posta boş, e-posta `admin@example.com`. `config/hotel.php` de artık bu iki alan
+> için varsayılan vermez.
+>
+> **`.env`'de `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` yine doldurulmalıdır** —
+> aksi hâlde `db:seed` çalışmaz. Fark şu: unutulursa artık *sessizce zayıf bir hesap*
+> değil, *anlaşılır bir hata* alırsınız.
 
 Geçici parola için: `openssl rand -base64 24`. Parola `.env`'e yazılır, seeder
 çalıştıktan **sonra** `.env`'den silinebilir (seeder yeniden çalıştırılmadıkça
@@ -839,7 +848,7 @@ Sıra bağlayıcıdır; her madde bir öncekine dayanır.
 | 1 | Gerçek deploy başarıyla tamamlandı | Actions run yeşil; "Gerçek aktarım tamamlandı" özeti |
 | 2 | `.env` sunucuda ve eksiksiz | File Manager'da `/home/derspros/lemon-app/.env` var; §5.1'deki tüm anahtarlar dolu |
 | 3 | `APP_KEY` dolu ve `base64:` ile başlıyor | `.env` içinde göz kontrolü (§5.2) |
-| 4 | `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` dolu | §6.3 blocker'ı — varsayılan parola kapısı kapalı |
+| 4 | `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` dolu | Artık kod zorluyor (K-081): eksik/varsayılan değerde `db:seed` RuntimeException verir. Bu madde 8. adımda kendiliğinden doğrulanır |
 | 5 | DB bağlantısı doğrulandı | `php artisan migrate --force` hatasız bağlandı (ayrı bir test gerekmez) |
 | 6 | `migrate --force` **hatasız** bitti, 13 migration | Çıktıda 13 satır `DONE` |
 | 7 | **Tetikleyiciler oluştu** | phpMyAdmin → `SHOW TRIGGERS;` → `ledger_entries_block_update` ve `ledger_entries_block_delete`. **Yoksa DURULUR** (§8) |

@@ -777,12 +777,10 @@ kurar; **tek** admin oluşur; `patron@example.com` ve `personel@example.com` dem
 hesapları **oluşmaz** (`DatabaseSeeder` onları yalnızca `local`/`testing`'de yaratır).
 Parola `User` modelinin `'password' => 'hashed'` cast'iyle bcrypt'lenir; düz metin
 hiçbir yerde tutulmaz veya loglanmaz.
-**BLOCKER:** `SEED_ADMIN_PASSWORD` `.env`'de boşsa `config/hotel.php` varsayılanı
-devreye girer ve seeder `admin@example.com` / `degistir-beni` oluşturur. **Negatif test
-yapıldı: bu parola gerçekten geçerli.** `db:seed`'den önce `SEED_ADMIN_EMAIL` ve
-`SEED_ADMIN_PASSWORD` doldurulmalıdır.
-**Önerilen ek sertleştirme (uygulanmadı, onay bekliyor):** `DatabaseSeeder`, production
-ortamında varsayılan parolayı görürse exception fırlatsın — belge unutulsa bile kapı kapanır.
+**BLOCKER (o gün açıktı, K-081 ile KAPATILDI ✅):** `SEED_ADMIN_PASSWORD` `.env`'de
+boşsa `config/hotel.php` varsayılanı devreye girer ve seeder `admin@example.com` /
+`degistir-beni` oluştururdu. **Negatif test yapıldı: bu parola gerçekten geçerliydi.**
+Artık kod engelliyor — bkz. K-081.
 **V1 boşluğu (blocker değil):** kendi parolasını değiştirme akışı yok. Admin
 `/users/{id}/edit` üzerinden kendi parolasını değiştirebilir (`UserPolicy::update`
 yalnızca `users.manage` ister); Patron ve Personel **değiştiremez**. Şifre sıfırlama
@@ -808,4 +806,29 @@ Bu bilinçlidir: "doğru gibi görünen" bir değerle kazara açılmasın.
 **`false`** yapılır (silmek yerine `false` bırakmak, değişkenin varlığını ve son
 kullanımını görünür tutar). Böylece depoya yazma yetkisi olan biri "Run workflow"a
 basarak canlıyı ezemez ve "üç kilitten biri kalıcı açık kaldı" hatası yapısal olarak engellenir.
+## K-081 · Üretimde varsayılan yönetici kimlik bilgisiyle seed YASAKTIR
+**Sorun (K-078'de blocker olarak raporlanmıştı):** `SEED_ADMIN_PASSWORD` boş bırakılırsa
+`config/hotel.php` varsayılanı devreye giriyor ve seeder `admin@example.com` /
+`degistir-beni` hesabı oluşturuyordu. Negatif testle doğrulanmıştı: parola geçerliydi.
+Belgeye yazmak yetmez — `.env` unutulursa kapı açık kalır.
+**Karar — koruma iki katmanlı:**
+1. `config/hotel.php` artık e-posta ve parola için **varsayılan vermiyor**; env yoksa
+   `null` döner. Güvensiz değerin config'te durması, "ayarlanmış" gibi görünmesine yol açıyordu.
+2. `DatabaseSeeder::guardProductionCredentials()` local/testing DIŞINDAKİ her ortamda
+   çalışır ve şu dört durumda `RuntimeException` fırlatır: parola boş, parola geliştirme
+   varsayılanı (`degistir-beni`), e-posta boş, e-posta geliştirme varsayılanı
+   (`admin@example.com`).
+**Kapsam `production` değil `! local/testing`:** dosyada zaten demo hesapları aynı koşulla
+sınırlayan bir kural vardı; iki farklı "üretim" tanımı taşımak yerine tek tanım kullanıldı.
+`staging` de korunur.
+**Fail-closed:** guard `RolePermissionSeeder`'dan hemen sonra, **hiçbir kullanıcı
+yazılmadan** çalışır. Testle doğrulandı: guard tetiklendiğinde `users` tablosu boş kalır.
+Yarım kalan tek şey rol/yetki tablolarıdır; o seeder idempotenttir, yeniden çalıştırmak güvenlidir.
+**Geliştirici deneyimi korundu:** varsayılanlar `DatabaseSeeder` sabitlerine taşındı ve
+yalnızca local/testing'de uygulanır. `php artisan migrate:fresh --seed` `.env` olmadan
+da çalışmaya devam eder.
+**Doğrulama:** 12 yeni test (`tests/Feature/Security/ProductionSeedGuardTest.php`) +
+gerçek CLI provası: `APP_ENV=production php artisan db:seed --force` `SEED_ADMIN_*`
+olmadan RuntimeException verdi ve `users` tablosunda 0 kayıt kaldı; güçlü parolayla
+tek admin oluştu. Toplam test 454 → 466, hepsi yeşil.
 
