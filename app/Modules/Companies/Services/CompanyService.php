@@ -4,21 +4,24 @@ declare(strict_types=1);
 
 namespace App\Modules\Companies\Services;
 
+use App\Modules\Companies\Exceptions\CompanyHasLedgerEntries;
 use App\Modules\Companies\Models\Company;
+use App\Modules\Ledger\Services\LedgerService;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Firma modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
  *
- * KARAR — cari hareketi olan firmanın silinememesi (CLAUDE.md §5.2):
- * Bu kural Ledger modülü geldiğinde (Gün 4) burada uygulanacaktır: delete()
- * içinde LedgerService üzerinden hareket kontrolü yapılacak ve hareketi olan
- * firma için istisna fırlatılacaktır. Ledger tablosu henüz mevcut olmadığı için
- * bugün taklit bir kontrol yazılmamıştır — sahte bir kontrol, gerçek koruma
- * varmış izlenimi verirdi.
+ * Cari hareketi olan firma silinemez (CLAUDE.md §5.2). Bu kontrol Policy'de
+ * DEĞİL burada zorunludur: Gate::before admin için Policy'leri kısa devre
+ * yapabilir ve servis, HTTP dışındaki çağrı yollarını da (konsol komutu,
+ * gelecekteki import) kapsar. Policy aynı kuralı yalnızca arayüzde butonu
+ * gizlemek için tekrarlar.
  */
 class CompanyService
 {
+    public function __construct(private readonly LedgerService $ledger) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -37,9 +40,17 @@ class CompanyService
         });
     }
 
-    /** Soft delete. Firma kaydı hiçbir zaman fiziksel olarak silinmez. */
+    /**
+     * Soft delete. Firma kaydı hiçbir zaman fiziksel olarak silinmez.
+     *
+     * @throws CompanyHasLedgerEntries cari hareketi olan firma için
+     */
     public function delete(Company $company): void
     {
+        if ($this->ledger->hasEntriesForCompany($company->getKey())) {
+            throw CompanyHasLedgerEntries::make($company->name);
+        }
+
         DB::transaction(function () use ($company): void {
             $company->delete();
         });

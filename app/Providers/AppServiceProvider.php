@@ -9,6 +9,7 @@ use App\Modules\AuditLog\Models\AuditLog;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Authorization\Models\Role;
 use App\Modules\Companies\Models\Company;
+use App\Modules\Ledger\Models\LedgerEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
@@ -35,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
             'user' => User::class,
             'role' => Role::class,
             'company' => Company::class,
+            'ledger_entry' => LedgerEntry::class,
         ]);
 
         // CLAUDE.md §7.1: admin rolü yetki kontrollerini geçer.

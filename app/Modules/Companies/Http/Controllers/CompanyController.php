@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Companies\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Companies\Exceptions\CompanyHasLedgerEntries;
 use App\Modules\Companies\Filters\CompanyFilter;
 use App\Modules\Companies\Http\Requests\CompanyRequest;
 use App\Modules\Companies\Models\Company;
@@ -87,7 +88,11 @@ class CompanyController extends Controller
     {
         $this->authorize('delete', $company);
 
-        $this->companies->delete($company);
+        try {
+            $this->companies->delete($company);
+        } catch (CompanyHasLedgerEntries $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('companies.index')
             ->with('success', 'Firma silindi. Kayıt saklanır, geri alınabilir.');

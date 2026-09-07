@@ -14,6 +14,7 @@ enum AuditEvent: string
     case Logout = 'logout';
     case LoginFailed = 'login_failed';
     case Cancelled = 'cancelled';
+    case Reversed = 'reversed';
     case Exported = 'exported';
     case PermissionChanged = 'permission_changed';
 
@@ -28,6 +29,7 @@ enum AuditEvent: string
             self::Logout => 'Çıkış yapıldı',
             self::LoginFailed => 'Başarısız giriş',
             self::Cancelled => 'İptal edildi',
+            self::Reversed => 'Ters kayıt yapıldı',
             self::Exported => 'Dışa aktarıldı',
             self::PermissionChanged => 'Yetki değişikliği',
         };

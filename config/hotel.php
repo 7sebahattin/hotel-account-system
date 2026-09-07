@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Modules\Core\Enums\Currency;
 
 return [
 
@@ -29,7 +30,8 @@ return [
 
     'default_currency' => env('HOTEL_DEFAULT_CURRENCY', 'TRY'),
 
-    'currencies' => ['TRY', 'EUR', 'GBP'],
+    // Tek doğruluk kaynağı App\Modules\Core\Enums\Currency enum'udur.
+    'currencies' => Currency::class,
 
     /*
     |--------------------------------------------------------------------------

@@ -192,3 +192,48 @@ oluşturulmaz. Admin hesabı `config('hotel.seed.*')` üzerinden gelir.
 **Karar:** Kural Gün 4'te `CompanyService::delete()` içinde `LedgerService` üzerinden uygulanacaktır.
 Bugün taklit bir kontrol yazılmamıştır — sahte kontrol, gerçek koruma varmış izlenimi verirdi.
 Karar `CompanyService` sınıf yorumunda da kayıtlıdır.
+
+## K-025 · `Money`: tamsayı kuruş, sıfır bağımlılık
+**Karar:** `Core\Support\Money` tutarı `int` kuruş olarak tutar. Ayrıştırma metin üzerinden
+(regex) yapılır, biçimlendirme tam sayı bölmesiyle — **hiçbir adımda kayan nokta yoktur**.
+`DECIMAL(15,2)` sınırı kuruş cinsinden 999.999.999.999.999'dur ve 64 bit tam sayıya sığar.
+**Sonuç:** `bcmath` eklentisine ihtiyaç yok (K-002). 22 birim testi, 0.1+0.2 sapması dahil doğruluyor.
+
+## K-026 · Ledger dört katmanda korunur
+**Karar:** (1) `CHECK` kısıtları — negatif tutar ve iki yönün aynı anda dolu/boş olması engellenir;
+(2) `UNIQUE (reverses_entry_id)` — ikinci ters kayıt imkânsız; (3) `BEFORE UPDATE`/`BEFORE DELETE`
+tetikleyicileri — ham SQL ve query builder toplu güncellemesi dahil her yazma reddedilir;
+(4) model olayları ve `LedgerService`.
+**Gerekçe:** Uygulama katmanı Eloquent'ten geçmeyen yazmaları göremez. Finansal defterde
+"kod düzgün yazılırsa güvenli" yeterli değildir.
+**Dağıtım riski:** Tetikleyiciler TRIGGER yetkisi gerektirir. Yetki yoksa migration hata verir ve
+deploy durur — sessizce atlanmaz. `docs/deploy-cpanel.md` §1'e eklendi.
+
+## K-027 · Ters kayıt orijinalin tarihini taşır
+**Karar:** Ters kayıt orijinalin `entry_date` değerini kullanır; iki kayıt her tarih aralığında
+birbirini götürür.
+**Bilinen etki:** Geçmiş bir dönemin bakiyesi geriye dönük değişir. Örneğin Mart'ta girilen bir
+konaklama Mayıs'ta iptal edilirse Mart bakiyesi de değişir.
+**Neden şimdilik böyle:** Kullanıcı "tam tersini üretmeli" dedi ve V1'de dönem kilidi yoktur.
+**Yeniden değerlendirilecek:** Cari ekstre (Gün 8) ve dönem kapatma geldiğinde. `reverse()`
+metodunun açıklama parametresi gibi bir tarih parametresi eklemek tek satırlık iştir.
+
+## K-028 · Ledger hiçbir modülü tanımaz
+**Karar:** `LedgerService` firma kimliğini `int $companyId` olarak alır, `Company` modelini
+kullanmaz. Kaynak kayıt `?string $sourceType, ?int $sourceId` olarak geçirilir — `Stay`/`Payment`
+modellerine bağımlılık yoktur.
+**Gerekçe:** CLAUDE.md §4.3/3. Bağımlılık yönü tek yönlüdür: Companies → Ledger, Stays → Ledger,
+Payments → Ledger. Ters yön yoktur.
+
+## K-029 · Açılış bakiyesi için ayrı tablo yok
+**Karar:** `source_type` serbest metindir; Excel göçü `'opening'` değerini teknik olarak
+kullanabilir. Ayrı `opening_balances` tablosu **açılmadı** (CLAUDE.md §3.3).
+**Durum:** Yalnızca teknik imkân; arayüz ve göç kodu yazılmadı. Testle doğrulandı.
+
+## K-030 · Firma silme koruması iki katmanda
+**Karar:** Cari hareketi olan firma silinemez. Asıl koruma `CompanyService::delete()` içindedir
+(HTTP dışı çağrı yollarını da kapsar); `CompanyPolicy::delete()` aynı kuralı arayüzde butonu
+gizlemek ve isteği erken reddetmek için tekrarlar.
+**Gerekçe:** K-010 — `Gate::before` admin için Policy'leri kısa devre yapabilir; tek katman yetmez.
+**Kapsam:** Bakiye sıfır olsa bile (ters kayıtla kapatılmış) hareket geçmişi varsa silme yasaktır.
+Kullanımdan kaldırmak için doğru işlem `is_active = false`.

@@ -7,9 +7,12 @@ namespace App\Modules\Companies\Policies;
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Companies\Models\Company;
+use App\Modules\Ledger\Services\LedgerService;
 
 class CompanyPolicy
 {
+    public function __construct(private readonly LedgerService $ledger) {}
+
     public function viewAny(User $user): bool
     {
         return $user->can(Permission::CompaniesView->value);
@@ -50,9 +53,16 @@ class CompanyPolicy
         return $this->isOwnRecentRecord($user, $company);
     }
 
+    /**
+     * Cari hareketi olan firma silinemez (CLAUDE.md §5.2). Asıl koruma
+     * CompanyService::delete() içindedir; buradaki kontrol arayüzde silme
+     * butonunu gizlemek ve HTTP isteğini erken reddetmek içindir.
+     */
     public function delete(User $user, Company $company): bool
     {
-        return $user->can(Permission::CompaniesDelete->value) && ! $company->trashed();
+        return $user->can(Permission::CompaniesDelete->value)
+            && ! $company->trashed()
+            && ! $this->ledger->hasEntriesForCompany($company->getKey());
     }
 
     public function restore(User $user, Company $company): bool

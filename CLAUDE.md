@@ -268,10 +268,18 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`.
 | debit | decimal(15,2) | default 0 |
 | credit | decimal(15,2) | default 0 |
 | currency | char(3) | |
-| created_by | FK users | |
-| created_at | timestamp | **`updated_at` YOK** |
+| is_reversal | boolean | default false |
+| reverses_entry_id | FK ledger_entries null | **unique** — bir hareket yalnızca bir kez ters kaydedilebilir |
+| created_by | FK users | zorunlu |
+| created_at | timestamp | **`updated_at` ve `deleted_at` YOK** |
 
-Index: `(company_id, entry_date)`, `(source_type, source_id)`.
+Index: `(company_id, entry_date)`, `(company_id, currency)`, `(source_type, source_id)`, `(entry_date)`.
+
+**Veritabanı düzeyinde uygulanan değişmezler** (uygulama katmanı atlansa bile geçerli):
+- `CHECK (debit >= 0 AND credit >= 0)` — negatif tutar yok
+- `CHECK ((debit > 0 AND credit = 0) OR (credit > 0 AND debit = 0))` — tam olarak bir yön dolu
+- `UNIQUE (reverses_entry_id)` — ikinci ters kayıt imkânsız
+- `BEFORE UPDATE` / `BEFORE DELETE` tetikleyicileri — ham SQL dahil her yazma reddedilir
 
 ### 5.6 `audit_logs`
 
@@ -280,7 +288,7 @@ Index: `(company_id, entry_date)`, `(source_type, source_id)`.
 | id | bigint PK |
 | user_id | FK users null |
 | user_name | varchar(150) — snapshot |
-| event | varchar(30) — `created`, `updated`, `deleted`, `restored`, `login`, `logout`, `login_failed`, `cancelled`, `exported`, `permission_changed` |
+| event | varchar(30) — `created`, `updated`, `deleted`, `restored`, `login`, `logout`, `login_failed`, `cancelled`, `reversed`, `exported`, `permission_changed` |
 | auditable_type | varchar(50) — morph map |
 | auditable_id | bigint null |
 | old_values | json null |
@@ -295,7 +303,8 @@ Kayıt **değiştirilemez ve silinemez**. `updated_at` yoktur. Hiçbir role dele
 ### 5.7 Morph map
 
 `AppServiceProvider::boot()` içinde `Relation::enforceMorphMap([...])` zorunlu:
-`'stay' => Stay::class`, `'payment' => Payment::class`, `'company' => Company::class`, `'user' => User::class`.
+`'stay' => Stay::class`, `'payment' => Payment::class`, `'company' => Company::class`,
+`'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`.
 Sınıf adı değişse bile veri bozulmaz.
 
 ---
@@ -327,9 +336,38 @@ Pozitif = firma bize borçlu. **Önbelleklenmiş `balance` kolonu V1'de yoktur.*
 - Konaklama silinirse (soft delete): ters satır.
 - Tahsilat iptalinde: ters satır. Tahsilat tutarı **hiçbir rol tarafından düzenlenemez**; düzeltme = iptal + yeniden giriş.
 
-**L8.** Ters kayıt `description` alanı `[İPTAL]` ön ekiyle başlar ve aynı `source_type/source_id`'yi taşır. Servis, aynı kaynak için ikinci kez ters kayıt yazmadan önce mevcut olup olmadığını kontrol eder (idempotans).
+**L8.** Ters kayıt, `is_reversal = true` ve `reverses_entry_id = <orijinal id>` kolonlarıyla
+tanımlanır — açıklama metnine bakılarak değil. Varsayılan açıklama `[İPTAL]` ön ekiyle başlar
+ama bu yalnızca okunabilirlik içindir.
 
-**L9.** Cariye yazma **sadece** `Ledger\Services\LedgerService` üzerinden yapılır. Controller, Blade veya başka modül doğrudan `LedgerEntry::create()` çağıramaz.
+Ters kayıt orijinalin **tam tersidir**: aynı firma, aynı tutar, aynı para birimi, aynı
+`entry_date`, aynı `source_type/source_id`; yalnızca borç/alacak yönü değişir. Böylece iki
+kayıt her tarih aralığında birbirini götürür.
+
+- **Aynı hareket ikinci kez ters kaydedilemez** — `reverses_entry_id` üzerindeki unique
+  kısıt bunu eşzamanlı isteklerde bile garanti eder.
+- **Ters kaydın tersi alınamaz** (`is_reversal = true` olan kayıt reddedilir); zincir oluşmaz.
+- Ters kayıt ve denetim kaydı **aynı transaction** içindedir; biri başarısız olursa ikisi de yazılmaz.
+
+> Ters kaydın orijinalle aynı tarihi taşıması, geçmiş bir dönemin bakiyesini geriye dönük
+> değiştirir. V1'de dönem kilidi yoktur; ekstre/dönem kapatma geldiğinde bu davranış
+> yeniden değerlendirilmelidir.
+
+**L9.** Cariye yazma **sadece** `Ledger\Services\LedgerService` üzerinden yapılır. Controller,
+Blade veya başka modül doğrudan `LedgerEntry::create()` çağıramaz. Servisin dışa açık API'si:
+
+| Metot | İşi |
+|---|---|
+| `debit()` | Firma borçlanır |
+| `credit()` | Firmanın borcu azalır |
+| `reverse()` | Bir hareketin tam tersini üretir |
+| `balanceForCompany()` | Tek para biriminde bakiye |
+| `balancesForCompanyByCurrency()` | Para birimi bazında bakiyeler |
+| `hasEntriesForCompany()` | Firmanın hareketi var mı |
+| `isReversed()` | Hareket ters kaydedilmiş mi |
+
+`LedgerService` firma kimliğini `int $companyId` olarak alır; Companies modülünün modeline
+bağımlı **değildir** (§4.3/3). Tutarlar `Core\Support\Money` ile geçirilir.
 
 **L10.** Eşzamanlılık: bir firmanın bakiyesini okuyup ona göre yazan hiçbir mantık yoktur (limit kontrolü yok), bu yüzden kilit gerekmez. Bu değişirse `lockForUpdate` eklenir.
 
