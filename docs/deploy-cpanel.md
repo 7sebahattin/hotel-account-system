@@ -16,7 +16,7 @@ Deploy yöntemi bunlara göre belirlenir:
 | MySQL sürümü ve `utf8mb4_turkish_ci` desteği | Türkçe arama davranışı buna bağlı. |
 | Staging için ayrı subdomain / ayrı veritabanı | Canlı veriyle test edilmemeli. |
 | Cron çalıştırma yetkisi | Günlük yedek ve deploy sonrası migration için gerekli. |
-| **Veritabanı kullanıcısının TRIGGER yetkisi** | `ledger_entries` tablosunu UPDATE/DELETE'e karşı koruyan tetikleyiciler bu yetkiyi gerektirir. Yetki yoksa `2026_09_07_050100_protect_ledger_entries_from_writes` migration'ı **hata verir ve deploy durur** — bu bilinçlidir: koruma var sanılıp olmaması daha kötüdür. Yetki alınamıyorsa karar kullanıcıya sorulmalıdır. |
+| **Veritabanı kullanıcısının TRIGGER yetkisi** | `ledger_entries` tablosunu UPDATE/DELETE'e karşı koruyan tetikleyiciler bu yetkiyi gerektirir. Yetki yoksa `2026_09_07_050100_protect_ledger_entries_from_writes` migration'ı **hata verir ve deploy durur** — bu bilinçlidir: koruma var sanılıp olmaması daha kötüdür. Yetki alınamıyorsa karar kullanıcıya sorulmalıdır. Lemon hedefi için durum: `docs/deploy-lemon.md` §8 (blocker değil; doğrulama ilk gerçek migration'dadır). |
 
 ## 2. Dizin yerleşimi
 

@@ -652,3 +652,58 @@ Bunun sonucu: o hesapta hedef `/lemon-app/` değil `/` olur ve `EXPECTED_DIR` il
 **uygulanmadı**, yalnızca önerildi (`docs/deploy-lemon.md` §12).
 **Deploy durumu değişmedi:** `DEPLOY_ENABLED` yok, varsayılan `dry-run`, yalnızca
 `workflow_dispatch`. Bu turda dry-run dahil hiçbir workflow çalıştırılmadı.
+
+## K-068 · TRIGGER yetkisi blocker olmaktan çıkarıldı; doğrulama migration'a taşındı
+**Bağlam:** `SHOW GRANTS FOR CURRENT_USER();` çıktısında `derspros_lemon.*` için
+ALL PRIVILEGES görüldü. Ancak `CURRENT_USER` phpMyAdmin oturum kullanıcısıdır;
+Laravel'in kullanacağı `derspros_sebahattin` ile birebir aynı kullanıcı değildir —
+yani bu çıktı dolaylı bir kanıttır. cPanel Manage Databases ekranında
+`derspros_sebahattin` → `derspros_lemon` → TÜM AYRICALIKLAR atanmış durumdadır.
+**Karar:** TRIGGER yetkisi artık **dry-run blocker değildir.** Dry-run veritabanına
+hiç dokunmaz; onu bir DB yetkisine bağlamak gereksizdi.
+**Kesin doğrulama ilk gerçek production migration'dadır.** `CREATE TRIGGER` doğrudan
+kanıttır, `SHOW GRANTS` dolaylı.
+**Zorunlu davranış — CREATE TRIGGER başarısız olursa:** `migrate --force` fail eder ve
+orada durulur; **DocumentRoot KESİNLİKLE değiştirilmez** (yarım migrate edilmiş bir
+veritabanına kimse yönlenmez); karar kullanıcıya sorulur.
+**Değişmeyen:** migration'da hiçbir `try/catch`, `IF NOT EXISTS` veya sessiz atlama
+yoktur ve eklenmeyecektir. **Ledger trigger koruması hiçbir koşulda bypass edilmez
+veya kaldırılmaz** (CLAUDE.md §6/L1).
+
+## K-069 · Dry-run kilitsizdir; kilitler yalnızca gerçek deploy yolundadır
+**Sorun:** Kilitlerin güvenli doğrulamayı da engellemesi tasarım hatasıdır. Dry-run'ı
+`DEPLOY_ENABLED`'a bağlamak, hiçbir şey yazmayan bir işlemi yazma iznine bağlamak olurdu.
+**Karar — iki çalışma biçimi:**
+| | `mode: dry-run` (varsayılan) | `mode: deploy` |
+|---|---|---|
+| `DEPLOY_ENABLED` | gerekmez, okunmaz | `true` zorunlu |
+| `confirm_target` | gerekmez; dolu ve yanlışsa yalnızca uyarı | `lemon.derspros.com.tr` birebir |
+| `LEMON_APP_DIR` | `/lemon-app/` (hedef doğrulaması her iki biçimde de çalışır) | `/lemon-app/` — deploy yolunda ikinci kez kontrol edilir |
+| Dosya oluşturma/değiştirme/silme | yok | var |
+**Fail-closed korundu:** karar iki kez, birbirinden bağımsız hesaplanır (`guard` işi ve
+aktarım işi); ikisi uyuşmazsa iş durur. Aktarım adımının `dry-run` bayrağı artık guard
+çıktısına değil, aktarım işinin kendi hesabına bağlıdır — guard çıktısının kaybolması
+veya ileride değiştirilmesi tek başına gerçek aktarım açamaz. `'true'` dışındaki her
+değer dry-run demektir. `mode: deploy` seçilip kilitlerden biri kapalıysa iş **durur**;
+sessizce dry-run'a düşülmez, çünkü kullanıcı deploy istemiştir.
+**Doğrulama:** 11 senaryolu karar matrisi yerelde sınandı — dry-run'ın dört varyantı da
+yazmasız geçti, `deploy` yalnızca dört kilit birden açıkken gerçek aktarıma döndü.
+
+## K-070 · FTP aracının dry-run ve ilk-yayın davranışı kaynaktan doğrulandı
+**Bağlam:** İki iddia şimdiye kadar belgeye dayanıyordu, kaynağa değil.
+**Yöntem:** `@samkirkland/ftp-deploy` paketi indirilip `dist/` okundu.
+**Bulgu 1 — dry-run gerçekten yazmıyor.** Sunucuyu değiştiren beş işlemin tamamı
+bayrakla kapalı: `createFolder` (`if (this.dryRun === true) return;`), `uploadFile`
+(upload + replace), `removeFile`, `removeFolder` ve durum dosyası yazımı
+(`if (this.dryRun === false) { … }`).
+**Bulgu 2 — bilinen tek istisna.** `getServerFiles()`, dry-run kontrolünden ÖNCE
+`ensureDir(server-dir)` çağırır; hedef dizin yoksa **oluşturulabilir**. Sonuç boş bir
+dizindir; dosya yazılmaz, hiçbir şey silinmez. Hedefimiz `/lemon-app/` zaten mevcut
+olduğu için pratikte no-op'tur ve guard tek değere kilitli olduğu için yanlış bir yola
+dizin açılması mümkün değildir. Bu istisna belgeye açıkça yazıldı.
+**Bulgu 3 — ilk yayında silme yok (K-064'teki açık soru kapandı).** Durum dosyası
+bulunamazsa araç sunucu durumunu boş kabul eder (`data: []`); boş duruma göre hesaplanan
+fark yalnızca **upload** üretir, **delete üretmez**. İlk gerçek aktarım sunucuda
+önceden bulunan dosyaları silmez. İlk çalıştırmanın dry-run olması önerisi yine de
+geçerlidir — hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
+

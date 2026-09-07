@@ -934,8 +934,16 @@ workflow'un `guard` işi başka her hedefi fail-closed reddeder.
 > Bağımlılıklar `config.platform.php = "8.3.0"` ile PHP 8.3'e kilitlendi;
 > Symfony bileşenleri 7.4 LTS'e indi. `composer why-not php 8.3` temiz.
 >
-> **Kalan tek deploy blocker'ı** (`docs/deploy-lemon.md` §8): veritabanı
-> kullanıcısının TRIGGER yetkisi doğrulanmadan production migration çalıştırılmaz.
+> **TRIGGER blocker'ı da kaldırıldı** — bkz. `docs/deploy-lemon.md` §8 ve
+> `docs/kararlar.md` K-068. cPanel'de `derspros_sebahattin` → `derspros_lemon`
+> TÜM AYRICALIKLAR atanmış durumdadır. Kesin doğrulama **ilk gerçek production
+> migration'da** yapılır: `CREATE TRIGGER` başarısız olursa `migrate --force`
+> fail eder ve **DocumentRoot değiştirilmez**. Ledger trigger koruması hiçbir
+> koşulda bypass edilmez veya "yetki yoksa atla" hâline getirilmez (§6/L1).
+>
+> **Dry-run kilitsizdir** (`docs/deploy-lemon.md` §9, K-069): `mode: dry-run`
+> `DEPLOY_ENABLED` ve `confirm_target` gerektirmez, sunucuya hiçbir dosya
+> yazmaz/silmez. Kilitler yalnızca `mode: deploy` yolundadır.
 
 Kurallar:
 - `.env` repoda tutulmaz ve deploy sırasında **asla üzerine yazılmaz**.

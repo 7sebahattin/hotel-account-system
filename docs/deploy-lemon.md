@@ -5,7 +5,10 @@
 > veya değiştirilmedi; production veritabanı oluşturulmadı, cPanel'de hiçbir
 > ayar değiştirilmedi. FTP kökü ve FTPS desteği kullanıcı tarafından bir FTP
 > istemcisiyle **yalnızca dizin listeleyerek** doğrulanmıştır (§12).
-> `.github/workflows/deploy.yml` bu hâliyle **gerçek aktarım yapamaz** (§9).
+> `DEPLOY_ENABLED` oluşturulmadı; **dry-run dahil hiçbir workflow çalıştırılmadı.**
+> `.github/workflows/deploy.yml` bu hâliyle **gerçek aktarım yapamaz**; buna karşılık
+> **dry-run her zaman güvenle çalıştırılabilir** — kilitler yalnızca gerçek deploy
+> yolundadır (§9).
 
 ## 0. Hedef ortam
 
@@ -15,8 +18,9 @@
 | cPanel hesap kökü | `/home/derspros` |
 | Lemon DocumentRoot (**mevcut**) | `/home/derspros/lemon.derspros.com.tr` — henüz değiştirilmedi |
 | Lemon DocumentRoot (**hedef**) | `/home/derspros/lemon-app/public` — cPanel'den ELLE ayarlanacak (§11 Aşama 4) |
-| Laravel kökü | `/home/derspros/lemon-app/` |
-| FTP kökü (**doğrulandı**) | `/home/derspros` — ana FTP hesabı buraya chroot'lu. Deploy hedefi köke göre `/lemon-app/` (§12) |
+| Laravel kökü (sunucu açısından) | `/home/derspros/lemon-app/` |
+| Laravel kökü (**FTP açısından**) | `/lemon-app/` ← workflow'daki `server-dir` bu değerdir |
+| FTP kökü (**doğrulandı**) | `/` = `/home/derspros` — ana FTP hesabı buraya chroot'lu (§12) |
 | Ana site DocumentRoot | `/home/derspros/public_html` |
 | PHP | 8.3 |
 | Aktarım | GitHub Actions → FTPS |
@@ -198,9 +202,10 @@ ve hangi biçimin beklendiği yazılır.
 - `exclude` verildiğinde aracın **varsayılan listesi ezilir**; bu yüzden
   `**/.git*` ve `**/node_modules/**` kalıpları workflow'da tekrar yazılmıştır.
 - Araç, kendi tuttuğu `.ftp-deploy-*.json` durum dosyasıyla senkronizasyon
-  yapar. **İlk çalıştırmada, durum dosyası yokken sunucuda halihazırda bulunan
-  dosyalara ne yaptığı belgelenmemiştir** — kaynak koda inilerek doğrulanmadı.
-  Bu yüzden ilk çalıştırma **zorunlu olarak `dry-run`** olmalıdır (§9).
+  yapar. **İlk çalıştırmadaki davranışı artık belirsiz değildir**: durum dosyası
+  yoksa sunucu durumu boş kabul edilir ve fark yalnızca upload üretir, delete
+  üretmez (kaynak koddan doğrulandı — §9). Yine de ilk çalıştırma **`dry-run`**
+  olmalıdır: hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
 
 ---
 
@@ -329,48 +334,117 @@ Ayrıca:
 
 ---
 
-## 8. Ledger TRIGGER yetkisi — deploy öncesi TEK kalan blocker
+## 8. Ledger TRIGGER yetkisi — dry-run blocker DEĞİL, migration kapısı
 
 `ledger_entries` tablosunun değiştirilemezliği, uygulama katmanına ek olarak
 **veritabanı tetikleyicileriyle** korunur
-(`2026_09_07_050100_protect_ledger_entries_from_writes`).
+(`2026_09_07_050100_protect_ledger_entries_from_writes`). Bu migration
+`CREATE TRIGGER` çalıştırır ve veritabanı kullanıcısının **TRIGGER yetkisi**
+olmasını gerektirir.
 
-Bu migration `CREATE TRIGGER` çalıştırır ve veritabanı kullanıcısının
-**TRIGGER yetkisi** olmasını gerektirir. Paylaşımlı hostinglerde bu yetki
-bazen verilmez.
+### Bugüne kadar bilinenler
 
-**Yetki doğrulanmadan production migration çalıştırılmamalıdır.**
-PHP sürümü blocker'ı çözüldükten sonra (§1) geriye kalan tek engel budur.
+- cPanel → phpMyAdmin → `SHOW GRANTS FOR CURRENT_USER();` çıktısında
+  `derspros_lemon.*` için **ALL PRIVILEGES** görüldü.
+- **Ancak** `CURRENT_USER`, phpMyAdmin oturum kullanıcısıdır; Laravel'in
+  kullanacağı production DB kullanıcısı olan `derspros_sebahattin` ile
+  **birebir aynı kullanıcı değildir.** Bu yüzden bu çıktı tek başına kanıt sayılmaz.
+- cPanel → Manage Databases ekranında
+  `derspros_sebahattin` → `derspros_lemon` → **TÜM AYRICALIKLAR** atanmış durumda.
 
-Kontrol (cPanel → phpMyAdmin → SQL):
+Bu iki bulgu birlikte yetkinin **büyük olasılıkla var olduğunu** gösterir.
 
-```sql
-SHOW GRANTS FOR CURRENT_USER();
--- Çıktıda TRIGGER geçmeli veya ALL PRIVILEGES olmalı.
-```
+### Karar: blocker statüsü kaldırıldı
 
-Yetki yoksa migration **hata verir ve durur** — bu bilinçlidir: koruma var
-sanılıp olmaması, hiç olmamasından kötüdür. O durumda karar kullanıcıya
-sorulacaktır (hosting'den yetki istemek / korumayı yeniden tasarlamak).
+TRIGGER yetkisi artık **dry-run'ın önünde bir engel değildir.** Dry-run zaten
+veritabanına hiç dokunmaz (§9); onu bir DB yetkisine bağlamak gereksizdi.
+
+**Kesin doğrulama ilk gerçek production migration sırasında yapılacaktır.**
+Bu bilinçli bir seçimdir: `SHOW GRANTS` dolaylı bir kanıttır, `CREATE TRIGGER`
+ise doğrudan olanıdır.
+
+### Doğrulama nasıl işler
+
+Migration'da **hiçbir `try/catch`, `IF NOT EXISTS` veya sessiz atlama yoktur.**
+`DB::unprepared('CREATE TRIGGER …')` yetki yoksa exception fırlatır, migration
+**hata verir ve durur**. Koruma var sanılıp olmaması, hiç olmamasından kötüdür.
+
+**Zorunlu davranış — `CREATE TRIGGER` başarısız olursa:**
+
+1. `php artisan migrate --force` **fail eder** ve orada durulur.
+2. **DocumentRoot KESİNLİKLE değiştirilmez** (§11 Aşama 4). Lemon alan adı
+   eski hâlinde kalır; yarım migrate edilmiş bir veritabanına kimse yönlenmez.
+3. Karar kullanıcıya sorulur: hosting'den TRIGGER yetkisi istemek mi, korumayı
+   yeniden tasarlamak mı?
+
+**Ledger trigger koruması hiçbir koşulda bypass edilmez, kaldırılmaz veya
+"yetki yoksa atla" hâline getirilmez** (CLAUDE.md §6/L1).
 
 ---
 
-## 9. Workflow neden şimdi deploy edemiyor
+## 9. Dry-run ile gerçek deploy arasındaki fark
 
-`.github/workflows/deploy.yml` üç bağımsız kilit taşır:
+Workflow'un **iki** çalışma biçimi vardır ve kilitler **yalnızca ikincisine**
+uygulanır. Güvenli doğrulamayı engellemek kilidin amacı değildir.
 
-1. **Tetikleme:** yalnızca `workflow_dispatch`. `push`/`pull_request` yok —
-   `main` veya `develop`'a merge hiçbir şey başlatmaz.
-2. **Varsayılan biçim `dry-run`:** araç bağlanır, ne yapacağını raporlar,
-   **hiçbir dosya yazmaz/silmez**.
-3. **`DEPLOY_ENABLED` variable'ı:** `true` değilse `mode: deploy` seçilse bile
-   `guard` işi hatayla durur. Bu değişken **henüz oluşturulmamıştır**.
+| | `mode: dry-run` (varsayılan) | `mode: deploy` |
+|---|---|---|
+| `DEPLOY_ENABLED` | **gerekmez, okunmaz** | **`true` olmalı** (henüz yok) |
+| `confirm_target` | gerekmez; dolu ve yanlışsa yalnızca uyarı | `lemon.derspros.com.tr` birebir |
+| `LEMON_APP_DIR` | `/lemon-app/` (hedef doğrulaması her iki biçimde de çalışır) | `/lemon-app/` — deploy yolunda **ikinci kez** kontrol edilir |
+| FTPS bağlantısı | kurulur | kurulur |
+| Hedef ve aktarım planı | doğrulanır ve raporlanır | doğrulanır |
+| Dosya oluşturma / değiştirme / silme | **yok** | var |
 
-Gerçek deploy ayrıca `confirm_target` alanına `lemon.derspros.com.tr` yazılmasını
-ister — yanlışlıkla tıklamayı engeller.
+Her iki biçimde de ortak: yalnızca `workflow_dispatch` ile elle tetiklenir —
+`push`/`pull_request` tetiklemesi **yoktur**, `main` veya `develop`'a merge
+hiçbir şey başlatmaz.
 
-Ek kapılar: hedef dizin doğrulaması (§4.1), artifact temizlik kontrolü (§4),
-`composer check-platform-reqs` (§1).
+### Karar iki kez, bağımsız hesaplanır
+
+`guard` işi kararı verir; **aktarım işi aynı kararı kendi girdilerinden yeniden
+hesaplar** ve iki sonuç uyuşmazsa iş durur. Böylece guard çıktısının kaybolması,
+boş gelmesi veya ileride yanlışlıkla değiştirilmesi tek başına gerçek aktarım
+açamaz. Fail-closed: `'true'` dışındaki **her** değer dry-run demektir.
+
+### Dry-run'ın "hiçbir şey yazmaz" garantisi nereden geliyor
+
+Tahmin değil; aracın kaynağından doğrulandı (`@samkirkland/ftp-deploy`,
+`dist/syncProvider.js`). Sunucuyu değiştiren **beş** işlemin tamamı `dryRun`
+bayrağıyla kapatılır:
+
+| İşlem | Kaynak koddaki koruma |
+|---|---|
+| `createFolder` | `if (this.dryRun === true) return;` |
+| `uploadFile` (upload + replace) | `if (this.dryRun === false) { … }` |
+| `removeFile` | `if (this.dryRun === false) { … }` |
+| `removeFolder` | `if (this.dryRun === false) { … }` |
+| Durum dosyası (`.ftp-deploy-*.json`) yazımı | `if (this.dryRun === false) { … }` |
+
+`dangerous-clean-slate` de dry-run'da `clearWorkingDir()` çağırmaz — ama zaten
+**hiçbir koşulda kullanılmıyor** (§4.1).
+
+**Bilinen tek istisna:** `getServerFiles()`, dry-run kontrolünden **önce**
+`ensureDir(server-dir)` çağırır. Hedef dizin sunucuda yoksa bu çağrı onu
+oluşturabilir. Sonuç boş bir dizindir — dosya yazılmaz, hiçbir şey silinmez.
+Hedefimiz `/lemon-app/` zaten mevcut olduğu için pratikte no-op'tur; guard tek
+değere kilitli olduğu için yanlış bir yola dizin açılması da mümkün değildir.
+
+### İlk yayında silme davranışı — ÇÖZÜLDÜ ✅
+
+Daha önce "belgelenmemiş" diye işaretlenmişti. Kaynak koddan doğrulandı
+(`dist/deploy.js`, `getServerFiles`): durum dosyası bulunamazsa araç sunucu
+durumunu **boş** kabul eder (`data: []`). Boş duruma göre hesaplanan fark
+yalnızca **upload** üretir; **delete üretmez.** Yani ilk gerçek aktarım,
+sunucuda önceden bulunan dosyaları silmez.
+
+Buna rağmen **ilk çalıştırmanın `dry-run` olması önerisi geçerlidir** — hedefin
+ve aktarım listesinin gerçekten beklenen şey olduğunu görmek için.
+
+### Ek kapılar
+
+Hedef dizin doğrulaması (§4.1), artifact temizlik kontrolü (§4),
+`composer check-platform-reqs` (§1) her iki biçimde de çalışır.
 
 ---
 
@@ -417,8 +491,10 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
    oluşturun. Gerçek DB bilgilerini girin, `APP_KEY` satırını boş bırakın.
 3. **Veritabanı:** Lemon için ayrı veritabanı + kullanıcı, collation
    **`utf8mb4_turkish_ci`** (Türkçe arama davranışı buna bağlı — CLAUDE.md §9).
-4. **TRIGGER yetkisi** (§8): phpMyAdmin → SQL → `SHOW GRANTS FOR CURRENT_USER();`
-   Çıktıyı iletin. **Bu doğrulanmadan production migration çalıştırılmaz.**
+4. ~~**TRIGGER yetkisi**~~ — **blocker değil** (§8). cPanel Manage Databases'te
+   `derspros_sebahattin` → `derspros_lemon` → TÜM AYRICALIKLAR atanmış durumda.
+   Kesin doğrulama ilk gerçek migration'da yapılacak: `CREATE TRIGGER`
+   başarısız olursa migration fail eder ve **DocumentRoot değiştirilmez**.
 5. **PHP eklentileri:** `mbstring, pdo_mysql, intl, zip, gd, xml, ctype,
    fileinfo, openssl, tokenizer` etkin mi?
 6. ~~**FTP kökünü belirleyin**~~ — **TAMAMLANDI** (§12). FileZilla ile ana FTP
@@ -432,8 +508,9 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
 
 ### Aşama 2 — Dry-run
 
-9. Workflow'u **`mode: dry-run`** ile çalıştırın. Çıktıyı bana gönderin.
-   Sunucuda hiçbir dosya değişmez.
+9. Workflow'u **`mode: dry-run`** ile çalıştırın. `DEPLOY_ENABLED` **gerekmez**,
+   `confirm_target` **boş bırakılır**. Çıktıyı bana gönderin.
+   Sunucuda hiçbir dosya oluşturulmaz, değiştirilmez veya silinmez (§9).
 
 ### Aşama 3 — İlk gerçek deploy
 
@@ -442,10 +519,13 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
 11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6):
     `php artisan key:generate --force`, `migrate --force`, `storage:link`,
     `config:cache route:cache view:cache`.
+    **`migrate --force` burada TRIGGER yetkisinin gerçek sınavıdır (§8).**
+    Hata verirse durun ve Aşama 4'e **geçmeyin**.
 
 ### Aşama 4 — DocumentRoot değişikliği (EN SON)
 
-12. **Ancak dosyalar sunucuda ve uygulama hazır olduğunda:**
+12. **Ancak dosyalar sunucuda, migration'lar HATASIZ tamamlanmış ve uygulama
+    hazır olduğunda:**
     cPanel → Domains → `lemon.derspros.com.tr` → Document Root:
     `/home/derspros/lemon-app/public` → Güncelle.
 13. §7'deki güvenlik doğrulamasını koşun.
@@ -525,17 +605,17 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 
 ---
 
-## 14. Bu turda YAPILMAYANLAR
+## 14. Bu depodan YAPILMAYANLAR
 
-- Bu depodan/CI'dan hosting'e bağlanılmadı, deploy veya dry-run çalıştırılmadı
+- Bu depodan/CI'dan hosting'e bağlanılmadı; **dry-run dahil hiçbir workflow çalıştırılmadı**
 - Hiçbir dosya yüklenmedi, silinmedi, değiştirilmedi — FTP kökü doğrulaması
   kullanıcının FTP istemcisinde salt okunur dizin listelemesiydi (§12)
+- `DEPLOY_ENABLED` oluşturulmadı
 - Ayrı (dizine kısıtlı) FTP hesabı oluşturulmadı; yalnızca önerildi (§12)
-- Workflow çalıştırılmadı
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
+- **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
 - `finalize.php` ve production cron yazılmadı (§6)
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
-- **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
-- Dry-run dahil hiçbir workflow çalıştırılmadı
+- **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı

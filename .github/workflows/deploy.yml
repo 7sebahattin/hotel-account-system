@@ -3,13 +3,29 @@ name: Deploy (Lemon)
 # ============================================================================
 # BU WORKFLOW BU HÂLİYLE GERÇEK DEPLOY YAPAMAZ.
 #
-# Üç ayrı kilit vardır ve üçü birden açılmadan tek bir dosya bile aktarılmaz:
+# İKİ ÇALIŞMA BİÇİMİ VARDIR VE KİLİTLER YALNIZCA İKİNCİSİNE UYGULANIR:
 #
-#   1. Yalnızca `workflow_dispatch` ile elle tetiklenir. push/PR tetiklemesi YOKTUR.
-#   2. Varsayılan çalışma biçimi `dry-run`'dır: bağlanır, ne yapacağını raporlar,
-#      hiçbir şey yazmaz/silmez.
-#   3. Gerçek aktarım ayrıca `DEPLOY_ENABLED` repository variable'ının `true`
-#      olmasını ister. Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
+#   mode = dry-run  (varsayılan)  → GÜVENLİ, HER ZAMAN ÇALIŞTIRILABİLİR
+#     • DEPLOY_ENABLED GEREKMEZ
+#     • confirm_target GEREKMEZ (yazılırsa yalnızca bilgilendirme amaçlı bakılır)
+#     • FTPS bağlantısı kurulur, hedef ve aktarım planı doğrulanır
+#     • HİÇBİR DOSYA oluşturulmaz, değiştirilmez veya silinmez
+#       (doğrulandı: @samkirkland/ftp-deploy — createFolder/uploadFile/
+#        removeFile/removeFolder ve durum dosyası yazımı `dryRun` ile kapalıdır)
+#     • TEK istisna: hedef dizinin KENDİSİ sunucuda yoksa `ensureDir` onu
+#       oluşturabilir. Boş bir dizinden ibarettir, dosya yazılmaz, silinmez.
+#       Hedefimiz (/lemon-app/) zaten mevcut olduğu için pratikte no-op'tur.
+#
+#   mode = deploy   (gerçek aktarım) → DÖRT KİLİT BİRDEN AÇILMALI
+#     1. Yalnızca `workflow_dispatch` ile elle tetiklenir. push/PR tetiklemesi YOKTUR.
+#     2. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
+#        Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
+#     3. `confirm_target` alanına hedef alan adı birebir yazılmalı.
+#     4. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
+#
+#   Karar iki kez, birbirinden bağımsız hesaplanır (guard işi + aktarım işi).
+#   İkisi aynı sonuca varmazsa iş durur. Fail-closed: 'true' dışındaki her
+#   şey dry-run demektir.
 #
 # MİMARİ A (kesinleşti — docs/deploy-lemon.md §2):
 #   Laravel kökü  : /home/derspros/lemon-app/
@@ -26,13 +42,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry-run = hiçbir şey yazılmaz (önerilen ilk çalıştırma)'
+        description: 'dry-run = hiçbir şey yazılmaz, DEPLOY_ENABLED gerekmez (önerilen ilk çalıştırma)'
         type: choice
         options: [dry-run, deploy]
         default: dry-run
         required: true
       confirm_target:
-        description: 'Gerçek deploy için hedef alan adını birebir yazın'
+        description: 'YALNIZCA mode=deploy için zorunlu — hedef alan adını birebir yazın. dry-run''da boş bırakın.'
         type: string
         default: ''
         required: false
@@ -119,32 +135,65 @@ jobs:
           [ "$fail" -eq 0 ] && echo "Hedef dizin kontrolleri geçti (Lemon uygulama kökü)."
           exit $fail
 
+      # DRY-RUN İLE DEPLOY ARASINDAKİ FARK BURADA TANIMLIDIR.
+      #
+      # dry-run yolu bilinçli olarak KİLİTSİZDİR: güvenli doğrulamayı
+      # engellemek, kilidin amacı değildir. Yazma yetkisini kısıtlayan şey
+      # `mode` değil, aktarım adımına geçen `dry-run` bayrağıdır (aşağıda
+      # ikinci kez, bağımsız olarak hesaplanır).
       - name: Çalışma biçimine karar ver
         id: decide
         env:
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm_target }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
         run: |
+          set -u
+
+          # ---------------------------------------------------------- DRY-RUN
           if [ "$MODE" != "deploy" ]; then
             echo "live=false" >> "$GITHUB_OUTPUT"
-            echo "Çalışma biçimi: DRY-RUN — sunucuya hiçbir şey yazılmayacak."
+            echo "Çalışma biçimi: DRY-RUN."
+            echo "  • DEPLOY_ENABLED gerekmez ve okunmaz."
+            echo "  • confirm_target gerekmez."
+            echo "  • Sunucuya hiçbir dosya yazılmaz, değiştirilmez, silinmez."
+            # confirm_target dry-run'da bir kilit DEĞİLDİR; yalnızca yanlış
+            # doldurulmuşsa kullanıcıyı uyarırız (işi durdurmaz).
+            if [ -n "${CONFIRM:-}" ] && [ "$CONFIRM" != "$TARGET_DOMAIN" ]; then
+              echo "::warning::confirm_target dolu ama hedef alan adıyla eşleşmiyor. Dry-run'da yok sayıldı."
+            fi
             exit 0
           fi
+
+          # ----------------------------------------------------- GERÇEK DEPLOY
+          # Dört kilit de açık olmalı. Herhangi biri kapalıysa iş durur —
+          # sessizce dry-run'a düşülmez, çünkü kullanıcı deploy istemiştir.
+          fail=0
 
           if [ "${ENABLED:-}" != "true" ]; then
             echo "::error::Gerçek deploy kapalı. DEPLOY_ENABLED repository variable'ı 'true' değil."
             echo "::error::Bu bilinçli bir kilittir; açmadan önce docs/deploy-lemon.md §9 okunmalıdır."
-            exit 1
+            echo "::error::Güvenli doğrulama için mode=dry-run kullanın — o yol bu değişkeni gerektirmez."
+            fail=1
           fi
 
           if [ "$CONFIRM" != "$TARGET_DOMAIN" ]; then
             echo "::error::Onay metni hedef alan adıyla eşleşmiyor. Gerçek deploy için tam olarak yazın: $TARGET_DOMAIN"
-            exit 1
+            fail=1
           fi
 
+          # Hedef dizin kontrolü önceki adımda da yapıldı; gerçek deploy yolunda
+          # bilinçli olarak TEKRAR edilir. Bir adım gelecekte gevşetilirse diğeri kalır.
+          if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+            echo "::error::LEMON_APP_DIR gerçek deploy için beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+            fail=1
+          fi
+
+          [ "$fail" -eq 0 ] || exit 1
+
           echo "live=true" >> "$GITHUB_OUTPUT"
-          echo "Çalışma biçimi: GERÇEK DEPLOY."
+          echo "Çalışma biçimi: GERÇEK DEPLOY (dört kilit de açık)."
 
   # ---------------------------------------------------------------- 2. BUILD
   build:
@@ -238,6 +287,43 @@ jobs:
           test -f release/public/index.php || { echo "::error::public/index.php artifact'ta yok."; exit 1; }
           echo "Artifact temiz."
 
+      # Aktarım işi, guard işinin çıktısına KÖRÜ KÖRÜNE güvenmez: aynı kararı
+      # kendi girdilerinden bağımsız olarak yeniden hesaplar ve iki sonuç
+      # uyuşmazsa durur. Böylece guard çıktısının kaybolması, boş gelmesi ya da
+      # ileride yanlışlıkla değiştirilmesi tek başına gerçek aktarım açamaz.
+      #
+      # Fail-closed: 'true' dışındaki HER değer dry-run demektir.
+      - name: Çalışma biçimini bağımsız doğrula
+        id: mode
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm_target }}
+          ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+          GUARD_LIVE: ${{ needs.guard.outputs.live }}
+        run: |
+          set -u
+          live=false
+          if [ "$MODE" = "deploy" ] \
+             && [ "${ENABLED:-}" = "true" ] \
+             && [ "$CONFIRM" = "$TARGET_DOMAIN" ] \
+             && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
+            live=true
+          fi
+
+          if [ "$live" != "${GUARD_LIVE:-false}" ]; then
+            echo "::error::guard işi ile aktarım işi çalışma biçiminde anlaşamadı."
+            echo "::error::Bu beklenmedik bir durumdur; fail-closed olarak durduruldu."
+            exit 1
+          fi
+
+          echo "live=$live" >> "$GITHUB_OUTPUT"
+          if [ "$live" = "true" ]; then
+            echo "GERÇEK AKTARIM: sunucuya yazılacak."
+          else
+            echo "DRY-RUN: FTPS bağlantısı kurulacak, plan raporlanacak, hiçbir dosya yazılmayacak/silinmeyecek."
+          fi
+
       # TEK aktarım: Laravel kökü. DocumentRoot bu ağacın içindeki public/
       # dizinidir (Mimari A), bu yüzden ikinci bir aktarım YOKTUR.
       #
@@ -256,7 +342,9 @@ jobs:
           local-dir: ./release/
           server-dir: ${{ vars.LEMON_APP_DIR }}
           state-name: .ftp-deploy-lemon-app.json
-          dry-run: ${{ needs.guard.outputs.live != 'true' }}
+          # Yazma yetkisini belirleyen TEK bayrak budur ve bağımsız olarak
+          # doğrulanmış karardan gelir. 'true' değilse dry-run'dır.
+          dry-run: ${{ steps.mode.outputs.live != 'true' }}
           dangerous-clean-slate: false
           log-level: standard
           exclude: |
@@ -282,10 +370,11 @@ jobs:
 
       - name: Özet
         run: |
-          if [ "${{ needs.guard.outputs.live }}" = "true" ]; then
+          if [ "${{ steps.mode.outputs.live }}" = "true" ]; then
             echo "Gerçek aktarım tamamlandı."
             echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
             echo "(zaten ayarlıysa bir şey yapılmaz) ve docs/deploy-lemon.md §7 doğrulaması koşulmalı."
           else
-            echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya değişmedi."
+            echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya oluşturulmadı, değiştirilmedi veya silinmedi."
+            echo "Gerçek aktarım için: DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
           fi
