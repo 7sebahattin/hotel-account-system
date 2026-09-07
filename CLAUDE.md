@@ -898,8 +898,21 @@ Canlı dizin yerleşimi:
 ```
 
 **Deploy yöntemi: GitHub Actions + FTPS. SSH erişimi zorunlu kabul edilmez.**
-Ayrıntı, gerekli GitHub Secrets listesi ve workflow taslağı: `docs/deploy-github-actions.md`.
-`develop` → staging, `main` → production; ayrı hedefler, ayrı veritabanı.
+
+- Genel ilkeler: `docs/deploy-github-actions.md`
+- **Hedefe özel kurulum, dizin mimarisi kararı ve blocker'lar: `docs/deploy-lemon.md`**
+- Workflow: `.github/workflows/deploy.yml` — yalnızca elle tetiklenir, varsayılanı
+  `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan gerçek aktarım yapamaz.
+
+`develop` → Lemon (kabul/staging), `main` → production; ayrı hedefler, ayrı veritabanı.
+**Otomatik push deployment hiçbir dal için etkin değildir.**
+
+> **Deploy öncesi iki blocker** (`docs/deploy-lemon.md` §1 ve §8):
+> 1. Kilitli Symfony 8.1.x bileşenleri PHP ≥ 8.4.1 istiyor; hosting'de 8.3 var.
+>    Ya hosting 8.4'e alınmalı ya da `config.platform.php` 8.3'e sabitlenip
+>    kilit yeniden çözülmelidir (çözümün var olduğu doğrulandı: Symfony 7.4).
+> 2. Veritabanı kullanıcısının TRIGGER yetkisi doğrulanmadan production
+>    migration çalıştırılmaz.
 
 Kurallar:
 - `.env` repoda tutulmaz ve deploy sırasında **asla üzerine yazılmaz**.

@@ -457,3 +457,69 @@ Tailwind/koyu tema derlemesini yüklemez.
 **Gerekçe:** `app.css` `html { color-scheme: dark }` ve koyu gövde zemini tanımlar; bunları
 yazdırma için tek tek geri almak kırılgan olurdu. Kağıt beyazdır. Sonuç testle doğrulanır:
 yazdırma çıktısında `bg-bg`, kenar çubuğu ve `data-sidebar` bulunmaz.
+
+## K-055 · Deploy workflow'u üç kilitle devre dışı doğar
+**Karar:** `.github/workflows/deploy.yml` depoya eklendi ancak bu hâliyle gerçek
+aktarım yapamaz. Üç bağımsız kilit:
+1. Yalnızca `workflow_dispatch` — `push`/`pull_request` tetiklemesi yok.
+2. Varsayılan biçim `dry-run`; araç bağlanır, raporlar, hiçbir şey yazmaz.
+3. `DEPLOY_ENABLED` repository variable'ı `true` değilse `guard` işi durur.
+   Bu değişken henüz oluşturulmadı.
+Ek olarak gerçek deploy, `confirm_target` alanına hedef alan adının birebir
+yazılmasını ister.
+**Gerekçe:** Paylaşımlı hostingde yanlış deploy'un geri alınması pahalıdır ve
+aynı hesapta başka aktif siteler vardır. Workflow'un "kazara çalışabilir" hâlde
+depoda durması kabul edilemez.
+
+## K-056 · Hedef dizin, kalıp doğrulamasından geçmeden kullanılmaz
+**Sorun:** `SamKirkland/FTP-Deploy-Action` hedef dizinde senkronizasyon yapar.
+`server-dir` yanlış olursa aynı cPanel hesabındaki DİĞER SİTELER etkilenebilir.
+**Karar:** `guard` işi, hedef dizinleri aktarımdan önce doğrular: sonu `/` ile
+bitmeli, `public_html` altında olmamalı, `..` içermemeli ve en az
+`/home/<hesap>/<dizin>/` derinliğinde olmalı. Laravel kökü ile DocumentRoot
+aynı olamaz. Değerler loglanmaz; yalnızca geçti/kaldı yazılır.
+**Uygulama notu:** Kabuk `case` kalıplarında `*` eğik çizgiyi de eşler; bu yüzden
+"hesap kökü" kontrolü kalıpla değil derinlik ölçümüyle yapılır. Kalıplar yerel
+olarak dokuz senaryoyla sınandı.
+**`dangerous-clean-slate` hiçbir koşulda kullanılmaz** — hedef dizinin tüm
+içeriğini, `exclude` edilenler dahil siler.
+**Bilinmeyen:** Aracın, durum dosyası yokken (ilk çalıştırma) sunucuda var olan
+dosyalara ne yaptığı belgelenmemiştir ve kaynak koda inilerek doğrulanmadı.
+Bu yüzden ilk çalıştırma zorunlu olarak `dry-run` olmalıdır.
+
+## K-057 · BLOCKER: kilitli bağımlılıklar PHP 8.3'te çalışmaz
+**Bulgu:** `composer.lock` Symfony 8.1.x'e kilitli ve bu paketler `php >=8.4.1`
+istiyor. Hosting'de PHP 8.3 var. Kilit, PHP 8.4.19 üzerinde çözüldüğü için
+Laravel'in izin verdiği `^7.4.0 || ^8.0.0` aralığından yenisi seçilmiş.
+`laravel/framework` v13.30.1'in kendisi `^8.3` istiyor — sorun çerçevede değil,
+çözümlemede.
+**Doğrulama:** `composer update --dry-run` (platform 8.3'e sabitlenmiş kopyada)
+19 Symfony paketini 7.4.x'e indiren geçerli bir çözüm buldu.
+**Seçenekler:** (A) hosting'i PHP 8.4'e almak — önerilen, kod değişikliği yok;
+(B) `config.platform.php = "8.3.99"` ekleyip kilidi yeniden çözmek.
+**Bu turda `composer.lock` DEĞİŞTİRİLMEDİ** — karar kullanıcınındır.
+**Kalıcı önlem:** Deploy workflow'u vendor'ı hedef PHP sürümüyle derler ve
+`composer check-platform-reqs --no-dev` ile doğrular. Uyumsuzluk artık sessizce
+üretime gidemez; build kırmızıya döner.
+
+## K-058 · Dizin mimarisi kararı kullanıcıya bırakıldı
+**Durum:** Lemon'un DocumentRoot'u şu anda `/home/derspros/lemon.derspros.com.tr`.
+İki mimari değerlendirildi:
+- **A (önerilen):** DocumentRoot Laravel'in `public/` dizinine yönlendirilir.
+  `index.php` hiç değiştirilmez, `public_path()`/`asset()`/`storage:link` doğal
+  çalışır, deploy tek hedefe yazar.
+- **B:** DocumentRoot değiştirilemiyorsa Laravel kökü web dışında tutulur,
+  DocumentRoot'a yalnızca `index.php`, `.htaccess` ve `build/` konur.
+  Maliyeti: `public_path()` servis edilmeyen bir dizini gösterir, `storage:link`
+  elle kurulur, Vite çıktısı iki yere gider.
+**Karar verilmedi:** cPanel'de DocumentRoot'un değiştirilebildiği doğrulanmadan
+workflow'un son hâli yazılamaz — tahmine dayalı `server-dir` yanlış dizine yazma
+riski taşır. Workflow her iki mimariyi de destekleyecek biçimde yazıldı;
+Mimari A seçilirse ikinci aktarım adımı kaldırılacaktır.
+
+## K-059 · Lemon'a `develop` dalı deploy edilir
+**Öneri:** Lemon ilk kabul/staging ortamı olduğundan `develop` dalı deploy edilir.
+`main`'i Lemon'a bağlamak, gerçek production geldiğinde iki ortamın aynı dalı
+paylaşmasına ve geriye dönük ayrıştırma işine yol açar.
+**Otomatik push deployment hiçbir dal için etkinleştirilmedi.** Onay verilse bile
+öneri `workflow_dispatch`'te kalmaktır: paylaşımlı hostingde geri alma pahalıdır.

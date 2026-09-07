@@ -1,14 +1,23 @@
 <?php
 
 /**
- * cPanel public_html giriş dosyası.
+ * cPanel DocumentRoot giriş dosyası — YALNIZCA "Mimari B" için.
  *
- * Laravel kökü web'den erişilemeyen ../app dizinindedir. Bu dosya
- * public_html/index.php olarak kopyalanır. Yol farklıysa $laravel değişkeni
- * güncellenir; başka hiçbir yeri değiştirmeyin.
+ * Bu dosya, DocumentRoot cPanel'de değiştirilemediğinde kullanılır.
+ * DocumentRoot Laravel'in public/ dizinine yönlendirilebiliyorsa (Mimari A,
+ * önerilen) bu dosyaya HİÇ İHTİYAÇ YOKTUR ve Laravel'in kendi
+ * public/index.php dosyası olduğu gibi kullanılır.
+ * Ayrıntı ve karşılaştırma: docs/deploy-lemon.md §2.
+ *
+ * Değiştirilecek TEK yer aşağıdaki $laravel satırıdır. Yol GÖRELİDİR:
+ * mutlak yol yazmayın, hesap taşındığında kırılır.
+ *
+ * Lemon yerleşimi:
+ *   DocumentRoot : /home/derspros/lemon.derspros.com.tr/   (bu dosya burada)
+ *   Laravel kökü : /home/derspros/lemon-app/               (__DIR__/../lemon-app)
  */
 
-$laravel = __DIR__.'/../app';
+$laravel = __DIR__.'/../lemon-app';
 
 // Bakım modu
 if (file_exists($maintenance = $laravel.'/storage/framework/maintenance.php')) {
