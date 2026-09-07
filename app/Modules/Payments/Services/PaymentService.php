@@ -182,6 +182,25 @@ class PaymentService
         return Payment::query()->where('company_id', $companyId)->count();
     }
 
+    /**
+     * Verilen kimliklerden hâlâ VAR OLANLAR — tek sorguda.
+     *
+     * Cari ekstre, hareketin kaynak kaydına bağlantı verirken kullanır;
+     * satır satır sorgu (N+1) atmadan "kaynak kayıt bulunamadı" durumunu
+     * dürüstçe gösterebilmek içindir.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, int>
+     */
+    public function existingIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Payment::query()->whereIn('id', $ids)->pluck('id')->all();
+    }
+
     // ------------------------------------------------------------------ iç
 
     private function postCredit(Payment $payment, User $user): LedgerEntry

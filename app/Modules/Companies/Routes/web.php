@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Companies\Http\Controllers\CompanyController;
+use App\Modules\Companies\Http\Controllers\StatementController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->prefix('companies')->name('companies.')->group(function (): void {
@@ -42,4 +43,25 @@ Route::middleware('auth')->prefix('companies')->name('companies.')->group(functi
         ->middleware('can:'.Permission::CompaniesRestore->value)
         ->withTrashed()
         ->name('restore');
+});
+
+/*
+ * Cari ekstre. Companies modülünde durur çünkü `Ledger` hiçbir modülü tanımaz
+ * (CLAUDE.md §4.3/3); hesabın tamamı LedgerStatementService'tedir.
+ */
+Route::middleware('auth')->name('statements.')->group(function (): void {
+    // Firma bakiye listesi / ekstre seçim ekranı.
+    Route::get('statements', [StatementController::class, 'index'])
+        ->middleware('can:'.Permission::LedgerViewAll->value)
+        ->name('index');
+
+    Route::get('companies/{company}/statement', [StatementController::class, 'show'])
+        ->middleware('can:'.Permission::LedgerView->value)
+        ->withTrashed()
+        ->name('show');
+
+    Route::get('companies/{company}/statement/print', [StatementController::class, 'print'])
+        ->middleware('can:'.Permission::LedgerView->value)
+        ->withTrashed()
+        ->name('print');
 });

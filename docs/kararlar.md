@@ -407,3 +407,53 @@ bırakıyordu → `5.000.50` → doğrulama hatası. Gün 5'ten beri Stays'te de
 ondalık ayırıcıdır — `5.50` yazan kullanıcının beş buçuk lirası sessizce 550 liraya
 dönüşmemelidir. Virgülsüz `5.000` bilinçli olarak çözümlenmez; doğrulama reddeder ve
 kullanıcı düzeltir. Para tutarında tahmin etmek kabul edilemez.
+
+## K-049 · `cheque` (Çek) ödeme yöntemi eklendi
+**Karar:** `PaymentMethod` enum'una `cheque = 'Çek'` eklendi. DB CHECK kısıtı, oluşturma
+migration'ı GERİYE DÖNÜK DEĞİŞTİRİLMEDEN, ileri bir migration ile güncellendi (CLAUDE.md §15).
+**Not:** Migration'ın `down()` metodu, halihazırda `cheque` taşıyan satır varsa başarısız olur.
+Bu bilinçlidir — veri sessizce kaybedilmez, önce dönüştürülmesi gerekir.
+
+## K-050 · Ekstre ekranları Companies modülünde, hesap Ledger'da
+**Sorun:** Cari ekstre firma adını göstermek zorunda; ancak §4.3/3 "Ledger hiçbir modülü
+tanımaz" diyor. Ekranı Ledger'a koymak bu kuralı kırardı.
+**Karar:** Controller, route ve view'lar `Companies` modülünde; hesabın tamamı
+`Ledger\Services\LedgerStatementService`'te. Servis firmayı yalnızca `int $companyId`
+olarak bilir ve hiçbir modülü tanımaz.
+**Sonuç:** Ledger çekirdeği bağımlılıksız kalır; Companies zaten Stays ve Payments
+servislerine bağımlıydı, Ledger da aynı kapıdan eklendi.
+
+## K-051 · Filtreler ikiye ayrılır: bakiye evreni vs. gösterim
+**Sorun:** Kullanıcı "yalnızca tahsilatlar" filtrelerse, yürüyen bakiye kolonu ne göstermeli?
+Filtrelenmiş satırlar üzerinden hesaplanan bir bakiye gerçek bakiye DEĞİLDİR ve kullanıcıyı
+yanıltır.
+**Karar:** İki filtre türü ayrıldı:
+- `date_from`/`date_to`/`currency` → bakiyenin EVRENİ. SQL'de uygulanır, devreden bakiye
+  bunlara göre hesaplanır. Defteri temiz biçimde bölerler.
+- `type`/`q` → yalnızca GÖSTERİM. Yürüyen bakiye hesaplandıktan SONRA PHP'de uygulanır.
+  Görünen her satır, defterin tamamı üzerinden yürüyen GERÇEK bakiyesini taşır.
+**Ekranda:** Gösterim filtresi etkinken bir bilgi kutusu bunu açıkça söyler.
+**Performans:** Ağır filtre (tarih + para birimi) SQL'dedir; PHP'ye yalnızca aralık içindeki
+satırlar gelir.
+
+## K-052 · Ekstre sayfalanmaz
+**Karar:** Cari ekstrede sayfalama yoktur.
+**Gerekçe:** Ekstre bütün olarak okunan ve yazdırılan bir belgedir; sayfa 2'nin başında
+devreden bakiye göstermek gerekir ve bu, kullanıcı sıralamayı ters çevirdiğinde anlamsızlaşır.
+Veri hacmi de buna izin veriyor (CLAUDE.md §1: yılda ~binlerce konaklama, firma başına çok
+daha az). Tarih filtresi büyük dönemleri bölmek için yeterlidir.
+**Yeniden değerlendirme:** Bir firmanın tek aralıktaki hareket sayısı binleri bulursa,
+sayfalama yerine önce zorunlu tarih aralığı düşünülmelidir.
+
+## K-053 · Ekstre görüntüleme denetim kaydı üretmez
+**Karar:** Ekstre sayfası her açılışında `audit_logs`'a yazılmaz.
+**Gerekçe:** Salt okuma olayını loglamak, gerçek değişiklikleri gürültü içinde boğar.
+`exported` olayı Excel export geldiğinde (Gün 10) kullanılacaktır. Yazdırma tarayıcı
+işlevidir; sunucu tarafında ayrı bir olay yoktur.
+
+## K-054 · Yazdırma görünümü Vite çıktısını yüklemez
+**Karar:** `layouts/print.blade.php` kendi kendine yeten sade CSS taşır; uygulamanın
+Tailwind/koyu tema derlemesini yüklemez.
+**Gerekçe:** `app.css` `html { color-scheme: dark }` ve koyu gövde zemini tanımlar; bunları
+yazdırma için tek tek geri almak kırılgan olurdu. Kağıt beyazdır. Sonuç testle doğrulanır:
+yazdırma çıktısında `bg-bg`, kenar çubuğu ve `data-sidebar` bulunmaz.

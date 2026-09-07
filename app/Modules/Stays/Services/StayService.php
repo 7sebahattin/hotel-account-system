@@ -213,6 +213,25 @@ class StayService
         return Stay::query()->where('company_id', $companyId)->count();
     }
 
+    /**
+     * Verilen kimliklerden hâlâ VAR OLANLAR — tek sorguda.
+     *
+     * Cari ekstre, hareketin kaynak kaydına bağlantı verirken kullanır;
+     * satır satır sorgu (N+1) atmadan "kaynak kayıt bulunamadı" durumunu
+     * dürüstçe gösterebilmek içindir.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, int>
+     */
+    public function existingIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Stay::query()->whereIn('id', $ids)->pluck('id')->all();
+    }
+
     // ------------------------------------------------------------------ iç
 
     private function postDebit(Stay $stay, User $user): LedgerEntry

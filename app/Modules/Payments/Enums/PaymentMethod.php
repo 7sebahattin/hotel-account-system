@@ -16,6 +16,7 @@ enum PaymentMethod: string
     case Cash = 'cash';
     case BankTransfer = 'bank_transfer';
     case CreditCard = 'credit_card';
+    case Cheque = 'cheque';
     case Other = 'other';
 
     public function label(): string
@@ -24,6 +25,7 @@ enum PaymentMethod: string
             self::Cash => 'Nakit',
             self::BankTransfer => 'Havale / EFT',
             self::CreditCard => 'Kredi Kartı',
+            self::Cheque => 'Çek',
             self::Other => 'Diğer',
         };
     }

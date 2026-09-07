@@ -8,6 +8,12 @@
         </x-slot:meta>
 
         <x-slot:actions>
+            @can('ledger.view')
+                <x-ui.button variant="secondary" :href="route('statements.show', $company)">
+                    Cari Ekstre
+                </x-ui.button>
+            @endcan
+
             @can('update', $company)
                 <x-ui.button :href="route('companies.edit', $company)">Düzenle</x-ui.button>
             @endcan
@@ -76,9 +82,6 @@
                 </div>
             </dl>
 
-            <p class="mt-6 rounded-md bg-well px-3 py-2 text-xs text-mut">
-                Cari ekstre, Ledger ekranları geldiğinde bu karta eklenecektir.
-            </p>
         </x-ui.card>
     </div>
 

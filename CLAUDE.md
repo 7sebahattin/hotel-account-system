@@ -174,6 +174,9 @@ Paylaşılan, modüle ait olmayan her şey burada:
    - Tek istisna: Eloquent ilişki tanımları (`Stay::company()` → `Company::class`). İlişki tanımı serbest, iş mantığı değil.
 2. Bir modülün Controller'ı başka modülün Controller'ını çağıramaz.
 3. `Ledger` modülü **hiçbir modülü tanımaz**; `Stays` ve `Payments` ona yazar.
+   Bu yüzden cari ekstre EKRANLARI (controller, route, view) `Companies` modülündedir:
+   ekstre firma adını göstermek zorundadır ve Ledger bu bağımlılığı taşıyamaz.
+   Hesabın tamamı yine `Ledger\Services\LedgerStatementService`'tedir.
 4. Ortak bir şey iki modülde tekrar ediyorsa `Core`'a taşınır, kopyalanmaz.
 5. Yeni modül ancak kullanıcı onayıyla açılır.
 
@@ -262,7 +265,7 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 | payment_date | date | index |
 | amount | decimal(15,2) | > 0 |
 | currency | char(3) | default TRY |
-| payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `other` |
+| payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `cheque`, `other` |
 | reference_no | varchar(50) null | dekont/slip no, index |
 | description | varchar(255) null | |
 | status | varchar(20) | `active` \| `cancelled` — enum `PaymentStatus` |
@@ -281,7 +284,7 @@ Index: `(company_id, payment_date)`, `(payment_date)`, `(status)`, `(currency)`,
 **Veritabanı düzeyinde değişmezler:**
 - `CHECK (amount > 0)`
 - `CHECK (status IN ('active','cancelled'))`
-- `CHECK (payment_method IS NULL OR payment_method IN ('cash','bank_transfer','credit_card','other'))`
+- `CHECK (payment_method IS NULL OR payment_method IN ('cash','bank_transfer','credit_card','cheque','other'))`
 - `CHECK ((status='active' AND cancelled_at IS NULL AND cancelled_by IS NULL) OR (status='cancelled' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL))`
 
 ### 5.5 `ledger_entries`
@@ -571,9 +574,39 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
 - Denetim kaydı `Auditable` trait'i ile değil, `PaymentService` tarafından açıkça yazılır.
 
 ### Ledger / Current Account
-- Firma cari ekstresi: tarih aralığı filtresi, açılış bakiyesi (aralık öncesi net), satır satır hareketler, yürüyen bakiye (sorguda değil, view'da hesaplanır), kapanış bakiyesi.
-- Firma bakiye listesi (`ledger.view_all`): tüm firmalar, bakiye, son hareket tarihi.
-- Ekstre yazdırma görünümü (`layouts/print`) ve Excel export.
+
+Ekstre hesabının tamamı `Ledger\Services\LedgerStatementService`'tedir; controller'da
+finansal hesap yazılmaz. Servis firmayı yalnızca `int $companyId` olarak bilir (§4.3/3).
+
+- **Yürüyen bakiye** SQL'de değil serviste, kronolojik sırada (`entry_date ASC, id ASC`)
+  ve **para birimi bazında** hesaplanır. Her satır YALNIZCA kendi para biriminin
+  bakiyesini taşır; farklı para birimleri tek bakiyede birleştirilmez (§6/L5).
+- **Devreden bakiye (carry-forward):** tarih filtresi uygulandığında, aralıktan önceki
+  net bakiye para birimi bazında hesaplanır ve ekstre ondan devam eder. Tarih filtresi
+  yoksa devreden yoktur.
+- **İki filtre türü ayrılır:**
+  - `date_from`/`date_to`/`currency` bakiyenin EVRENİNİ belirler; SQL'de uygulanır ve
+    devreden bakiye bunlara göre hesaplanır.
+  - `type`/`q` yalnızca GÖSTERİMİ daraltır; yürüyen bakiye hesaplandıktan SONRA uygulanır.
+    Aksi hâlde "yalnızca tahsilatlar" seçen kullanıcıya gerçek bakiyesi olmayan bir kolon
+    gösterilirdi. Ekranda bu durum bir bilgi kutusuyla açıkça belirtilir.
+- **İşlem türü** kullanıcıya Türkçe gösterilir (`LedgerEntryType`): Konaklama / Tahsilat /
+  İptal / Ters Kayıt / Açılış Bakiyesi / Diğer. Ham `source_type` ana tabloda gösterilmez;
+  tanınmayan bir kaynak tipi "Diğer" olur — enum veri yolunu kısıtlamaz, yalnızca etiketler.
+- **Ters kayıt gizlenmez:** ekstrede ayrı satır olarak, rozetle ve `[İPTAL]` açıklamasıyla görünür.
+- **Kaynak kayda bağlantı** verilir (`stay`/`payment`). Ledger'ın doğruluğu kaynak kayda
+  bağlı DEĞİLDİR: kayıt yoksa satır geçerli kalır ve ekran "Kaynak kayıt bulunamadı" der,
+  hata vermez. Varlık kontrolü kaynak tipi başına tek sorgudur (N+1 yok).
+- **Firma bakiye listesi** (`ledger.view_all`): tüm firmalar, para birimi bazında bakiye,
+  son hareket tarihi. Bakiyeler ve tarihler firma başına değil, iki toplu sorguda alınır.
+- **Yazdırma** (`layouts/print`): koyu tema UYGULANMAZ. Beyaz zemin, siyah metin, kenar
+  çubuğu yok, A4. Sayfa kendi kendine yeten sade CSS taşır ve Vite çıktısını yüklemez.
+  PDF kütüphanesi kullanılmaz; tarayıcının `window.print()` işlevi yeterlidir.
+- **Ekstre görüntüleme denetim kaydı ÜRETMEZ** — her sayfa açılışını loglamak gürültü olur.
+  `exported` olayı Excel export geldiğinde kullanılacaktır.
+- Ekstre sayfalanmaz: bir ekstre bütün olarak okunur ve yazdırılır. Tarih filtresi
+  büyük dönemleri bölmek için yeterlidir (bkz. `docs/kararlar.md` K-052).
+- Excel export §10'da; V1'de Gün 10'da gelir.
 
 ### Dashboard
 Role duyarlı, tek sorgu setiyle:
@@ -760,7 +793,7 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 - Validasyon **sadece** FormRequest sınıflarında. `$request->all()` ile mass assignment yapılmaz; `$request->validated()` kullanılır.
 - Yetki **sadece** Policy sınıflarında. Controller içinde `if ($user->role === 'admin')` yazılmaz.
 - Model `$fillable` dar tutulur; `$guarded = []` yasak.
-- PHP enum'ları: `PaymentMethod`, `PaymentStatus`, `Currency`, `AuditEvent`, `StayPricingMode`, `StayStatus`. Serbest string sabitleri kullanılmaz.
+- PHP enum'ları: `PaymentMethod`, `PaymentStatus`, `Currency`, `AuditEvent`, `StayPricingMode`, `StayStatus`, `LedgerEntryType`. Serbest string sabitleri kullanılmaz.
 - Para hesabı: SQL'de `SUM()`, PHP'de `Core\Support\Money`. **Float aritmetiği yasak.**
   `Money` tutarı **tamsayı kuruş** olarak tutar; toplama/çıkarma/karşılaştırma tam sayı aritmetiğiyle yapılır. Veritabanında alan `DECIMAL(15,2)` kalır.
   **`bcmath` kullanılmaz** — eklenti her ortamda bulunmayabilir (bu projenin geliştirme ortamında yoktur) ve tamsayı kuruş yaklaşımı aynı kesinliği sıfır bağımlılıkla verir.
