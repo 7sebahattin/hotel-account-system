@@ -353,3 +353,57 @@ Bu, bu turdan önce de var olan bir hataydı; yeni zorunlu `pricing_mode` alanı
 **Karar:** `lang/tr/validation.php` eklendi — yalnızca projede fiilen kullanılan kurallar.
 Alan adları (`:attribute`) her FormRequest'in kendi `attributes()` metodundan gelmeye devam
 eder; dosyada `attributes` listesi tutulmaz (tek kaynak ilkesi).
+
+## K-044 · Tahsilatta finansal alan değişmezliği üç katmanlı
+**Karar:** `company_id`, `payment_date`, `amount`, `currency`, `payment_method` oluşturulduktan
+sonra hiçbir rol tarafından değiştirilemez. Düzeltme yolu tektir: iptal + yeniden giriş.
+**Katmanlar** (hiçbiri tek başına yeterli sayılmadı):
+1. `UpdatePaymentRequest` bu alanları hiç tanımaz — `validated()` onları döndürmez, servise ulaşmazlar.
+2. `PaymentService::updateMetadata()` gelen veride farklı bir finansal değer görürse
+   `PaymentFinancialFieldsAreImmutable` fırlatır (servis doğrudan çağrılsa bile).
+3. `Payment::booted()` içindeki `updating` dinleyicisi aynı kuralı zorlar — `$payment->update()`
+   çağrısı bile reddedilir.
+**Gerekçe:** HTTP/UI seviyesinde gizlemek yeterli değildir; ileride Excel import kodu ve konsol
+komutları servisi doğrudan çağıracak. Üç katman da ayrı ayrı testlidir.
+**Not:** Aynı değerin tekrar gönderilmesi (form gizli alanı) sessizce kabul edilir; yalnızca
+GERÇEK farklılık reddedilir. Çözümlenemeyen bir girdi (bozuk tutar) "değişiklik yok" sayılmaz,
+reddedilir.
+
+## K-045 · `payment_method` de değişmezdir
+**Karar:** Ödeme yöntemi finansal alanlar arasındadır ve değiştirilemez.
+**Gerekçe ve karşı görüş:** Bu, operasyon açısından katıdır — "havale" yerine yanlışlıkla
+"nakit" seçildiğinde, tutarı doğru olan bir tahsilatın iptal edilip yeniden girilmesi gerekir
+ve cari defterde iki gereksiz satır oluşur. Buna rağmen değişmez tutuldu: ödeme yöntemi ileride
+kasa/banka/POS hesaplarına bağlanacak alandır (§3.2'de bu modüller kapsam dışı); bugün serbestçe
+değiştirilebilir olması, o modüller geldiğinde mutabakatı bozan bir geçmiş bırakır.
+**Gevşetme yolu:** Tek satır — `Payment::IMMUTABLE_FIELDS` listesinden çıkarılıp
+`EDITABLE_FIELDS`'a alınması ve `UpdatePaymentRequest`'e eklenmesi yeterlidir.
+
+## K-046 · Metadata düzeltmesi için yeni yetki açılmadı
+**Karar:** `payments.edit/update` route'ları `payments.create` yetkisine bağlıdır.
+**Gerekçe:** Tahsilat girebilen herkes kendi girdiği kaydın referans numarasını
+düzeltebilmelidir; matriste "girebilen ama düzeltemeyen" bir rol yoktur. Kayıt bazlı kısıt
+(kendi kaydı + süre penceresi) `PaymentPolicy::update`'tedir. Konaklama iptalinin
+`stays.delete`'e bağlanmasıyla (K-034) aynı yaklaşım.
+
+## K-047 · Personel tüm tahsilatları görür (matris değişikliği)
+**Önceki (CLAUDE.md §7.3):** `payments.view` Personel için "⚠️ kendi tahsilatları".
+**Yeni karar:** Personel tahsilat listesinin TAMAMINI görür.
+**Gerekçe:** Kullanıcının Gün 7 talimatı Personel yetkilerini tek tek saydı ve görüntülemede
+kısıt belirtmedi ("tahsilatları görür"), buna karşılık düzenleme kısıtını ayrıntısıyla yazdı.
+Konaklamalarda da Personel tüm kayıtları görüyor; tahsilatta farklı davranmak tutarsız olurdu.
+**Etkisi:** `PaymentFilter`'da `created_by` daraltması YOKTUR. Personel yine bakiye, toplam
+alacak ve finansal dashboard kartlarını göremez (§7.4 değişmedi).
+**Geri alma:** `PaymentPolicy::viewAny` ve controller sorgusuna tek bir `created_by` koşulu
+eklemek yeterlidir.
+
+## K-048 · Türkçe biçimli tutar girdisi kabul edilir (bulunan hata)
+**Sorun:** Uygulama tutarları `5.000,50 ₺` diye GÖSTERİYOR ama form aynı biçimi geri kabul
+etmiyordu: `prepareForValidation` yalnızca virgülü noktaya çeviriyor, binlik ayırıcı noktayı
+bırakıyordu → `5.000.50` → doğrulama hatası. Gün 5'ten beri Stays'te de vardı.
+**Karar:** `Money::normalizeInput()` Core'a eklendi ve hem `StayRequest` hem
+`StorePaymentRequest` bunu kullanıyor (CLAUDE.md §4.3/4 — tekrar eden şey Core'a taşınır).
+**Kural:** Nokta yalnızca virgül de varsa binlik ayırıcı sayılıp atılır. Aksi hâlde nokta
+ondalık ayırıcıdır — `5.50` yazan kullanıcının beş buçuk lirası sessizce 550 liraya
+dönüşmemelidir. Virgülsüz `5.000` bilinçli olarak çözümlenmez; doğrulama reddeder ve
+kullanıcı düzeltir. Para tutarında tahmin etmek kabul edilemez.

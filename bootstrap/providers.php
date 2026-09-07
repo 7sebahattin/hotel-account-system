@@ -5,6 +5,7 @@ use App\Modules\Auth\Providers\AuthServiceProvider;
 use App\Modules\Authorization\Providers\AuthorizationServiceProvider;
 use App\Modules\Companies\Providers\CompaniesServiceProvider;
 use App\Modules\Ledger\Providers\LedgerServiceProvider;
+use App\Modules\Payments\Providers\PaymentsServiceProvider;
 use App\Modules\Stays\Providers\StaysServiceProvider;
 use App\Modules\Users\Providers\UsersServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -18,6 +19,7 @@ return [
     AuthServiceProvider::class,
     CompaniesServiceProvider::class,
     LedgerServiceProvider::class,
+    PaymentsServiceProvider::class,
     StaysServiceProvider::class,
     UsersServiceProvider::class,
 ];

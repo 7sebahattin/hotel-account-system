@@ -77,7 +77,7 @@
             </dl>
 
             <p class="mt-6 rounded-md bg-well px-3 py-2 text-xs text-mut">
-                Tahsilatlar ve cari ekstre, ilgili modüller geldiğinde bu karta eklenecektir.
+                Cari ekstre, Ledger ekranları geldiğinde bu karta eklenecektir.
             </p>
         </x-ui.card>
     </div>
@@ -127,6 +127,60 @@
                             <span class="flex items-center gap-3">
                                 <span class="text-sm tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
                                 @include('stays::_status', ['stay' => $stay])
+                            </span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </x-ui.card>
+
+    <x-ui.card class="mt-4 p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-medium text-tx">
+                Tahsilatlar <span class="tabular-nums text-mut">({{ $paymentCount }})</span>
+            </h2>
+
+            <div class="flex flex-wrap items-center gap-2">
+                @can('viewAny', \App\Modules\Payments\Models\Payment::class)
+                    <x-ui.button variant="ghost" :href="route('payments.index', ['company_id' => $company->id])">
+                        Tümünü gör
+                    </x-ui.button>
+                @endcan
+
+                @can('create', \App\Modules\Payments\Models\Payment::class)
+                    @unless ($company->trashed())
+                        <x-ui.button :href="route('payments.create', ['company_id' => $company->id])">
+                            Tahsilat ekle
+                        </x-ui.button>
+                    @endunless
+                @endcan
+            </div>
+        </div>
+
+        @if ($recentPayments->isEmpty())
+            <x-ui.empty class="mt-4 border-line bg-transparent">
+                Bu firmaya ait tahsilat kaydı yok.
+            </x-ui.empty>
+        @else
+            <ul class="mt-4">
+                @foreach ($recentPayments as $payment)
+                    <li class="border-b border-line last:border-0">
+                        <a href="{{ route('payments.show', $payment) }}"
+                           class="flex flex-wrap items-center justify-between gap-2 py-3 hover:bg-well">
+                            <span class="text-sm">
+                                <span class="tabular-nums text-tx">{{ $payment->payment_date->format('d.m.Y') }}</span>
+                                <span class="text-mut">
+                                    · {{ $payment->payment_method?->label() ?? 'Yöntem belirtilmedi' }}
+                                    @if ($payment->reference_no)
+                                        · Ref <span class="tabular-nums">{{ $payment->reference_no }}</span>
+                                    @endif
+                                </span>
+                            </span>
+
+                            <span class="flex items-center gap-3">
+                                <span class="text-sm tabular-nums text-tx">{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                                @include('payments::_status', ['payment' => $payment])
                             </span>
                         </a>
                     </li>

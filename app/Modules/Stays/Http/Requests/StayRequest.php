@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Stays\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\Money;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Foundation\Http\FormRequest;
@@ -87,7 +88,7 @@ class StayRequest extends FormRequest
             $value = $this->input($field);
 
             if (is_string($value)) {
-                $this->merge([$field => str_replace([' ', ','], ['', '.'], trim($value))]);
+                $this->merge([$field => Money::normalizeInput($value)]);
             }
         }
     }

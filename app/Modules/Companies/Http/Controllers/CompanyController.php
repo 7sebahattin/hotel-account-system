@@ -11,6 +11,7 @@ use App\Modules\Companies\Http\Requests\CompanyRequest;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -21,6 +22,7 @@ class CompanyController extends Controller
     public function __construct(
         private readonly CompanyService $companies,
         private readonly StayService $stays,
+        private readonly PaymentService $payments,
     ) {}
 
     public function index(Request $request, CompanyFilter $filter): View
@@ -68,12 +70,15 @@ class CompanyController extends Controller
     {
         $this->authorize('view', $company);
 
-        // Konaklamalar Stays modülünün servisinden alınır; Companies modülü
-        // Stay modelini doğrudan kullanmaz (CLAUDE.md §4.3/1).
+        // Konaklamalar ve tahsilatlar ilgili modüllerin SERVİSİNDEN alınır;
+        // Companies modülü Stay/Payment modelini doğrudan kullanmaz
+        // (CLAUDE.md §4.3/1). Servisler ilişkileri eager-load eder — N+1 yok.
         return view('companies::show', [
             'company' => $company->load(['creator', 'updater']),
             'recentStays' => $this->stays->recentForCompany($company->getKey()),
             'stayCount' => $this->stays->countForCompany($company->getKey()),
+            'recentPayments' => $this->payments->recentForCompany($company->getKey(), 5),
+            'paymentCount' => $this->payments->countForCompany($company->getKey()),
         ]);
     }
 

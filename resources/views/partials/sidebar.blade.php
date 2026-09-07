@@ -7,6 +7,7 @@
         ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null],
         ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value],
         ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value],
+        ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value],
     ];
 
     $secondary = [

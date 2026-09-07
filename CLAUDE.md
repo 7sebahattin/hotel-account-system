@@ -164,7 +164,7 @@ Paylaşılan, modüle ait olmayan her şey burada:
 - `Concerns/Auditable` — audit log kaydı
 - `Filters/` — liste filtreleme altyapısı (bkz. §9)
 - `Exports/` — Excel export temel sınıfları (bkz. §10)
-- `Support/Money.php` — para biçimleme ve güvenli toplama
+- `Support/Money.php` — para biçimleme, güvenli toplama ve kullanıcı girdisi normalleştirme
 - `Enums/Currency.php`
 - `View/Components/` — ortak Blade bileşenleri
 
@@ -262,15 +262,27 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 | payment_date | date | index |
 | amount | decimal(15,2) | > 0 |
 | currency | char(3) | default TRY |
-| method | varchar(30) | enum destekli: `nakit`, `kredi_karti`, `havale_eft`, `cek`, `diger` |
-| reference_no | varchar(50) null | dekont/slip no |
+| payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `other` |
+| reference_no | varchar(50) null | dekont/slip no, index |
 | description | varchar(255) null | |
-| created_by | FK users | |
+| status | varchar(20) | `active` \| `cancelled` — enum `PaymentStatus` |
+| created_by / updated_by | FK users | |
 | created_at / updated_at | | |
 | cancelled_at | timestamp null | |
 | cancelled_by | FK users null | |
+| cancellation_reason | varchar(255) null | iptal gerekçesi, zorunlu girdi |
 
-**Silme yoktur.** Yanlış tahsilat iptal edilir; iptal ters cari kaydı üretir.
+**Silme yoktur** — ne hard delete ne soft delete: tabloda `deleted_at` kolonu YOKTUR.
+Yanlış tahsilat `status` üzerinden iptal edilir; iptal ters cari kaydı üretir.
+
+Index: `(company_id, payment_date)`, `(payment_date)`, `(status)`, `(currency)`,
+`(payment_method)`, `(created_by)`, `(reference_no)`.
+
+**Veritabanı düzeyinde değişmezler:**
+- `CHECK (amount > 0)`
+- `CHECK (status IN ('active','cancelled'))`
+- `CHECK (payment_method IS NULL OR payment_method IN ('cash','bank_transfer','credit_card','other'))`
+- `CHECK ((status='active' AND cancelled_at IS NULL AND cancelled_by IS NULL) OR (status='cancelled' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL))`
 
 ### 5.5 `ledger_entries`
 
@@ -437,6 +449,12 @@ audit.view
 
 Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse sabit/enum üzerinden referans verilir.
 
+**Yeni yetki açılmadan çözülen iki durum:** konaklama iptali `stays.delete`, tahsilat
+metadata düzeltmesi `payments.create` yetkisine bağlıdır. Gerekçe: tahsilat girebilen
+herkes kendi girdiği kaydın referans numarasını düzeltebilmelidir; kayıt bazlı kısıt
+(kendi kaydı + süre penceresi) `PaymentPolicy::update`'tedir. Yetki matrisi bu şekilde
+birebir karşılanır ve yetki sayısı gereksiz büyümez.
+
 ### 7.3 Rol matrisi
 
 | Yetki | Admin | Patron | Personel |
@@ -452,10 +470,11 @@ Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse s
 | stays.create | ✅ | ✅ | ✅ |
 | stays.update | ✅ | ✅ | ⚠️ kendi kaydı + süre |
 | stays.delete | ✅ | ✅ | ❌ |
-| payments.view | ✅ (tümü) | ✅ (tümü) | ⚠️ kendi tahsilatları |
+| payments.view | ✅ (tümü) | ✅ (tümü) | ✅ (tümü) |
 | payments.create | ✅ | ✅ | ✅ |
 | payments.cancel | ✅ | ✅ | ❌ |
-| payments — tutar düzenleme | ❌ | ❌ | ❌ |
+| payments — metadata düzenleme | ✅ | ✅ | ⚠️ kendi kaydı + süre |
+| payments — finansal alan düzenleme | ❌ | ❌ | ❌ |
 | ledger.view | ✅ | ✅ | ❌ |
 | ledger.view_all | ✅ | ✅ | ❌ |
 | dashboard.financial | ✅ | ✅ | ❌ |
@@ -478,6 +497,8 @@ Personel bir kaydı düzenleyebilir ancak:
 
 Ek olarak:
 - Personel hiçbir kaydı silemez, hiçbir tahsilatı iptal edemez.
+- Personel tahsilat listesinin tamamını görür; yalnızca KENDİ kaydının `reference_no` ve
+  `description` alanlarını düzenleme penceresi içinde düzeltebilir.
 - Personel firma cari bakiyesini, toplam alacağı ve finansal dashboard kartlarını göremez — **liste ekranlarında bakiye kolonu render edilmez** (gizlenmez, hiç sorgulanmaz).
 - Personel Excel export alamaz.
 
@@ -530,10 +551,24 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
   finansal düzeltmenin kaydı ters kayıt ve yeni kayıt kimliklerini de taşımak zorundadır.
 
 ### Payments
-- Kayıt oluşturulunca **credit** kaydı (`entry_date = payment_date`).
+- Kayıt oluşturulunca **credit** kaydı (`entry_date = payment_date`), aynı transaction içinde.
 - Tahsilat–konaklama eşleştirmesi (allocation) **V1'de yok**; tahsilat firmaya yazılır, bakiye netleşir.
-- İptal: `cancelled_at` + `cancelled_by` doldurulur, ters kayıt yazılır. İptal edilmiş tahsilat tekrar iptal edilemez, düzenlenemez.
-- `description` ve `reference_no` dışındaki alanlar oluşturulduktan sonra değiştirilemez.
+- **Değişmez finansal alanlar:** `company_id`, `payment_date`, `amount`, `currency`,
+  `payment_method`. Bunlar oluşturulduktan sonra **hiçbir rol tarafından** değiştirilemez.
+  Düzeltme yolu tektir: iptal + yeniden giriş.
+  Koruma üç katmandadır ve HTTP'yi gizlemekle yetinilmez:
+  1. `UpdatePaymentRequest` bu alanları hiç tanımaz — `validated()` onları döndürmez.
+  2. `PaymentService::updateMetadata()` gelen veride farklı bir finansal değer görürse
+     `PaymentFinancialFieldsAreImmutable` fırlatır.
+  3. `Payment` modeli `updating` olayında aynı kuralı zorlar — servis atlansa bile geçerli.
+- **Düzeltilebilen tek alanlar:** `reference_no`, `description`. Metadata düzeltmesi
+  cari hareketi ÜRETMEZ.
+- **İptal:** `status = cancelled` + `cancelled_at` + `cancelled_by` + `cancellation_reason`
+  (gerekçe zorunludur) ve geçerli cari hareketinin ters kaydı, aynı transaction'da.
+  İptal edilmiş tahsilat tekrar iptal edilemez ve düzenlenemez. **Geri alma akışı YOKTUR.**
+- **Değişmez:** aktif bir tahsilatın her an **tam olarak bir geçerli alacak hareketi** vardır;
+  iptal edilmişse hiç yoktur.
+- Denetim kaydı `Auditable` trait'i ile değil, `PaymentService` tarafından açıkça yazılır.
 
 ### Ledger / Current Account
 - Firma cari ekstresi: tarih aralığı filtresi, açılış bakiyesi (aralık öncesi net), satır satır hareketler, yürüyen bakiye (sorguda değil, view'da hesaplanır), kapanış bakiyesi.
@@ -725,7 +760,7 @@ Komut: `php artisan test`. CI yeşil olmadan push edilmez.
 - Validasyon **sadece** FormRequest sınıflarında. `$request->all()` ile mass assignment yapılmaz; `$request->validated()` kullanılır.
 - Yetki **sadece** Policy sınıflarında. Controller içinde `if ($user->role === 'admin')` yazılmaz.
 - Model `$fillable` dar tutulur; `$guarded = []` yasak.
-- PHP enum'ları: `PaymentMethod`, `Currency`, `AuditEvent`, `StayPricingMode`. Serbest string sabitleri kullanılmaz.
+- PHP enum'ları: `PaymentMethod`, `PaymentStatus`, `Currency`, `AuditEvent`, `StayPricingMode`, `StayStatus`. Serbest string sabitleri kullanılmaz.
 - Para hesabı: SQL'de `SUM()`, PHP'de `Core\Support\Money`. **Float aritmetiği yasak.**
   `Money` tutarı **tamsayı kuruş** olarak tutar; toplama/çıkarma/karşılaştırma tam sayı aritmetiğiyle yapılır. Veritabanında alan `DECIMAL(15,2)` kalır.
   **`bcmath` kullanılmaz** — eklenti her ortamda bulunmayabilir (bu projenin geliştirme ortamında yoktur) ve tamsayı kuruş yaklaşımı aynı kesinliği sıfır bağımlılıkla verir.

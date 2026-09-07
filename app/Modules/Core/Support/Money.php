@@ -54,6 +54,29 @@ final readonly class Money implements Stringable
         return self::fromMinorUnits($m['sign'] === '-' ? -$minor : $minor);
     }
 
+    /**
+     * Kullanıcı girdisini `fromDecimal()`'in beklediği biçime çevirir.
+     *
+     * Türkçe klavyede ondalık ayırıcı virgüldür ve uygulama tutarları
+     * `5.000,50` biçiminde GÖSTERİR; kullanıcı aynı biçimi geri yazabilmelidir.
+     *
+     * Nokta yalnızca virgül de varsa binlik ayırıcı sayılıp atılır. Aksi hâlde
+     * nokta ondalık ayırıcı kabul edilir: `5.50` yazan bir kullanıcının
+     * beş buçuk lirası sessizce 550 liraya dönüşmemelidir. Bu yüzden virgülsüz
+     * `5.000` bilinçli olarak ÇÖZÜMLENMEZ — doğrulama reddeder ve kullanıcı
+     * düzeltir; tahmin etmek para tutarında kabul edilemez.
+     */
+    public static function normalizeInput(string $value): string
+    {
+        $value = str_replace(' ', '', trim($value));
+
+        if (str_contains($value, ',')) {
+            $value = str_replace('.', '', $value);
+        }
+
+        return str_replace(',', '.', $value);
+    }
+
     public static function zero(): self
     {
         return new self(0);
