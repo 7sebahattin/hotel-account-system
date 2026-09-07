@@ -53,6 +53,10 @@ class LedgerEntry extends Model
     protected function casts(): array
     {
         return [
+            'company_id' => 'integer',
+            'source_id' => 'integer',
+            'reverses_entry_id' => 'integer',
+            'created_by' => 'integer',
             'entry_date' => 'date',
             'debit' => 'decimal:2',
             'credit' => 'decimal:2',

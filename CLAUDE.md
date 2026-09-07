@@ -228,13 +228,25 @@ Genel kurallar:
 | amount | decimal(15,2) | toplam konaklama tutarı |
 | currency | char(3) | default TRY |
 | notes | text null | |
+| status | varchar(20) | `active` \| `cancelled` — V1'de PMS durumu YOK |
 | created_by / updated_by | FK users | |
 | created_at / updated_at | | |
-| deleted_at | soft delete | **eklendi** — hard delete yasağı için gerekli |
+| deleted_at | soft delete | kazara `delete()` çağrısının fiziksel silme olmasını engeller |
 
-> `deleted_at` **onaylandı**. Cariye işlenmiş bir konaklamanın silinmesi/iptali, aynı `DB::transaction()` içinde ters ledger kaydı üretmek **zorundadır** — soft delete tek başına yeterli değildir.
+> **İptal `status` alanı üzerinden yapılır**, soft delete ile değil: iptal edilmiş konaklama
+> listede görünmeye devam eder ve "Durum" filtresiyle ayrılır. `deleted_at` kolonu yalnızca
+> kazara yapılacak bir `delete()` çağrısının fiziksel silme olmasını engeller. **V1'de iptali
+> geri alma akışı YOKTUR.**
+>
+> Cariye işlenmiş bir konaklamanın iptali, aynı `DB::transaction()` içinde ters ledger kaydı
+> üretmek **zorundadır**.
 
-Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`.
+Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check_out_date)`,
+`(status)`, `(created_by)`, `(currency)`.
+
+**Veritabanı düzeyinde değişmezler:**
+- `CHECK (amount > 0)`
+- `CHECK (check_out_date >= check_in_date)`
 
 ### 5.4 `payments`
 
@@ -482,10 +494,25 @@ E-posta + şifre. Rate limit (5 deneme / dakika / IP+email). Başarısız giriş
 Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsilatlar / Cari Ekstre (yetkiye göre). Firma silinmeden önce ilişkili kayıt kontrolü.
 
 ### Stays
-- `nights` sunucuda `check_out_date - check_in_date` olarak hesaplanır; formdan gelen değere güvenilmez. 0 gece kabul edilmez (min 1).
-- Kayıt oluşturulunca `LedgerService` ile **debit** kaydı (`entry_date = check_out_date`, açıklama: `Konaklama: {guest_name} ({check_in} - {check_out})`).
-- Güncellemede tutar/para birimi/tarih değişirse ters kayıt + yeni kayıt.
-- Soft delete → ters kayıt.
+- `nights` sunucuda `check_out_date - check_in_date` olarak hesaplanır; formdan gelen değere
+  **asla** güvenilmez. `check_out_date >= check_in_date` zorunludur.
+- **Aynı gün giriş/çıkış kabul edilir ve 0 gece üretir** (günübirlik kullanım). Tutar yine
+  sıfırdan büyük olmalıdır.
+- Kayıt oluşturulunca `LedgerService` ile **debit** kaydı (`entry_date = check_out_date`,
+  açıklama: `Konaklama: {guest_name} (dd.mm.yyyy - dd.mm.yyyy)`).
+- **Finansal alanlar:** `company_id`, `check_in_date`, `check_out_date`, `amount`, `currency`.
+  Bunlardan biri değişirse akış tek transaction içinde şudur:
+  1. mevcut geçerli cari hareketi ters kaydedilir
+  2. konaklama güncellenir
+  3. yeni borç hareketi oluşturulur
+
+  Finansal olmayan alanlar (`guest_name`, `room_no`, `notes`) cari hareketi üretmez.
+- **İptal:** `status = cancelled` + geçerli cari hareketinin ters kaydı, aynı transaction'da.
+  Aynı konaklama ikinci kez iptal edilemez; iptal edilmiş konaklama düzenlenemez.
+- **Değişmez:** bir konaklamanın her an **tam olarak bir geçerli borç hareketi** vardır
+  (iptal edilmişse hiç yoktur). Düzeltilen hareketler ters kayıtla net sıfıra gelir.
+- Denetim kaydı `Auditable` trait'i ile değil, `StayService` tarafından açıkça yazılır —
+  finansal düzeltmenin kaydı ters kayıt ve yeni kayıt kimliklerini de taşımak zorundadır.
 
 ### Payments
 - Kayıt oluşturulunca **credit** kaydı (`entry_date = payment_date`).
@@ -504,7 +531,13 @@ Role duyarlı, tek sorgu setiyle:
 - **Personel:** bugün/bu hafta girdiği konaklama ve tahsilat sayısı, kendi son kayıtları. **Tutar toplamı gösterilmez.**
 
 ### Basic Audit Log
-`Auditable` trait'i ile `Company`, `Stay`, `Payment`, `User` modellerinde `created/updated/deleted` olayları; ayrıca `login`, `login_failed`, `logout`, `payment cancelled`, `exported`, rol değişiklikleri.
+`Auditable` trait'i ile `Company` ve `User` modellerinde `created/updated/deleted` olayları;
+ayrıca `login`, `login_failed`, `logout`, `payment cancelled`, `exported`, rol değişiklikleri.
+
+**İstisna — `Stay`, `Payment` ve `LedgerEntry`:** bu modellerin denetim kayıtları ilgili
+servis tarafından **açıkça** yazılır. Gerekçe: finansal kayıtların denetim satırı, ürettiği
+ya da ters kaydettiği cari hareketlerin kimliklerini de taşımak zorundadır; genel trait bunu
+ifade edemez. `LedgerEntry` ayrıca değiştirilemez olduğu için `updated`/`deleted` olayı hiç yoktur.
 `old_values`/`new_values` sadece **değişen alanları** içerir. `password`, `remember_token` asla loglanmaz.
 Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
 

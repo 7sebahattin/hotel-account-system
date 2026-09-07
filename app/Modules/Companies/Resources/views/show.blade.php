@@ -83,8 +83,59 @@
             </dl>
 
             <p class="mt-6 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Konaklama, tahsilat ve cari ekstre sekmeleri ilgili modüller geldiğinde eklenecektir.
+                Tahsilatlar ve cari ekstre, ilgili modüller geldiğinde bu karta eklenecektir.
             </p>
         </div>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-slate-200 bg-white p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-slate-700">
+                Konaklamalar <span class="font-normal text-slate-500">({{ $stayCount }})</span>
+            </h2>
+
+            <div class="flex items-center gap-3">
+                @can('viewAny', \App\Modules\Stays\Models\Stay::class)
+                    <a href="{{ route('stays.index', ['company_id' => $company->id]) }}"
+                       class="text-sm font-medium text-slate-700 hover:underline">Tümünü gör</a>
+                @endcan
+
+                @can('create', \App\Modules\Stays\Models\Stay::class)
+                    @unless ($company->trashed())
+                        <a href="{{ route('stays.create', ['company_id' => $company->id]) }}"
+                           class="inline-flex min-h-11 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
+                            Konaklama ekle
+                        </a>
+                    @endunless
+                @endcan
+            </div>
+        </div>
+
+        @if ($recentStays->isEmpty())
+            <p class="mt-4 rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                Bu firmaya ait konaklama kaydı yok.
+            </p>
+        @else
+            <ul class="mt-4 divide-y divide-slate-100">
+                @foreach ($recentStays as $stay)
+                    <li>
+                        <a href="{{ route('stays.show', $stay) }}"
+                           class="flex flex-wrap items-center justify-between gap-2 py-3 hover:bg-slate-50">
+                            <span class="text-sm">
+                                <span class="font-medium">{{ $stay->guest_name }}</span>
+                                <span class="text-slate-500">
+                                    · {{ $stay->check_in_date->format('d.m.Y') }} → {{ $stay->check_out_date->format('d.m.Y') }}
+                                    · {{ $stay->nights }} gece
+                                </span>
+                            </span>
+                            <span class="flex items-center gap-3">
+                                <span class="text-sm font-medium tabular-nums">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                                @include('stays::_status', ['stay' => $stay])
+                            </span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
     </div>
 @endsection

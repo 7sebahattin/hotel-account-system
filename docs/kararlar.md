@@ -237,3 +237,45 @@ gizlemek ve isteği erken reddetmek için tekrarlar.
 **Gerekçe:** K-010 — `Gate::before` admin için Policy'leri kısa devre yapabilir; tek katman yetmez.
 **Kapsam:** Bakiye sıfır olsa bile (ters kayıtla kapatılmış) hareket geçmişi varsa silme yasaktır.
 Kullanımdan kaldırmak için doğru işlem `is_active = false`.
+
+## K-031 · Aynı gün giriş/çıkış kabul edilir (0 gece)
+**Çelişki:** Kullanıcının Gün 5 kuralları `check_out_date >= check_in_date` ve
+`nights = check_out - check_in` diyor; CLAUDE.md §8 ise "0 gece kabul edilmez (min 1)" diyordu.
+**Karar:** Kullanıcının daha yeni ve açık talimatı uygulandı — aynı gün giriş/çıkış geçerlidir
+ve 0 gece üretir (günübirlik kullanım). Tutar yine `> 0` olmak zorundadır, dolayısıyla
+günübirlik kayıt da cariye normal şekilde işlenir.
+**Risk:** Aynı tarihi iki kez yazan bir kullanıcı hatası 0 geceli kayıt üretir ve engellenmez.
+Günübirlik kullanım istenmiyorsa `check_out_date` kuralı `after:check_in_date` yapılarak
+tek satırda geri alınır.
+**Sonuç:** CLAUDE.md §8 güncellendi.
+
+## K-032 · İptal `status` ile, soft delete ile değil
+**Karar:** Konaklama iptali `status = cancelled` alanıyla yapılır. `deleted_at` kolonu şemada
+durur ama iptal akışında kullanılmaz; görevi yalnızca kazara yapılacak bir `delete()` çağrısının
+fiziksel silme olmasını engellemektir.
+**Gerekçe:** İptal edilmiş konaklama listede görünmeye devam etmeli ve "Durum" filtresiyle
+ayrılabilmelidir; soft delete onu varsayılan sorgulardan tamamen düşürürdü.
+**V1'de iptal geri alınamaz:** restore route'u, servis metodu veya arayüzü yoktur — testle doğrulandı.
+
+## K-033 · Stay denetim kaydı serviste yazılır, trait ile değil
+**Karar:** `Stay` modeli `Auditable` trait'ini KULLANMAZ; denetim kayıtları `StayService`
+tarafından açıkça yazılır.
+**Gerekçe:** Finansal düzeltmenin denetim satırı `reversed_ledger_entry_id`,
+`reversal_ledger_entry_id` ve `new_ledger_entry_id` referanslarını taşımak zorundadır. Bu
+kimlikler ancak ters kayıt ve yeni kayıt oluştuktan SONRA bilinir; model olayları ise
+`save()` anında tetiklenir. Trait ile bunu ifade etmek ya iki ayrı denetim satırı ya da
+modele geçici durum taşıyan bir hile gerektirirdi.
+**Sonuç:** CLAUDE.md §8 (Basic Audit Log) güncellendi.
+
+## K-034 · Konaklama "silme" yerine "iptal"
+**Karar:** Arayüzde ve route'ta silme yoktur; `PATCH /stays/{stay}/cancel` vardır. Yetki adı
+CLAUDE.md §7.2'deki `stays.delete` olarak KALIR (yeni yetki eklenmedi); policy yeteneği `cancel`
+adını taşır ve bu yetkiye bağlıdır.
+**Gerekçe:** Yetki matrisini değiştirmeden domain dilini doğru kullanmak. Admin ve Patron iptal
+edebilir, Personel edemez — mevcut matrisle birebir örtüşür.
+
+## K-035 · Personel finansal alanları değiştirebilir
+**Karar:** Personel kendi kaydını ve düzenleme penceresi içinde, **finansal alanlar dahil**
+değiştirebilir. Bu değişiklik ters kayıt + yeni hareket üretir.
+**Uygulama yeri:** Kısıt frontend'de değil `StayPolicy` ve `StayService` katmanındadır;
+`nights` ve `status` alanları kullanıcı girdisinden hiçbir koşulda alınmaz.

@@ -16,6 +16,7 @@ use DateTimeInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -151,6 +152,35 @@ class LedgerService
         }
 
         return $balances;
+    }
+
+    /**
+     * Bir kaynak kaydın (konaklama, tahsilat) hâlâ geçerli olan hareketleri.
+     *
+     * "Geçerli" = kendisi ters kayıt olmayan VE ters kaydı alınmamış hareket.
+     * Değişmez: bir konaklamanın her an tam olarak bir geçerli borç hareketi olur.
+     *
+     * @return Collection<int, LedgerEntry>
+     */
+    public function activeEntriesForSource(string $sourceType, int $sourceId): Collection
+    {
+        return LedgerEntry::query()
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('is_reversal', false)
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('ledger_entries as reversals')
+                    ->whereColumn('reversals.reverses_entry_id', 'ledger_entries.id');
+            })
+            ->orderBy('id')
+            ->get();
+    }
+
+    /** Kaynak kaydın tek geçerli hareketi; yoksa null. */
+    public function activeEntryForSource(string $sourceType, int $sourceId): ?LedgerEntry
+    {
+        return $this->activeEntriesForSource($sourceType, $sourceId)->first();
     }
 
     public function hasEntriesForCompany(int $companyId): bool
