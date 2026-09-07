@@ -707,3 +707,32 @@ fark yalnızca **upload** üretir, **delete üretmez**. İlk gerçek aktarım su
 önceden bulunan dosyaları silmez. İlk çalıştırmanın dry-run olması önerisi yine de
 geçerlidir — hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
 
+## K-071 · `deploy.yml` main'e kopyalanır; uygulama kodu main'e taşınmaz
+**Sorun:** `deploy.yml` yalnızca `develop`'ta olduğu için GitHub Actions arayüzünde hiç
+görünmüyordu ve elle dry-run çalıştırılamıyordu.
+**Kök neden (GitHub belgelerinden doğrulandı, tahmin değil):** *"To trigger the
+`workflow_dispatch` event, your workflow must be in the default branch."* ve *"the 'Run
+workflow' button will be present if the workflow file exists on the default branch."*
+Bu şart UI'ı da `gh workflow run` / REST dispatch'i de kapsar.
+**Gözlem:** Actions API'si depoda tek workflow listeliyordu (`CI`). `main` ağacında
+`.github/` klasörü hiç yok; `ci.yml` yalnızca `push` tetikleyicisiyle çalıştığı için
+default branch şartına takılmıyor. `deploy.yml` ise sadece `workflow_dispatch` taşıyor.
+**Karar:** `.github/workflows/deploy.yml` **tek dosya olarak**, tek bir commit'le `main`'e
+eklenir. `main`'e uygulama kodu, migration, modül, view veya başka hiçbir `develop`
+içeriği taşınmaz — `main` ile `develop` arasındaki business-code farkı korunur.
+**Çalıştırma modeli:** workflow tanımı `main`'de kayıtlı, çalıştırma `Branch: develop`
+ile yapılır. GitHub o ref'in commit'ini ve o ref'teki workflow dosyasını kullanır
+(`GITHUB_SHA` = dispatch edilen dalın son commit'i), yani build/deploy adımları
+`develop` kodunu görür.
+**Neden güvenli:** dosyada `push`/`pull_request` tetikleyicisi yok — `main`'e girmesi
+hiçbir şey başlatmaz. `main` ref'iyle kazara çalıştırılırsa `build` işi `composer
+validate --strict` adımında fail eder (`main`'de `composer.json` yok) ve `deploy` işi
+`needs: [guard, build]` olduğu için hiç başlamaz. Gerçek deploy kilitleri (K-069)
+değişmedi.
+**Kabul edilen bedel:** sürüm kayması. `develop`'ta `deploy.yml` değişirse `main`'deki
+kopya elle eşitlenmelidir.
+**Elenen alternatif:** default branch'i `develop` yapmak — klonlama, PR taban dalı ve
+dal korumasını da değiştirirdi; tek dosya kopyalamaktan çok daha geniş etki alanı.
+**Uygulanmadı:** `main`'e push bu turda YAPILMADI — production dalına yazma kullanıcının
+kararıdır; hazır komut raporda verildi.
+

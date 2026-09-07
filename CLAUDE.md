@@ -927,6 +927,12 @@ workflow'un `guard` işi başka her hedefi fail-closed reddeder.
 - Workflow: `.github/workflows/deploy.yml` — yalnızca elle tetiklenir, varsayılanı
   `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan gerçek aktarım yapamaz.
 
+`workflow_dispatch` GitHub'da **default branch şartına** tabidir: dosya `main`'de
+yoksa workflow ne arayüzde görünür ne de `gh`/REST ile tetiklenebilir. Bu yüzden
+`deploy.yml` **tek dosya olarak** `main`'e de kopyalanır; `main`'e uygulama kodu
+taşınmaz. Çalıştırma `Branch: develop` seçilerek yapılır ve `develop` kodu build
+edilir (`docs/deploy-lemon.md` §3.1, `docs/kararlar.md` K-071).
+
 `develop` → Lemon (kabul/staging), `main` → production; ayrı hedefler, ayrı veritabanı.
 **Otomatik push deployment hiçbir dal için etkin değildir.**
 

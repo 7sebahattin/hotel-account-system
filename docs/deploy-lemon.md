@@ -139,6 +139,66 @@ kontrol edebilir.
 `APP_KEY`, veritabanı parolası ve diğer uygulama ayarları **GitHub'a konmaz**;
 sunucudaki `.env` dosyasında yaşarlar.
 
+### 3.1 Workflow'un Actions arayüzünde görünmesi — `deploy.yml` main'de olmalı
+
+**Kural (GitHub belgelerinden, doğrulandı):**
+
+> "To trigger the `workflow_dispatch` event, your workflow must be in the default branch."
+> — *Manually running a workflow*
+>
+> "On the GitHub UI, the **'Run workflow' button will be present if the workflow file
+> exists on the default branch.** Once a workflow has run at least once, you can dispatch
+> it against any branch or tag via the GitHub API or GitHub CLI."
+> — *Events that trigger workflows → `workflow_dispatch`*
+
+Bu kural **UI'ı da API/CLI'ı da** kapsar. `gh workflow run` ve REST
+`POST /actions/workflows/{id}/dispatches` de dosya default branch'te yoksa çalışmaz;
+`--ref` bayrağı ancak workflow bir kez kaydolduktan **sonra** başka bir dalı seçmeye yarar.
+
+**Bu depodaki durum ve gözlem:**
+
+| Dal | `ci.yml` | `deploy.yml` |
+|---|---|---|
+| `main` (default branch) | yok | **yok** ← sorun burada |
+| `develop` | var | var |
+
+`ci.yml` çalışıyor çünkü `push` tetikleyicisi **her daldan** çalışır ve default branch
+şartı aramaz. `deploy.yml` ise yalnızca `workflow_dispatch` taşır; default branch'te
+olmadığı için GitHub onu **workflow olarak hiç kaydetmemiştir** — Actions API'sinde
+depoda tek bir workflow (`CI`) görünür. Bu yüzden sol menüde yoktur ve "Run workflow"
+düğmesi de yoktur.
+
+**Çözüm:** `.github/workflows/deploy.yml` dosyası **tek başına**, uygulama kodu olmadan
+`main`'e eklenir. `main` yalnızca bu dosyayı alır; migration, modül, view veya başka
+hiçbir `develop` içeriği taşınmaz.
+
+**Çalıştırma modeli — tanım main'de, kod develop'ta:**
+
+1. Actions → **Deploy (Lemon)** → **Run workflow**
+2. **Branch: `develop`** seçilir
+3. GitHub, `develop` ref'i için `GITHUB_SHA = develop'un son commit'i` atar ve
+   **`develop`'taki workflow dosyasını** çalıştırır; `actions/checkout@v4` `develop`
+   kodunu alır. `main`'deki kopya yalnızca workflow'u **kaydettirmek** için vardır.
+
+**Neden `main` kopyası tehlikesiz:**
+
+- Dosyada `push`/`pull_request` tetikleyicisi **yoktur** — `main`'e girmesi hiçbir şey başlatmaz.
+- `main` ref'iyle yanlışlıkla çalıştırılırsa: `main`'de `composer.json` olmadığı için
+  `build` işi `composer validate --strict` adımında **fail eder**. `deploy` işi
+  `needs: [guard, build]` olduğu için hiç başlamaz. **Fail-closed.**
+- Gerçek deploy yine `DEPLOY_ENABLED`, `confirm_target` ve `LEMON_APP_DIR` kilitlerine
+  tabidir (§9).
+
+**Kabul edilen bedel — sürüm kayması (drift):** aynı dosya iki dalda durur. `develop`'ta
+`deploy.yml` değişirse `main`'deki kopya **elle** eşitlenmelidir; aksi hâlde `main` ref'iyle
+eski bir tanım çalışabilir. Bu kabul edilebilir çünkü `main` kopyası pratikte hiç
+çalıştırılmaz (gerçek çalıştırma her zaman `develop` ref'iyle yapılır) ve `main`'de
+uygulama kodu olmadığı için o kopyanın her çalıştırması zaten `build`'de durur.
+
+**Elenen alternatif:** default branch'i `develop` yapmak. Workflow'u görünür kılardı ama
+klonlama, PR taban dalı, dal koruması ve depo bağlantılarını da değiştirirdi — tek bir
+dosyayı kopyalamaktan çok daha geniş bir etki alanı.
+
 ---
 
 ## 4. Aktarılan ve aktarılmayan dosyalar
