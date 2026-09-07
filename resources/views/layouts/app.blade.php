@@ -4,47 +4,55 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-color" content="#0f172a">
     <title>@yield('title', config('app.name'))</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="flex h-full flex-col bg-slate-100 text-slate-900 antialiased">
-    <header class="border-b border-slate-200 bg-white">
-        <div class="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-            <a href="{{ route('home') }}" class="font-semibold tracking-tight">
+<body class="min-h-full bg-bg text-tx antialiased">
+    <a href="#icerik"
+       class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-acc focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-[#111]">
+        İçeriğe atla
+    </a>
+
+    {{-- Mobil çekmece arka planı --}}
+    <div data-sidebar-overlay class="fixed inset-0 z-30 hidden bg-black/60 md:hidden" aria-hidden="true"></div>
+
+    <aside id="kenar-cubugu" data-sidebar
+           class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col border-r border-line bg-card transition-transform duration-200 md:translate-x-0">
+        <div class="flex h-14 items-center justify-between border-b border-line px-4">
+            <a href="{{ route('home') }}" class="truncate text-sm font-medium text-tx">
                 {{ config('app.name') }}
             </a>
 
-            @auth
-                <div class="hidden md:block">
-                    @include('partials.nav')
-                </div>
-
-                <div class="flex items-center gap-3">
-                    <span class="hidden text-sm text-slate-600 sm:inline">
-                        {{ auth()->user()->name }}
-                    </span>
-
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit"
-                                class="min-h-11 rounded-md px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
-                            Çıkış
-                        </button>
-                    </form>
-                </div>
-            @endauth
+            <button type="button" data-sidebar-close
+                    class="-mr-2 flex size-11 items-center justify-center rounded-lg text-mut hover:text-tx md:hidden"
+                    aria-label="Menüyü kapat">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5" aria-hidden="true">
+                    <path d="M5 5l10 10M15 5L5 15" stroke-linecap="round"/>
+                </svg>
+            </button>
         </div>
-    </header>
 
-    @auth
-        <div class="border-b border-slate-200 bg-white px-4 pb-2 md:hidden sm:px-6">
-            @include('partials.nav')
-        </div>
-    @endauth
+        @include('partials.sidebar')
+    </aside>
 
-    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">
-        @include('partials.flash')
-        @yield('content')
-    </main>
+    <div class="md:pl-64">
+        <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-bg px-2 md:hidden">
+            <button type="button" data-sidebar-toggle
+                    class="flex size-11 items-center justify-center rounded-lg text-mut hover:text-tx"
+                    aria-label="Menüyü aç" aria-expanded="false" aria-controls="kenar-cubugu">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5" aria-hidden="true">
+                    <path d="M3 5h14M3 10h14M3 15h14" stroke-linecap="round"/>
+                </svg>
+            </button>
+
+            <span class="truncate text-sm font-medium">{{ config('app.name') }}</span>
+        </header>
+
+        <main id="icerik" class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
+            @include('partials.flash')
+            @yield('content')
+        </main>
+    </div>
 </body>
 </html>

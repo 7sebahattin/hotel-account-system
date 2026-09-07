@@ -279,3 +279,44 @@ edebilir, Personel edemez — mevcut matrisle birebir örtüşür.
 değiştirebilir. Bu değişiklik ters kayıt + yeni hareket üretir.
 **Uygulama yeri:** Kısıt frontend'de değil `StayPolicy` ve `StayService` katmanındadır;
 `nights` ve `status` alanları kullanıcı girdisinden hiçbir koşulda alınmaz.
+
+## K-036 · Tek tema, tek token kaynağı
+**Karar:** Koyu tema uygulamanın tek temasıdır. Light mode, tema değiştirici ve kullanıcı
+tema tercihi yoktur; `prefers-color-scheme` sorgusu hiçbir yerde kullanılmaz.
+Tüm renk/tipografi token'ları yalnızca `resources/css/app.css` içindeki `@theme` bloğunda
+tanımlıdır ve Tailwind bunlardan yardımcı sınıfları (`bg-card`, `border-line`, `text-mut`…)
+üretir. Blade dosyalarında ham hex kodu yazılmaz.
+**Gerekçe:** Tek kaynak, palet değişiminde tek dosya düzenlemesi demektir; testle de
+doğrulanmıştır (`DesignSystemTest::tek_tema_kullanilir`).
+
+## K-037 · `--color-field`: form sınırları için ayrı token (WCAG 1.4.11)
+**Sorun:** Belirlenen palette hiçbir form kontrolü sınırı 3:1 kontrast eşiğini geçmiyordu —
+`line`/`card` 1.41:1, `line`/`well` 1.81:1, dolgu farkı `well`/`card` 1.28:1. WCAG 2.1
+1.4.11 arayüz bileşeni sınırları için en az 3:1 ister; input'un nerede başladığı görünmüyordu.
+**Karar:** `--color-field: #64748b` eklendi ve **yalnızca** form kontrolü (`input`, `select`,
+`textarea`, `checkbox`), ikincil buton ve sayfalama bağlantısı sınırlarında kullanılır.
+Kullanıcının verdiği `--color-line` değeri **değiştirilmedi**; ayraç ve kart sınırı olarak
+aynen kalır.
+**Ölçüm:** Tüm metin çiftleri ≥ 4.5:1, tüm arayüz sınırları ≥ 3:1 (headless Chromium ile
+hesaplandı).
+
+## K-038 · Tablo kırılımı `md` değil `lg`
+**Karar:** Veri tabloları 1024px (`lg`) ve üzerinde gösterilir; altında kart listesine düşer.
+**Gerekçe:** 768px'te 256px kenar çubuğundan sonra içeriğe ~460px kalıyor ve tablo sayfayı
+yatay kaydırmaya zorluyordu (ölçüldü: `window.scrollX = 285`). `lg` kırılımıyla 375/768/1366/1920
+kırılımlarının tamamında yatay sayfa kaydırması sıfırdır.
+**Sonuç:** CLAUDE.md §11.5 güncellendi ("tablolar `md` altında karta düşer" → `lg`).
+
+## K-039 · Alpine.js yerine sade JavaScript
+**Karar:** Kenar çubuğu çekmecesi ~40 satır sade JavaScript ile yazıldı; Alpine.js **kurulmadı**.
+**Gerekçe:** Kullanıcı "yeni npm/UI framework paketi ekleme" dedi ve Alpine projede zaten kurulu
+değildi. Tek etkileşim gereksinimi bir çekmece aç/kapa idi; bunun için paket eklemek gerekmiyor.
+**İleride:** Modal, tutar maskesi veya dinamik firma arama kutusu gerektiğinde Alpine kullanıcı
+onayıyla eklenir (CLAUDE.md §2 yığında duruyor).
+
+## K-040 · Görsel doğrulama araçları proje dışında
+**Karar:** Ekran görüntüsü, kontrast ve taşma doğrulaması için `playwright-core` proje
+`package.json`'ına **eklenmedi**; geçici bir dizine kurulup ortamda hazır bulunan Chromium
+sürücülendi.
+**Gerekçe:** Doğrulama aracı uygulamanın bağımlılığı değildir; `npm ci` süresini ve deploy
+yükünü artırmamalıdır.

@@ -4,11 +4,100 @@
 @source '../../storage/framework/views/*.php';
 @source '../../app/Modules/**/Resources/views/**/*.blade.php';
 
+/*
+|--------------------------------------------------------------------------
+| Tasarım token'ları — tek kaynak
+|--------------------------------------------------------------------------
+|
+| Bu uygulamanın TEK teması koyu temadır: açık tema, tema değiştirici veya
+| kullanıcı tema tercihi yoktur.
+|
+| Buradaki her değer Tailwind yardımcı sınıfı üretir: bg-bg, bg-card,
+| border-line, text-tx, text-mut, bg-acc, text-success ...
+*/
 @theme {
+    --color-bg: #0f172a;
+    --color-card: #1e293b;
+    --color-line: #334155;
+    --color-tx: #e2e8f0;
+    --color-mut: #94a3b8;
+    --color-acc: #f97316;
+    --color-well: #0b1220;
+
+    /*
+        Form kontrolü sınırı — YALNIZCA input/select/textarea için.
+
+        WCAG 1.4.11 arayüz bileşeni sınırları için 3:1 ister. Ölçüm: --line
+        (#334155) kart üzerinde 1.41, arka planda 1.72 kalıyor; dolgu farkı
+        (well/card) da 1.28. Yani sınır da dolgu da alanı tanımlamaya yetmiyor.
+        Bu token kart üzerinde 3.07, arka planda 3.75 verir.
+
+        Ayırıcı ve kart çizgileri --line olarak KALIR; değişen yalnızca form
+        kontrollerinin sınırıdır.
+    */
+    --color-field: #64748b;
+
+    --color-success: #4ade80;
+    --color-danger: #f87171;
+
+    --color-success-bg: #1c2b1f;
+    --color-danger-bg: #2b1c1c;
+
     /*
         Sistem font yığını: derleme anında veya tarayıcıda hiçbir dış servise
         (Google/Bunny Fonts) istek atılmaz. CI ve cPanel deploy'u ağdan bağımsız kalır.
     */
-    --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
         Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+}
+
+/* Spesifikasyondaki kısa adlar; ham CSS'te kullanmak için Tailwind token'larına bağlı. */
+:root {
+    --bg: var(--color-bg);
+    --card: var(--color-card);
+    --line: var(--color-line);
+    --tx: var(--color-tx);
+    --mut: var(--color-mut);
+    --acc: var(--color-acc);
+    --well: var(--color-well);
+    --field: var(--color-field);
+    --success: var(--color-success);
+    --danger: var(--color-danger);
+    --success-bg: var(--color-success-bg);
+    --danger-bg: var(--color-danger-bg);
+}
+
+@layer base {
+    html {
+        /* Tarayıcı kaydırma çubuğu ve form kontrolleri de koyu tema kullansın. */
+        color-scheme: dark;
+    }
+
+    body {
+        background-color: var(--color-bg);
+        color: var(--color-tx);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /*
+        Form kontrollerinde en az 16px: iOS Safari 16px altındaki alanlara
+        odaklanınca sayfayı otomatik yakınlaştırır.
+    */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+
+    /* Klavye ile gezinmede odak her zaman görünür olmalı. */
+    :focus-visible {
+        outline: 2px solid var(--color-acc);
+        outline-offset: 2px;
+    }
+
+    ::placeholder {
+        color: var(--color-mut);
+    }
 }

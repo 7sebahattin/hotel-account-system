@@ -1,5 +1,5 @@
 @if ($stay->isCancelled())
-    <span class="inline-flex shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">İptal</span>
+    <x-ui.badge tone="danger">İptal</x-ui.badge>
 @else
-    <span class="inline-flex shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Aktif</span>
+    <x-ui.badge tone="success">Aktif</x-ui.badge>
 @endif

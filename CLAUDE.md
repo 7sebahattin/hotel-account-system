@@ -579,13 +579,89 @@ Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
 
 ## 11. Arayüz Standartları
 
-- Blade + Tailwind. Ortak bileşenler `resources/views/components` altında: `<x-ui.card>`, `<x-ui.table>`, `<x-ui.badge>`, `<x-ui.empty>`, `<x-form.input>`, `<x-form.select>`, `<x-form.money>`, `<x-form.date>`.
-- **Alpine.js sadece şunlar için:** modal/dropdown aç-kapa, form onay diyaloğu, tutar maskesi, dinamik firma arama kutusu. Alpine ile iş mantığı yazılmaz, veri hesaplanmaz.
-- Mobil öncelikli: tablolar `md` altında kart görünümüne düşer. Dokunma hedefi min 44px.
+### 11.1 Tasarım dili
+
+Koyu slate zemin + turuncu vurgu. Düz renk; **gölge, gradient, dekoratif öge yoktur**.
+Ayrımlar ince çizgi (1px) ile yapılır. Bu tema uygulamanın **tek** temasıdır —
+light mode, tema değiştirici ve kullanıcı tema tercihi **yoktur**.
+
+**Vurgu (accent) yalnızca** birincil aksiyon butonu, seçili menü öğesi, aktif sıralama
+göstergesi, odak halkası ve zorunlu alan yıldızında kullanılır. Silme/iptal butonları
+turuncu değildir (`danger` varyantı).
+
+### 11.2 Tasarım token'ları — tek kaynak
+
+Tüm renk ve tipografi token'ları **yalnızca** `resources/css/app.css` içindeki `@theme`
+bloğunda tanımlıdır; Tailwind bu bloktan `bg-card`, `border-line`, `text-mut` gibi
+sınıfları üretir. Blade içinde ham hex kodu yazılmaz.
+
+| Token | Değer | Kullanım |
+|---|---|---|
+| `--color-bg` | `#0f172a` | sayfa zemini |
+| `--color-card` | `#1e293b` | kart / tablo zemini |
+| `--color-line` | `#334155` | ayraç ve kart sınırı |
+| `--color-field` | `#64748b` | **yalnızca** form kontrolü, ikincil buton ve sayfalama sınırı (WCAG 1.4.11 → 3:1) |
+| `--color-tx` | `#e2e8f0` | ana metin |
+| `--color-mut` | `#94a3b8` | ikincil metin, placeholder |
+| `--color-acc` | `#f97316` | vurgu |
+| `--color-well` | `#0b1220` | çukur alan, aktif menü zemini |
+| `--color-success` / `--color-danger` | `#4ade80` / `#f87171` | durum metni |
+| `--color-success-bg` / `--color-danger-bg` | `#1c2b1f` / `#2b1c1c` | durum kutusu zemini |
+
+Tipografi: `system-ui` yığını, gövde 15px/1.5, form kontrolleri **16px** (mobil zoom'u
+engeller), sayfa başlığı 19px/500. Tüm tutar hücreleri `font-variant-numeric: tabular-nums`
+ve sağa hizalı.
+
+### 11.3 Blade bileşenleri
+
+Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
+`card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
+`alert`, `errors`, `empty`, `table`, `sort-header`, `th`.
+
+- Form kontrolleri hata durumunu `$errors` üzerinden kendisi okur; `aria-invalid` ve
+  `aria-describedby` bağlantısını kendisi kurar. Her `<label>` `for` ile input `id`'sine bağlıdır.
+- Bileşen soyutlaması gereksiz büyütülmez: tek yerde kullanılan bir işaretleme bileşen yapılmaz.
+- Sayfalama görünümleri `resources/views/vendor/pagination/` altında Türkçeleştirilmiştir.
+
+### 11.4 Yerleşim
+
+- Masaüstünde sabit **256px** kenar çubuğu (`md` ve üzeri). Kenar çubuğu turuncuya boyanmaz;
+  aktif öğe `well` zemin + sol turuncu şerit + `aria-current="page"` ile belirtilir.
+- Menü **yetki duyarlıdır**: kullanıcının göremeyeceği bölüm hiç render edilmez.
+  Route'u olmayan bir ekran menüye eklenmez (disabled placeholder yazılmaz).
+- Kenar çubuğu altında kullanıcı adı, rol etiketi ve çıkış bağlantısı bulunur.
+- Mobilde hamburger + çekmece (sağdan kayan overlay, `Escape` ile kapanır); içerik tam genişlik.
+- Tüm sayfalarda "İçeriğe atla" bağlantısı ve `<main id="icerik">` vardır.
+
+### 11.5 Tablo ve mobil liste
+
+- Tablolar **`lg` (1024px) ve üzerinde** gösterilir; altında aynı veri kart listesine düşer.
+  Gerekçe: 256px kenar çubuğundan sonra `md` genişlikte ~460px kalır ve tablo yatay kaydırma
+  gerektirirdi. **Ana tablolarda yatay scroll yoktur.**
+- Zebra stripe kullanılmaz; satır ayrımı ince çizgi iledir.
+- Dokunma hedefi minimum 44px.
+
+### 11.6 Finansal ve durum gösterimi
+
 - Tutar biçimi: `1.234,56 ₺` (Türkçe binlik/ondalık). Tarih: `d.m.Y`.
-- Negatif/pozitif bakiye renkli gösterilir; renk tek başına anlam taşımaz, metin de yazar.
-- Silme/iptal işlemleri onay adımı ister.
-- Flash mesajları tek bir partial'dan.
+- **Borç/alacak, aktif/iptal gibi anlamlar yalnızca renge bağlanmaz** — her durumun
+  metin etiketi vardır (renk körlüğü). Rozetler `<x-ui.badge>` ile.
+- Durum kutuları (`<x-ui.alert>`) yalnızca gerçekten uyarı/durum gerektiğinde kullanılır.
+- Monospace **yalnızca** denetim kaydı gibi teknik ekranlarda; normal formlarda kullanılmaz.
+- Silme/iptal işlemleri onay adımı ister. Flash mesajları tek partial'dan gelir.
+
+### 11.7 JavaScript
+
+`resources/js/app.js` içinde yalnızca kenar çubuğu çekmecesi vardır — sade JavaScript,
+harici paket yok. Alpine.js **kurulu değildir**; ihtiyaç doğarsa (modal, tutar maskesi,
+dinamik firma arama) kullanıcı onayıyla eklenir. JS ile iş mantığı yazılmaz, veri hesaplanmaz.
+
+### 11.8 Erişilebilirlik
+
+- Metin kontrastı ≥ 4.5:1, arayüz sınırı/durum göstergesi ≥ 3:1 (WCAG 2.1 1.4.3 / 1.4.11).
+- Görünür odak halkası (`:focus-visible` → 2px turuncu, 2px offset).
+- Yalnızca ikon içeren butonlarda `aria-label`. `<html lang="tr">`.
+- Kontrol edilen kırılımlar: 375 / 768 / 1366 / 1920 — hiçbirinde yatay sayfa kaydırması yoktur.
 
 ### PWA (temel)
 

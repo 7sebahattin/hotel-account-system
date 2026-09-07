@@ -2,16 +2,18 @@
 @section('title', 'Firma düzenle')
 
 @section('content')
-    <h1 class="text-lg font-semibold">{{ $company->name }}</h1>
+    <x-ui.page-header :title="$company->name" subtitle="Firma bilgilerini düzenle" />
 
-    <form method="POST" action="{{ route('companies.update', $company) }}"
-          class="mt-6 max-w-3xl rounded-xl border border-slate-200 bg-white p-6">
+    <form method="POST" action="{{ route('companies.update', $company) }}" class="mt-6 max-w-3xl">
         @method('PUT')
-        @include('companies::_form')
 
-        <div class="mt-6 flex gap-3">
-            <button type="submit" class="min-h-11 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Güncelle</button>
-            <a href="{{ route('companies.show', $company) }}" class="inline-flex min-h-11 items-center px-4 text-sm text-slate-600 hover:underline">Vazgeç</a>
+        <x-ui.card class="p-6">
+            @include('companies::_form')
+        </x-ui.card>
+
+        <div class="mt-4 flex flex-wrap gap-3">
+            <x-ui.button type="submit">Güncelle</x-ui.button>
+            <x-ui.button variant="ghost" :href="route('companies.show', $company)">Vazgeç</x-ui.button>
         </div>
     </form>
 @endsection

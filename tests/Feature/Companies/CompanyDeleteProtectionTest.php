@@ -122,11 +122,18 @@ class CompanyDeleteProtectionTest extends TestCase
         $admin = $this->userWithRole(RoleName::Admin);
         $company = Company::factory()->create();
 
-        $this->actingAs($admin)->get(route('companies.show', $company))->assertSee('Sil');
+        // Buton metni yerine DELETE formunun varlığına bakılır: işaretleme
+        // değişse bile test anlamını korur (sayfadaki tek DELETE formu budur).
+        $deleteForm = 'name="_method" value="DELETE"';
+
+        $this->actingAs($admin)->get(route('companies.show', $company))
+            ->assertSee('Sil')
+            ->assertSee($deleteForm, false);
 
         $this->withEntry($company, $admin);
 
-        $this->actingAs($admin)->get(route('companies.show', $company))->assertDontSee('>Sil<', false);
+        $this->actingAs($admin)->get(route('companies.show', $company))
+            ->assertDontSee($deleteForm, false);
     }
 
     #[Test]

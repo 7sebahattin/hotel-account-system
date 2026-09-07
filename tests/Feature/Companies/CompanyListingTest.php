@@ -46,10 +46,14 @@ class CompanyListingTest extends TestCase
     {
         $admin = $this->userWithRole(RoleName::Admin);
 
-        Company::factory()->create(['name' => 'A Firma', 'tax_number' => '9876543210']);
-        Company::factory()->create(['name' => 'B Firma', 'phone' => '0212 111 22 33']);
-        Company::factory()->create(['name' => 'C Firma', 'contact_person' => 'Mehmet Öz']);
-        Company::factory()->create(['name' => 'D Firma', 'city' => 'Trabzon']);
+        // Aranabilir alanların tamamı açıkça verilir: factory'nin rastgele değerleri
+        // (fake()->city() Türkçe şehir listesinden seçer) aranan terimle çakışabiliyordu.
+        $base = ['tax_number' => '1000000000', 'phone' => '0500 000 00 00', 'contact_person' => 'Ali Veli', 'city' => 'Ankara', 'tax_office' => 'Çankaya'];
+
+        Company::factory()->create(['name' => 'A Firma', ...$base, 'tax_number' => '9876543210']);
+        Company::factory()->create(['name' => 'B Firma', ...$base, 'phone' => '0212 111 22 33']);
+        Company::factory()->create(['name' => 'C Firma', ...$base, 'contact_person' => 'Mehmet Öz']);
+        Company::factory()->create(['name' => 'D Firma', ...$base, 'city' => 'Trabzon']);
 
         foreach ([
             '9876543210' => 'A Firma',

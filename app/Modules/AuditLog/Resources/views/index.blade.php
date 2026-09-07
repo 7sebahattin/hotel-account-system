@@ -2,68 +2,79 @@
 @section('title', 'Denetim kaydı')
 
 @section('content')
-    <h1 class="text-lg font-semibold">Denetim kaydı</h1>
-    <p class="mt-1 text-sm text-slate-600">Kayıtlar salt okunurdur; değiştirilemez ve silinemez.</p>
+    <x-ui.page-header title="Denetim kaydı" :count="$logs->total()"
+                      subtitle="Kayıtlar salt okunurdur; değiştirilemez ve silinemez." />
 
-    <form method="GET" class="mt-4 flex flex-wrap items-end gap-3">
-        <div>
-            <label for="event" class="block text-xs font-medium text-slate-600">Olay</label>
-            <select id="event" name="event" class="mt-1 min-h-11 rounded-md border border-slate-300 px-3 text-sm">
-                <option value="">Tümü</option>
-                @foreach ($events as $event)
-                    <option value="{{ $event->value }}" @selected(request('event') === $event->value)>
-                        {{ $event->label() }}
-                    </option>
-                @endforeach
-            </select>
+    <form method="GET" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <x-ui.select label="Olay" name="event">
+            <option value="">Tümü</option>
+            @foreach ($events as $event)
+                <option value="{{ $event->value }}" @selected(request('event') === $event->value)>
+                    {{ $event->label() }}
+                </option>
+            @endforeach
+        </x-ui.select>
+
+        <x-ui.input label="Başlangıç" name="date_from" type="date" :value="request('date_from')" />
+        <x-ui.input label="Bitiş" name="date_to" type="date" :value="request('date_to')" />
+
+        <div class="flex items-end gap-3">
+            <x-ui.button type="submit">Filtrele</x-ui.button>
+            <x-ui.button variant="ghost" :href="route('audit.index')">Temizle</x-ui.button>
         </div>
-        <div>
-            <label for="date_from" class="block text-xs font-medium text-slate-600">Başlangıç</label>
-            <input id="date_from" type="date" name="date_from" value="{{ request('date_from') }}"
-                   class="mt-1 min-h-11 rounded-md border border-slate-300 px-3 text-sm">
-        </div>
-        <div>
-            <label for="date_to" class="block text-xs font-medium text-slate-600">Bitiş</label>
-            <input id="date_to" type="date" name="date_to" value="{{ request('date_to') }}"
-                   class="mt-1 min-h-11 rounded-md border border-slate-300 px-3 text-sm">
-        </div>
-        <button type="submit" class="min-h-11 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Filtrele</button>
-        <a href="{{ route('audit.index') }}" class="inline-flex min-h-11 items-center px-2 text-sm text-slate-600 hover:underline">Temizle</a>
     </form>
 
-    <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                    <th class="px-4 py-3">Tarih</th>
-                    <th class="px-4 py-3">Kullanıcı</th>
-                    <th class="px-4 py-3">Olay</th>
-                    <th class="px-4 py-3">Kayıt</th>
-                    <th class="px-4 py-3">Değişiklik</th>
-                    <th class="px-4 py-3">IP</th>
+    <x-ui.table class="mt-4">
+        <thead class="border-b border-line">
+            <tr>
+                <x-ui.th>Tarih</x-ui.th>
+                <x-ui.th>Kullanıcı</x-ui.th>
+                <x-ui.th>Olay</x-ui.th>
+                <x-ui.th>Kayıt</x-ui.th>
+                <x-ui.th>Değişiklik</x-ui.th>
+                <x-ui.th>IP</x-ui.th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse ($logs as $log)
+                <tr class="border-b border-line last:border-0 hover:bg-well">
+                    <td class="px-4 py-3 whitespace-nowrap tabular-nums text-mut">
+                        {{ $log->created_at->format('d.m.Y H:i:s') }}
+                    </td>
+                    <td class="px-4 py-3 text-tx">{{ $log->user?->name ?? $log->user_name ?? '—' }}</td>
+                    <td class="px-4 py-3 text-tx">{{ $log->event->label() }}</td>
+                    <td class="px-4 py-3 text-mut">{{ $log->subjectLabel() }}</td>
+                    <td class="px-4 py-3">
+                        @if ($log->new_values)
+                            {{-- Teknik ekran: alan adları monospace gösterilir. --}}
+                            <code class="font-mono text-xs break-all text-mut">
+                                {{ implode(', ', array_keys($log->new_values)) }}
+                            </code>
+                        @else
+                            <span class="text-mut">—</span>
+                        @endif
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs text-mut">{{ $log->ip_address ?? '—' }}</td>
                 </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                @forelse ($logs as $log)
-                    <tr>
-                        <td class="px-4 py-3 whitespace-nowrap text-slate-600">{{ $log->created_at->format('d.m.Y H:i:s') }}</td>
-                        <td class="px-4 py-3">{{ $log->user?->name ?? $log->user_name ?? '—' }}</td>
-                        <td class="px-4 py-3">{{ $log->event->label() }}</td>
-                        <td class="px-4 py-3 text-slate-600">{{ $log->subjectLabel() }}</td>
-                        <td class="px-4 py-3 text-slate-600">
-                            @if ($log->new_values)
-                                <code class="text-xs">{{ implode(', ', array_keys($log->new_values)) }}</code>
-                            @else
-                                —
-                            @endif
-                        </td>
-                        <td class="px-4 py-3 text-slate-500">{{ $log->ip_address ?? '—' }}</td>
-                    </tr>
-                @empty
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">Kayıt bulunamadı.</td></tr>
-                @endforelse
-            </tbody>
-        </table>
+            @empty
+                <tr><td colspan="6" class="px-4 py-10 text-center text-mut">Kayıt bulunamadı.</td></tr>
+            @endforelse
+        </tbody>
+    </x-ui.table>
+
+    <div class="mt-4 space-y-3 lg:hidden">
+        @forelse ($logs as $log)
+            <x-ui.card>
+                <div class="flex items-start justify-between gap-3">
+                    <span class="text-tx">{{ $log->event->label() }}</span>
+                    <span class="shrink-0 text-xs tabular-nums text-mut">{{ $log->created_at->format('d.m.Y H:i') }}</span>
+                </div>
+                <p class="mt-1 text-sm text-mut">{{ $log->user?->name ?? $log->user_name ?? '—' }}</p>
+                <p class="mt-1 font-mono text-xs break-all text-mut">{{ $log->subjectLabel() }}</p>
+            </x-ui.card>
+        @empty
+            <x-ui.empty />
+        @endforelse
     </div>
 
     <div class="mt-4">{{ $logs->links() }}</div>

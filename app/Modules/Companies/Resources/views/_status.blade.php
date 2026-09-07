@@ -1,7 +1,7 @@
 @if ($company->trashed())
-    <span class="inline-flex shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Silinmiş</span>
+    <x-ui.badge tone="danger">Silinmiş</x-ui.badge>
 @elseif ($company->is_active)
-    <span class="inline-flex shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Aktif</span>
+    <x-ui.badge tone="success">Aktif</x-ui.badge>
 @else
-    <span class="inline-flex shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">Pasif</span>
+    <x-ui.badge>Pasif</x-ui.badge>
 @endif
