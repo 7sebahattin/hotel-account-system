@@ -163,7 +163,15 @@ artifact'ın temiz olduğunu doğrular. Üç katman aynı şeyi söyler.
 | `composer.json/lock`, `package*.json`, `vite.config.js`, `phpunit.xml`, `pint.json`, `phpstan.neon` | Üretimde gereksiz |
 
 **`storage/` ve `bootstrap/cache/` sunucuda BİR KEZ elle oluşturulur** (§11) ve
-bir daha hiçbir deploy onlara dokunmaz.
+bir daha hiçbir deploy onlara dokunmaz. İlk gerçek deploy da onları **silmez**:
+araç ilk yayında sunucu durumunu boş kabul eder ve yalnızca upload üretir, delete
+üretmez (§9); ayrıca üç katmanın üçü de bu iki ağacı dışarıda tutar.
+
+`composer.json`/`composer.lock`'un aktarılmaması **çalışmayı bozmaz**: Laravel
+runtime'da bu dosyaları okumaz; paket keşfi `vendor/composer/installed.json` ve
+`bootstrap/cache/packages.php` üzerinden yürür. `public/build/` (Vite çıktısı)
+`exclude` listesinde **yoktur** ve aktarılır — repoda tutulmayıp CI'da üretildiği
+için tek kaynağı budur.
 
 ### 4.1 Hedef dizin doğrulaması — FAIL-CLOSED
 
@@ -209,15 +217,17 @@ ve hangi biçimin beklendiği yazılır.
 
 ---
 
-## 5. Production `.env` şablonu
+## 5. Sunucu tarafı hazırlık
 
-Sunucuda `/home/derspros/lemon-app/.env` olarak **elle** oluşturulur.
-**Repoya girmez, deploy tarafından gönderilmez, üzerine yazılmaz.**
+### 5.1 Production `.env` şablonu
+
+Sunucuda `/home/derspros/lemon-app/.env` olarak **elle** oluşturulur (cPanel File
+Manager → Edit). **Repoya girmez, deploy tarafından gönderilmez, üzerine yazılmaz.**
 
 ```dotenv
 APP_NAME="Otel Cari Takip"
 APP_ENV=production
-APP_KEY=                       # ← sunucuda üretilir, buraya YAZILMAZ (§5.1)
+APP_KEY=                       # ← §5.2'de üretilip BURAYA yapıştırılır
 APP_DEBUG=false
 APP_URL=https://lemon.derspros.com.tr
 APP_TIMEZONE=Europe/Istanbul
@@ -230,16 +240,16 @@ APP_MAINTENANCE_DRIVER=file
 BCRYPT_ROUNDS=12
 
 LOG_CHANNEL=stack
-LOG_STACK=daily
+LOG_STACK=daily                # tek dev dosya yerine günlük dosyalar
 LOG_LEVEL=error                # production'da debug DEĞİL
 LOG_DEPRECATIONS_CHANNEL=null
 
 DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
+DB_HOST=localhost              # cPanel'de yerel soket; 127.0.0.1 de çalışır
 DB_PORT=3306
-DB_DATABASE=derspros_lemon     # cPanel'de oluşturulan gerçek ad
-DB_USERNAME=derspros_lemon
-DB_PASSWORD=                   # ← cPanel'de üretilen parola
+DB_DATABASE=derspros_lemon
+DB_USERNAME=derspros_sebahattin
+DB_PASSWORD=                   # ← cPanel'de üretilen parola, elle yapıştırılır
 DB_CHARSET=utf8mb4
 DB_COLLATION=utf8mb4_turkish_ci
 
@@ -250,38 +260,225 @@ SESSION_ENCRYPT=false
 SESSION_PATH=/
 SESSION_DOMAIN=null
 SESSION_SECURE_COOKIE=true     # HTTPS zorunlu olduğu için
+SESSION_HTTP_ONLY=true
+SESSION_SAME_SITE=lax
+
 CACHE_STORE=database
 QUEUE_CONNECTION=sync
 BROADCAST_CONNECTION=log
 FILESYSTEM_DISK=local
 
-MAIL_MAILER=log                # V1'de e-posta gönderimi yok (CLAUDE.md §3.2)
+# V1'de e-posta GÖNDERİLMEZ (CLAUDE.md §3.2). `log` sürücüsü, yanlışlıkla
+# tetiklenen bir e-postayı ağa çıkarmaz; günlüğe yazar. SMTP bilgisi girilmez.
+MAIL_MAILER=log
 MAIL_FROM_ADDRESS="noreply@lemon.derspros.com.tr"
 MAIL_FROM_NAME="${APP_NAME}"
+
+# İlk yönetici hesabı — db:seed BUNLARI okur (§6.3).
+# Boş bırakılırsa seeder admin@example.com / "degistir-beni" oluşturur: AÇIK KAPI.
+SEED_ADMIN_EMAIL=
+SEED_ADMIN_NAME="Sistem Yöneticisi"
+SEED_ADMIN_PASSWORD=
 ```
 
-### 5.1 `APP_KEY`
+`APP_KEY`, `DB_PASSWORD` ve `SEED_ADMIN_PASSWORD` **repoya, GitHub'a, CI çıktısına
+veya sohbete yazılmaz**; yalnızca sunucudaki bu dosyada yaşarlar.
 
-Repoda üretilmez, GitHub'a konmaz, bu dosyaya yazılmaz. Sunucuda bir kez:
+### 5.2 `APP_KEY` — SSH olmadan üretim
 
+`php artisan key:generate --force` sunucuda çalıştırılamaz (SSH yok, uygulama henüz
+ayakta değil). Anahtar **ortamdan bağımsızdır**: 32 rastgele bayttır, nerede
+üretildiğinin önemi yoktur. Bu yüzden yerelde üretilip `.env`'e yapıştırılır.
+
+**Yol A (Laravel varsa) — önerilen:**
 ```bash
-php artisan key:generate --force
+php artisan key:generate --show
+```
+`--show` anahtarı yalnızca **ekrana yazar**, hiçbir `.env` dosyasına dokunmaz
+(yerelde doğrulandı).
+
+**Yol B (Laravel yoksa) — birebir eşdeğer:**
+```bash
+echo "base64:$(openssl rand -base64 32)"
+```
+Doğrulandı: her iki yol da `base64:` öneki + **32 ham bayt** üretir; Laravel'in
+`aes-256-cbc` için beklediği biçim budur.
+
+Çıktı doğrudan cPanel File Manager'da `.env` içindeki `APP_KEY=` satırına
+yapıştırılır. Terminal geçmişini temizlemek iyi olur.
+
+> **Uyarı:** uygulama canlıya girdikten sonra `APP_KEY` değiştirilirse tüm oturumlar
+> ve şifrelenmiş veriler okunamaz hâle gelir. Yedeklenmesi gereken bir sırdır.
+> V1'de şifrelenmiş kolon yoktur; yine de oturumlar düşer.
+
+### 5.3 PHP eklentileri — kesin liste
+
+Otorite tahmin değil, `composer.lock`'tur. Kilitteki **üretim** paketlerinin
+istediği eklentiler:
+
+`ctype`, `dom`, `fileinfo`, `filter`, `hash`, `iconv`, `json`, `libxml`,
+`mbstring`, `openssl`, `pcre`, `session`, `tokenizer`
+
+Buna Composer'ın göremediği **runtime** gereksinimi eklenir: `pdo` + `pdo_mysql`.
+
+| Eklenti | Durum | Not |
+|---|---|---|
+| `pdo_mysql` | **ZORUNLU** | Zaten açıldığı bildirildi ✓ |
+| `mbstring` | **ZORUNLU** | Türkçe karakter işleme; polyfill var ama yavaş |
+| `openssl` | **ZORUNLU** | `APP_KEY`, HTTPS, hash |
+| `tokenizer`, `ctype`, `fileinfo`, `filter`, `hash`, `iconv`, `json`, `pcre`, `session` | **ZORUNLU** | Neredeyse tüm cPanel PHP kurulumlarında öntanımlı açık |
+| `dom` + `libxml` | **ZORUNLU** | `tijsverkoyen/css-to-inline-styles` (Laravel mail bağımlılığı) yükleniyor |
+| `intl` | **gerekmiyor** | Kilitte yok; kodda `NumberFormatter`/`Collator` kullanılmıyor. Türkçe biçimleme elle yapılıyor |
+| `curl` | **gerekmiyor** | V1'de dış HTTP çağrısı yok |
+| `zip` | **şimdi değil, Gün 10'da GEREKECEK** | `maatwebsite/excel` için. Aynı ziyarette açılması işi ikiye bölmez |
+| `gd` | **gerekmiyor** | Görsel işleme yok; Excel'de de zorunlu değil |
+| `bcmath` | **GEREKMİYOR** | Açıldığı bildirildi, zararı yok ama **kullanılmıyor**: `Core\Support\Money` tamsayı kuruş aritmetiği yapar, `bcmath` bilinçli olarak reddedilmiştir (CLAUDE.md §13) |
+| `imagick` | gerekmiyor | — |
+
+**cPanel'de ayrıca kontrol edilecekler:** `mbstring`, `dom`/`libxml`, `openssl`,
+`fileinfo`, `tokenizer` — ve Gün 10 için `zip`.
+
+`build` işi zaten her deploy'da `composer check-platform-reqs --no-dev` çalıştırır;
+kilit ile hedef PHP arasında uyumsuzluk olursa aktarımdan **önce** durur.
+
+### 5.4 Dizin izinleri
+
+Sunucuda elle oluşturulan yapı yalnızca şu iki ağaçta yazılabilir olmalıdır:
+
+```
+/home/derspros/lemon-app/
+├── storage/            ← yazılabilir (log, oturum, önbellek, view)
+└── bootstrap/cache/    ← yazılabilir (paket keşfi, config/route/view cache)
 ```
 
-**Uygulama canlıya girdikten sonra `APP_KEY` değiştirilirse tüm oturumlar ve
-şifrelenmiş veriler okunamaz hâle gelir.** Yedeklenmesi gereken bir sırdır.
+| Yol | İzin | Neden |
+|---|---|---|
+| `lemon-app/` ve altındaki kod dizinleri | **755** (dizin) / **644** (dosya) | Yalnızca okuma+çalıştırma yeter |
+| `storage/` (özyinelemeli) | **755** | Paylaşımlı hostingde PHP, dosyaların **sahibi** olarak çalışır (suPHP/CGI) — sahibin yazma hakkı yeterlidir |
+| `bootstrap/cache/` | **755** | Aynı gerekçe |
+
+**775 gerekli mi?** Yalnızca PHP'nin farklı bir kullanıcı (`nobody`, `apache`) olarak
+çalıştığı ve dosya sahibiyle **aynı gruba** düştüğü kurulumlarda. cPanel'de standart
+olan suPHP/FCGI modelinde PHP hesabın kendi kullanıcısı olarak çalışır ve 755 yeter.
+Deploy sonrası `storage/logs/laravel.log` yazılamıyorsa **o zaman** `storage/` ve
+`bootstrap/cache/` için 775 denenir.
+
+**777 KULLANILMAZ.** Gerekçe: 777, sunucudaki *diğer* hesapların da yazabilmesi
+demektir. Aynı cPanel hesabında başka canlı siteler bulunduğu için bu, oturum
+dosyalarının ve günlüklerin komşu bir siteden değiştirilebilmesi anlamına gelir.
+Yazma sorunu 777 ile "çözülüyorsa" gerçek sorun sahiplik/SELinux'tur ve orada
+düzeltilir.
+
+**Deploy bu dizinlere dokunmaz:** artifact hazırlığında `storage` ve
+`bootstrap/cache` silinir, FTP adımında ayrıca `exclude` edilir (§4).
+
+### 5.5 `storage:link` — V1'de GEREKMİYOR
+
+Karar: **ilk deploy'da atlanır.**
+
+Gerekçe (kod taranarak doğrulandı, varsayım değil): uygulamada `Storage::` çağrısı,
+`disk('public')` kullanımı, `->store(...)` ile dosya yükleme veya `asset('storage/...')`
+bağlantısı **hiç yok**. V1 kapsamında dosya yükleme özelliği bulunmuyor (CLAUDE.md §3.2).
+`public/storage` sembolik bağı olmayan bir kurulumda hiçbir ekran bozulmaz.
+
+Gelecekte gerekirse: `php artisan storage:link` §6.1'deki yöntemle çalıştırılır;
+FTP üzerinden sembolik bağ oluşturulamaz, cPanel File Manager de symlink üretmez.
 
 ---
 
-## 6. Migration stratejisi — cron + işaret dosyası
+## 6. İlk deploy sonrası: artisan komutları ve nasıl çalıştırılacağı
 
-Karar korunuyor (Gün 3, `docs/deploy-github-actions.md` §6):
+### 6.0 Değişmeyen kural
 
 > **İnternete açık `/migrate`, `/deploy`, `/artisan` benzeri bir HTTP ucu
-> KESİNLİKLE oluşturulmaz.** Token korumalı uç reddedilmiştir: token sızarsa
+> KESİNLİKLE oluşturulmaz.** Token korumalı uç da reddedilmiştir: token sızarsa
 > veritabanı şeması uzaktan değiştirilebilir.
 
-Tasarlanan akış:
+### 6.1 Çalıştırılacak komutlar — sırayla
+
+```bash
+php artisan migrate --force          # 1. şema (TRIGGER sınavı burada — §8)
+php artisan db:seed --force          # 2. roller, yetkiler, TEK admin (§6.3)
+php artisan config:cache             # 3.
+php artisan route:cache              # 4.
+php artisan view:cache               # 5.
+php artisan event:cache              # 6.
+```
+
+Notlar:
+
+- **`route:cache` bu projede çalışıyor** — yerelde doğrulandı. Route dosyalarındaki
+  closure'lar yalnızca `Route::group(...)` sarmalayıcılarıdır; önbelleklemeyi
+  engelleyen şey *route eyleminin* closure olmasıdır ve öyle bir route yok.
+- `config:cache` sonrası **uygulama kodundan `env()` null döner.** Proje buna zaten
+  uyumlu: `env()` çağrıları yalnızca `config/` altındadır (`config/hotel.php` dahil).
+- `optimize` = `config:cache` + `route:cache` + `view:cache` + `event:cache`.
+  Tek komut tercih edilirse `php artisan optimize` yeterlidir; ayrı ayrı çalıştırmak
+  hangi adımın patladığını görmeyi kolaylaştırır.
+- `storage:link` **çalıştırılmaz** (§5.5).
+- `queue:*` yoktur — `QUEUE_CONNECTION=sync` (CLAUDE.md §2).
+
+**Kod her değiştiğinde** (sonraki deploy'larda) 3–6 tekrarlanır; `migrate --force`
+yalnızca yeni migration varsa gerekir ama çalıştırmak zararsızdır.
+
+### 6.2 SSH yokken bu komutlar nasıl çalıştırılır
+
+Seçenekler, **güvenlik ve basitlik sırasıyla**:
+
+| # | Yöntem | Değerlendirme |
+|---|---|---|
+| **A** | **cPanel → Terminal** | **Önerilen — varsa.** Gerçek bir kabuk; komutlar tek tek çalıştırılır, çıktı anında görülür, kalıcı hiçbir mekanizma kurulmaz. İlk deploy tam olarak bunu ister: **görerek** ilerlemek. Hosting'te bu özellik kapalı olabilir — cPanel ana ekranında "Terminal" kutusu var mı, bakılmalı. |
+| **B** | **cPanel → Cron Jobs, tek seferlik** | Terminal yoksa en iyisi. Cron satırı elle eklenir, bir kez çalışır, **çıktı bir dosyaya yazılır**, sonra cron **silinir**. Kalıcı `finalize.php` altyapısı kurulmadan ilk deploy tamamlanır. |
+| **C** | Kalıcı cron + işaret dosyası (`finalize.php`) | §6.4'teki tasarım. **İlk deploy için değil**: hata ayıklaması zor, ilk kurulumda görünürlük düşük. Otomatikleşecekse *sonraki* deploy'lar için kurulur. |
+| **D** | HTTP ucu | **YASAK.** |
+
+**Yöntem B'nin somut hâli** (Terminal yoksa) — cPanel → Cron Jobs → Add New Cron Job,
+"Once Per Five Minutes" seçilip komut olarak:
+
+```bash
+cd /home/derspros/lemon-app && /usr/local/bin/ea-php83 artisan migrate --force \
+  >> /home/derspros/lemon-setup.log 2>&1
+```
+
+Çalıştıktan sonra **cron silinir**, `lemon-setup.log` File Manager'dan okunur,
+sonra sıradaki komut için aynı şey tekrarlanır. Yavaş ama tamamen görünür ve
+geriye hiçbir kalıcı yürütme yolu bırakmaz.
+
+> PHP CLI yolu hosting'e göre değişir (`ea-php83`, `/opt/cpanel/ea-php83/root/usr/bin/php`).
+> İlk cron'da `which php; php -v` çalıştırıp doğru yolu tespit etmek en sağlamıdır.
+
+### 6.3 İlk admin kullanıcısı
+
+**Seeder production'a hazır — ek kod gerekmiyor.** Boş bir veritabanında
+`APP_ENV=production` ile prova edildi:
+
+- `RolePermissionSeeder` → **3 rol, 20 yetki** kurar (CLAUDE.md §7.2/§7.3).
+- **Tek bir admin** oluşturulur; e-posta/ad/parola `.env`'deki `SEED_ADMIN_*`
+  değerlerinden okunur.
+- **Demo `patron@example.com` / `personel@example.com` hesapları oluşturulmaz** —
+  `DatabaseSeeder` bunları yalnızca `local`/`testing` ortamında yaratır. Provada
+  veritabanında yalnızca admin çıktı.
+- Parola `User` modelindeki `'password' => 'hashed'` cast'i ile **bcrypt'lenerek**
+  yazılır; hiçbir yerde düz metin tutulmaz veya loglanmaz.
+
+> **BLOCKER — varsayılan parola açık kapısı.** `SEED_ADMIN_PASSWORD` `.env`'de
+> **boş bırakılırsa** `config/hotel.php` varsayılanı devreye girer ve seeder
+> `admin@example.com` / `degistir-beni` hesabı oluşturur. Negatif test yapıldı:
+> bu parola gerçekten geçerli. **`db:seed` çalıştırılmadan önce `.env`'de
+> `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` mutlaka doldurulmalıdır.**
+
+Geçici parola için: `openssl rand -base64 24`. Parola `.env`'e yazılır, seeder
+çalıştıktan **sonra** `.env`'den silinebilir (seeder yeniden çalıştırılmadıkça
+gerekmez).
+
+**İlk girişte parola değiştirme:** Admin, `/users/{id}/edit` ekranından kendi
+parolasını değiştirebilir (`UserPolicy::update` yalnızca `users.manage` ister;
+admin kendi kaydını düzenleyebilir). **Zorunlu parola değiştirme akışı V1'de
+yoktur** ve Patron/Personel kendi parolasını değiştiremez — yalnızca admin
+değiştirebilir. Bu bir V1 boşluğudur, deploy blocker'ı değildir; ayrı bir iş
+olarak not düşülmüştür.
+
+### 6.4 Kalıcı otomasyon (henüz KURULMADI)
 
 ```
 GitHub deploy  →  storage/app/deploy-pending işaret dosyası
@@ -289,28 +486,16 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
               cPanel cron (dakikada bir)
                         ↓
        işaret var mı? → php artisan migrate --force
-                        → config:cache / route:cache / view:cache
+                        → config:cache / route:cache / view:cache / event:cache
                         ↓
         başarılı → günlüğe yaz + işaret dosyasını SİL
         başarısız → işaret dosyası KALIR + hata günlüğe yazılır
-                    (sonraki cron tekrar dener, sorun görünür kalır)
 ```
 
-Planlanan cron satırı:
-
-```bash
-* * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
-          >> /home/derspros/lemon-deploy.log 2>&1
-```
-
-**`finalize.php` bu turda YAZILMADI** ve production cron kurulmadı — talimat
-gereği yalnızca tasarım dokümante edildi. Yazıldığında taşıması gerekenler:
-
-- işaret dosyası yoksa hiçbir şey yapmadan çıkmak (cron her dakika koşar)
-- eşzamanlı iki çalıştırmayı engelleyen kilit
-- `migrate --force` çıktısını ve çıkış kodunu günlüğe yazmak
-- **başarısızlıkta işaret dosyasını silmemek**
-- yalnızca CLI'dan çalışabilmek (`php_sapi_name() === 'cli'` değilse çıkmak)
+`finalize.php` yazıldığında taşıması gerekenler: işaret yoksa hemen çıkmak,
+eşzamanlı çalıştırmayı engelleyen kilit, çıkış kodunu günlüğe yazmak,
+**başarısızlıkta işaret dosyasını silmemek**, `php_sapi_name() === 'cli'` değilse
+çıkmak. **İlk deploy'da kullanılmaz** (§6.2/C).
 
 ---
 
@@ -487,16 +672,20 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
    ```
    İzin `755` (hosting `750` istiyorsa ona uyun).
    **Bu dizinlere hiçbir deploy dokunmayacak.**
-2. **`.env`** dosyasını `/home/derspros/lemon-app/.env` olarak §5'teki şablonla
-   oluşturun. Gerçek DB bilgilerini girin, `APP_KEY` satırını boş bırakın.
+2. **`.env`** dosyasını `/home/derspros/lemon-app/.env` olarak §5.1'deki şablonla
+   oluşturun. Gerçek DB bilgilerini girin. `APP_KEY` §5.2'ye göre **yerelde
+   üretilip yapıştırılır** (sunucuda `key:generate` çalıştırılamaz — SSH yok).
+   `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` **mutlaka doldurulur** (§6.3).
 3. **Veritabanı:** Lemon için ayrı veritabanı + kullanıcı, collation
    **`utf8mb4_turkish_ci`** (Türkçe arama davranışı buna bağlı — CLAUDE.md §9).
 4. ~~**TRIGGER yetkisi**~~ — **blocker değil** (§8). cPanel Manage Databases'te
    `derspros_sebahattin` → `derspros_lemon` → TÜM AYRICALIKLAR atanmış durumda.
    Kesin doğrulama ilk gerçek migration'da yapılacak: `CREATE TRIGGER`
    başarısız olursa migration fail eder ve **DocumentRoot değiştirilmez**.
-5. **PHP eklentileri:** `mbstring, pdo_mysql, intl, zip, gd, xml, ctype,
-   fileinfo, openssl, tokenizer` etkin mi?
+5. **PHP eklentileri:** kesin liste artık §5.3'tedir (`composer.lock`'tan
+   çıkarıldı). cPanel'de ayrıca bakılacaklar: `mbstring`, `dom`/`libxml`,
+   `openssl`, `fileinfo`, `tokenizer` — ve Gün 10 (Excel export) için `zip`.
+   `intl`, `gd`, `curl` ve `bcmath` **gerekmiyor**.
 6. ~~**FTP kökünü belirleyin**~~ — **TAMAMLANDI** (§12). FileZilla ile ana FTP
    hesabına bağlanıldı; uzak kökte `lemon-app`, `lemon.derspros.com.tr`,
    `nuvernatrade.com` klasörleri doğrudan göründü. Kök = `/home/derspros`,
@@ -514,18 +703,23 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
 
 ### Aşama 3 — İlk gerçek deploy
 
-10. Dry-run temizse `DEPLOY_ENABLED=true` oluşturulur ve workflow
-    `mode: deploy` + `confirm_target: lemon.derspros.com.tr` ile çalıştırılır.
-11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6):
-    `php artisan key:generate --force`, `migrate --force`, `storage:link`,
-    `config:cache route:cache view:cache`.
+10. Dry-run temizse `DEPLOY_ENABLED=true` **repository variable** olarak
+    oluşturulur ve workflow `mode: deploy` +
+    `confirm_target: lemon.derspros.com.tr` + **Branch: `develop`** ile
+    çalıştırılır. Run yeşil olunca `DEPLOY_ENABLED` hemen **`false`** yapılır
+    (§16 — kilit normalde kapalı durur).
+11. Deploy sonrası sunucuda, §6.2'deki yöntemle (cPanel Terminal varsa onunla;
+    yoksa tek seferlik cron) §6.1'deki komutlar sırayla:
+    `migrate --force` → `db:seed --force` → `config:cache` → `route:cache` →
+    `view:cache` → `event:cache`.
+    `key:generate` **çalıştırılmaz** (anahtar §5.2'de `.env`'e yazıldı);
+    `storage:link` **gerekmiyor** (§5.5).
     **`migrate --force` burada TRIGGER yetkisinin gerçek sınavıdır (§8).**
     Hata verirse durun ve Aşama 4'e **geçmeyin**.
 
 ### Aşama 4 — DocumentRoot değişikliği (EN SON)
 
-12. **Ancak dosyalar sunucuda, migration'lar HATASIZ tamamlanmış ve uygulama
-    hazır olduğunda:**
+12. **Ancak §15'teki 11 maddelik checklist'in TAMAMI doğru olduğunda:**
     cPanel → Domains → `lemon.derspros.com.tr` → Document Root:
     `/home/derspros/lemon-app/public` → Güncelle.
 13. §7'deki güvenlik doğrulamasını koşun.
@@ -577,31 +771,41 @@ yeniden düşünülmelidir. Bu yüzden **bugün değiştirilmedi**; kararı size
 
 ---
 
-## 13. Rollback — analiz (uygulanmadı)
+## 13. Rollback — V1 planı (kesinleştirildi)
 
-**Bu turda rollback sistemi KURULMADI**; yalnızca değerlendirildi.
+**Kritik avantaj:** DocumentRoot hâlâ `/home/derspros/lemon.derspros.com.tr`'yi
+gösteriyor. Yani ilk gerçek deploy sırasında **Lemon alan adına gelen trafik yeni
+uygulamaya hiç yönlenmiyor.** İlk deploy ve migration, canlı kullanıcı olmadan
+yapılıyor. Bu, rollback ihtiyacını neredeyse sıfıra indirir.
 
-FTPS senkronizasyonu **yerinde güncelleme** yapar: eski sürümün üzerine yazar.
-Bu, hata hâlinde geri dönüşü kendiliğinden mümkün kılmaz. Değerlendirilen üç yol:
+### Deploy öncesi
 
-| Yaklaşım | Artı | Eksi |
-|---|---|---|
-| **A. Deploy öncesi elle yedek** — `lemon-app/` klasörünün cPanel File Manager ile sıkıştırılmış kopyası | Basit, ek altyapı yok, bugün uygulanabilir | Elle; unutulursa yok. Büyük dosyada yavaş |
-| **B. Sürümlü dizin + symlink** (`releases/<sha>/` + `current` symlink) | Anında geri dönüş, sıfır kesinti | FTPS ile symlink oluşturmak güvenilir değil; SSH ister — bu projede yok |
-| **C. Git ile ileri düzeltme** — hatalı commit'i düzeltip yeniden deploy | Mevcut akışa uyar, ek şey gerektirmez | Geri dönüş süresi bir CI koşusu kadar (~3 dk) |
+| Soru | Cevap |
+|---|---|
+| `lemon-app/` klasörünün yedeği gerekli mi? | **Hayır.** İçinde yalnızca elle oluşturulmuş boş `storage/`, `bootstrap/cache/` ve `.env` var. **`.env`'in bir kopyası** yine de yerelde/parola kasasında tutulmalı — tek gerçek kayıp riski odur. |
+| Migration öncesi `mysqldump` gerekli mi? | **Hayır** — `derspros_lemon` boş. Boş veritabanının dump'ı bilgi taşımaz. Geri dönüş yolu: veritabanını cPanel'den silip yeniden oluşturmak (ya da `migrate:fresh`). |
 
-**Önerim: A + C birlikte.** Her gerçek deploy öncesi `lemon-app/` klasörünün
-yedeği alınır (dosya tarafı), veritabanı için ayrıca `mysqldump` alınır
-(CLAUDE.md §15'te zaten günlük yedek cron'u planlı). Kod hatasında C ile ileri
-düzeltme yapılır; ciddi bozulmada A geri yüklenir.
+### Deploy sonrası, DocumentRoot değişmeden önce
 
-**Kritik ayrım — veritabanı rollback'i ayrı bir konudur:** migration'lar
-ileri alınmıştır ve `ledger_entries` **append-only**'dir (CLAUDE.md §6/L1).
-Dosya yedeğini geri yüklemek veritabanını geri almaz. Şema değişikliği içeren
-bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
-"canlıda `migrate:rollback` yerine ileri düzeltme migration'ı" der.
+Bir şey ters giderse **hiçbir şey geri alınmaz** — sadece durulur. Kimse etkilenmez.
+Düzeltilir ve tekrar denenir.
 
-**Uygulama zamanı:** ilk gerçek deploy öncesi, ayrı bir turda.
+### DocumentRoot değiştikten sonra
+
+**Geri dönüş tek adımdır ve saniyeler sürer:** cPanel → Domains →
+`lemon.derspros.com.tr` → Document Root'u eski değerine
+(`/home/derspros/lemon.derspros.com.tr`) geri al. Eski dizin **silinmediği için**
+olduğu gibi geri gelir.
+
+> **Bu yüzden eski `/home/derspros/lemon.derspros.com.tr` dizini, yeni uygulama
+> birkaç gün sorunsuz çalışana kadar SİLİNMEZ.** Rollback mekanizmamız odur.
+
+Veri tarafı: `ledger_entries` append-only'dir (CLAUDE.md §6/L1) ve migration'lar
+ileri alınır. Dosya geri alma veritabanını geri almaz; **şema değiştiren** bir
+sonraki deploy'dan önce `mysqldump` alınmalıdır (o zaman veri olacaktır).
+
+**Kurulmayan:** sürümlü dizin + symlink (B) elendi — FTPS ile güvenilir symlink
+kurulamıyor ve SSH yok.
 
 ---
 
@@ -619,3 +823,57 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
 - **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı
+
+---
+
+## 15. DocumentRoot geçiş kriteri — kesin checklist
+
+DocumentRoot şu an: `/home/derspros/lemon.derspros.com.tr`
+Hedef: `/home/derspros/lemon-app/public`
+
+**Aşağıdakilerin HEPSİ doğru olmadan DocumentRoot değiştirilmez.**
+Sıra bağlayıcıdır; her madde bir öncekine dayanır.
+
+| # | Kriter | Nasıl doğrulanır |
+|---|---|---|
+| 1 | Gerçek deploy başarıyla tamamlandı | Actions run yeşil; "Gerçek aktarım tamamlandı" özeti |
+| 2 | `.env` sunucuda ve eksiksiz | File Manager'da `/home/derspros/lemon-app/.env` var; §5.1'deki tüm anahtarlar dolu |
+| 3 | `APP_KEY` dolu ve `base64:` ile başlıyor | `.env` içinde göz kontrolü (§5.2) |
+| 4 | `SEED_ADMIN_EMAIL` ve `SEED_ADMIN_PASSWORD` dolu | §6.3 blocker'ı — varsayılan parola kapısı kapalı |
+| 5 | DB bağlantısı doğrulandı | `php artisan migrate --force` hatasız bağlandı (ayrı bir test gerekmez) |
+| 6 | `migrate --force` **hatasız** bitti, 13 migration | Çıktıda 13 satır `DONE` |
+| 7 | **Tetikleyiciler oluştu** | phpMyAdmin → `SHOW TRIGGERS;` → `ledger_entries_block_update` ve `ledger_entries_block_delete`. **Yoksa DURULUR** (§8) |
+| 8 | `db:seed --force` çalıştı; admin hazır | `users` tablosunda **tek** kullanıcı, `roles` = 3, `permissions` = 20; demo hesap YOK |
+| 9 | Cache komutları hatasız | `config:cache`, `route:cache`, `view:cache`, `event:cache` (§6.1) |
+| 10 | `storage/` ve `bootstrap/cache/` yazılabilir | `storage/logs/` altında dosya oluştu; hata yok (§5.4) |
+| 11 | Uygulama `public/index.php` seviyesinde ayağa kalkıyor | Geçici doğrulama: aynı hesaptaki bir alt alan adını **geçici olarak** `lemon-app/public`'e yöneltmek yerine, cron ile `php artisan about` çalıştırıp çıktının hatasız olduğunu görmek yeterlidir |
+
+**11 için not:** DocumentRoot değişmeden HTTP üzerinden test etmenin temiz bir yolu
+yok — bu, geçişin kaçınılmaz "tek yönlü kapı" anıdır. Riski düşüren şey §13'teki
+geri dönüş: eski dizin duruyor, DocumentRoot saniyeler içinde geri alınabiliyor.
+
+Geçişten hemen sonra: §7'deki güvenlik doğrulaması koşulur
+(`https://lemon.derspros.com.tr/.env` → 403/404 olmalı).
+
+---
+
+## 16. `DEPLOY_ENABLED` operasyon modeli
+
+| Soru | Karar | Gerekçe |
+|---|---|---|
+| **Variable mı secret mı?** | **Repository *variable*** | Gizli bilgi değil, bir *anahtar*. Variable olarak değeri gözden geçirilebilir ve loglarda görünmesi zararsızdır. Secret yapmak yanlış güvenlik hissi verir: sır olmayan bir şeyi gizlemek, kimin ne zaman açtığını izlemeyi zorlaştırır. |
+| **Değeri tam olarak ne?** | **`true`** (küçük harf, tırnaksız, boşluksuz) | Guard `[ "$ENABLED" != "true" ]` ile **tam eşleşme** arar. `True`, `TRUE`, `1`, `yes` **çalışmaz** — bu bilinçlidir: yanlışlıkla "doğru gibi görünen" bir değerle açılmasın. |
+| **Ne zaman oluşturulmalı?** | §15'teki 1–4. maddeler hazır olduğunda, **gerçek deploy'a basmadan hemen önce** | Daha erken oluşturmak, kilidi aylarca açık bırakır. |
+| **Deploy sonrası kaldırılmalı mı?** | **Evet — ilk deploy'dan sonra `false` yapılır veya silinir** | Asıl model: **kilit normalde kapalıdır**, yalnızca bilinçli bir deploy için açılır ve hemen kapatılır. Böylece depoya yazma yetkisi olan biri "Run workflow"a basarak canlıyı ezemez. |
+
+**Önerilen operasyonel akış — her gerçek deploy için:**
+
+1. `DEPLOY_ENABLED` = `true` yap
+2. Workflow'u `mode: deploy` + `confirm_target: lemon.derspros.com.tr` +
+   **Branch: `develop`** ile çalıştır
+3. Run yeşil → `DEPLOY_ENABLED`'ı **`false` yap** (silmek yerine `false` bırakmak,
+   değişkenin varlığını ve son kullanımını görünür tutar)
+4. §6.1'deki artisan komutlarını çalıştır
+
+Bu, "üç kilitten biri kalıcı olarak açık kalır" hatasını yapısal olarak engeller.
+

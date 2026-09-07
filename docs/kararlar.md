@@ -707,3 +707,105 @@ fark yalnızca **upload** üretir, **delete üretmez**. İlk gerçek aktarım su
 önceden bulunan dosyaları silmez. İlk çalıştırmanın dry-run olması önerisi yine de
 geçerlidir — hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
 
+## K-072 · `APP_KEY` yerelde üretilip `.env`'e yapıştırılır
+**Bağlam:** SSH yok; `php artisan key:generate --force` sunucuda çalıştırılamaz ve
+uygulama henüz ayakta değil. Belge daha önce yanlışlıkla "sunucuda üretilir" diyordu.
+**Karar:** anahtar **ortamdan bağımsızdır** (32 rastgele bayt), yerelde üretilip cPanel
+File Manager ile `.env`'e yapıştırılır.
+**Yol A:** `php artisan key:generate --show` — yalnızca ekrana yazar, hiçbir `.env`
+dosyasına dokunmaz (yerelde doğrulandı).
+**Yol B (Laravel yoksa, birebir eşdeğer):** `echo "base64:$(openssl rand -base64 32)"`.
+**Doğrulama:** her iki yol da `base64:` öneki + tam **32 ham bayt** üretti; Laravel'in
+`aes-256-cbc` için beklediği biçim budur.
+**Kural:** anahtar repoya, GitHub'a, CI çıktısına veya sohbete yazılmaz.
+
+## K-073 · `storage:link` V1'de gerekmiyor; ilk deploy'da atlanır
+**Yöntem:** kod tarandı — `Storage::`, `disk('public')`, `->store(...)`,
+`asset('storage/...')` kullanımı **hiç yok**. V1'de dosya yükleme özelliği yok (§3.2).
+**Karar:** `public/storage` sembolik bağı olmadan hiçbir ekran bozulmaz; ilk deploy'da
+çalıştırılmaz. FTP ile symlink kurulamıyor, cPanel File Manager da üretmiyor; gerekirse
+ileride §6.2'deki yöntemle çalıştırılır.
+
+## K-074 · PHP eklenti listesinin otoritesi `composer.lock`'tur
+**Yöntem:** kilitteki üretim paketlerinin `ext-*` gereksinimleri çıkarıldı; tahmin
+edilmedi. Zorunlu: `ctype, dom, fileinfo, filter, hash, iconv, json, libxml, mbstring,
+openssl, pcre, session, tokenizer` + runtime `pdo`/`pdo_mysql`.
+**Gerekmiyor:** `intl`, `curl`, `gd`, `imagick`.
+**`bcmath` GEREKMİYOR** — açıldığı bildirildi, zararı yok ama kullanılmıyor:
+`Core\Support\Money` tamsayı kuruş aritmetiği yapar ve `bcmath` bilinçli olarak
+reddedilmiştir (CLAUDE.md §13).
+**`zip` Gün 10'da gerekecek** (`maatwebsite/excel`); aynı ziyarette açılması önerilir.
+
+## K-075 · Dizin izinleri 755; 777 kullanılmaz
+**Karar:** kod dizinleri 755/644; `storage/` ve `bootstrap/cache/` **755**. cPanel'in
+standart suPHP/FCGI modelinde PHP hesabın kendi kullanıcısı olarak çalışır, sahibin
+yazma hakkı yeterlidir. Yazma hatası çıkarsa **önce 775** denenir.
+**777 reddedildi:** aynı cPanel hesabında başka canlı siteler var; 777, oturum
+dosyalarının ve günlüklerin komşu bir siteden değiştirilebilmesi demektir. Yazma sorunu
+777 ile "çözülüyorsa" gerçek sorun sahipliktedir ve orada düzeltilir.
+
+## K-076 · İlk deploy sonrası komutlar cPanel Terminal ile, yoksa tek seferlik cron ile
+**Karar sırası:** (A) cPanel Terminal — varsa önerilen: görerek ilerlenir, kalıcı
+mekanizma kurulmaz. (B) Terminal yoksa tek seferlik cron: komut çalışır, çıktı dosyaya
+yazılır, **cron silinir**. (C) Kalıcı cron + `finalize.php` ilk deploy için değil,
+sonraki deploy'ların otomasyonu için. (D) HTTP ucu **YASAK** (K-039).
+**Komut sırası:** `migrate --force` → `db:seed --force` → `config:cache` →
+`route:cache` → `view:cache` → `event:cache`.
+**Doğrulanan:** dördü de yerelde hatasız çalıştı. `route:cache` bu projede **çalışıyor**
+— route dosyalarındaki closure'lar yalnızca `Route::group()` sarmalayıcılarıdır,
+önbelleklemeyi engelleyen *route eylemi* closure'ı yoktur.
+`key:generate` çalıştırılmaz (K-072), `storage:link` çalıştırılmaz (K-073).
+
+## K-077 · Migration zinciri boş veritabanında prova edildi
+**Yöntem:** boş bir veritabanında `migrate:fresh --force` — canlı senaryonun birebir provası.
+**Sonuç: 13 migration, hepsi DONE.** Sıra: users(+password_reset_tokens+sessions) →
+cache(+cache_locks) → jobs → permission_tables → audit_logs → is_system → companies →
+ledger_entries → **protect_ledger_entries (2 tetikleyici)** → stays → pricing_mode →
+payments → cheque.
+**`SHOW TRIGGERS` doğrulandı:** `ledger_entries_block_update` ve
+`ledger_entries_block_delete` oluştu.
+**Session/cache tabloları var:** `sessions` Laravel'in `create_users_table`'ı içinde,
+`cache` + `cache_locks` `create_cache_table` içinde. `SESSION_DRIVER=database` ve
+`CACHE_STORE=database` için ek migration **gerekmiyor** — blocker yok.
+**Taşınabilirlik:** `cheque` migration'ı `ALTER TABLE … DROP CONSTRAINT` kullanır;
+MySQL 8.0.19+ ve MariaDB 10.2+ destekler. Yerelde MariaDB 10.11, CI'da MySQL 8.4 —
+iki motorda da geçiyor.
+
+## K-078 · İlk admin seeder'dan; demo hesap production'da oluşmuyor — ama varsayılan parola blocker'ı var
+**Doğrulama (boş DB, `APP_ENV=production`):** `RolePermissionSeeder` **3 rol / 20 yetki**
+kurar; **tek** admin oluşur; `patron@example.com` ve `personel@example.com` demo
+hesapları **oluşmaz** (`DatabaseSeeder` onları yalnızca `local`/`testing`'de yaratır).
+Parola `User` modelinin `'password' => 'hashed'` cast'iyle bcrypt'lenir; düz metin
+hiçbir yerde tutulmaz veya loglanmaz.
+**BLOCKER:** `SEED_ADMIN_PASSWORD` `.env`'de boşsa `config/hotel.php` varsayılanı
+devreye girer ve seeder `admin@example.com` / `degistir-beni` oluşturur. **Negatif test
+yapıldı: bu parola gerçekten geçerli.** `db:seed`'den önce `SEED_ADMIN_EMAIL` ve
+`SEED_ADMIN_PASSWORD` doldurulmalıdır.
+**Önerilen ek sertleştirme (uygulanmadı, onay bekliyor):** `DatabaseSeeder`, production
+ortamında varsayılan parolayı görürse exception fırlatsın — belge unutulsa bile kapı kapanır.
+**V1 boşluğu (blocker değil):** kendi parolasını değiştirme akışı yok. Admin
+`/users/{id}/edit` üzerinden kendi parolasını değiştirebilir (`UserPolicy::update`
+yalnızca `users.manage` ister); Patron ve Personel **değiştiremez**. Şifre sıfırlama
+e-postası da henüz yok — bu yüzden `MAIL_MAILER=log` güvenli varsayılandır.
+
+## K-079 · Rollback: eski DocumentRoot dizini silinmez
+**Avantaj:** DocumentRoot hâlâ eski dizini gösterdiği için ilk deploy ve migration
+**canlı kullanıcı olmadan** yapılır. Rollback ihtiyacı neredeyse sıfır.
+**Deploy öncesi yedek:** `lemon-app/` için **gerekmiyor** (içi boş iskelet). Yalnızca
+`.env`'in bir kopyası saklanmalı. Migration öncesi `mysqldump` **gerekmiyor** —
+`derspros_lemon` boş.
+**DocumentRoot değiştikten sonra geri dönüş:** tek adım, saniyeler — cPanel'den Document
+Root eski değerine (`/home/derspros/lemon.derspros.com.tr`) alınır.
+**Bu yüzden eski dizin, yeni uygulama birkaç gün sorunsuz çalışana kadar SİLİNMEZ.**
+**Sonraki, şema değiştiren deploy'lardan önce `mysqldump` zorunludur** (o zaman veri olacaktır).
+
+## K-080 · `DEPLOY_ENABLED` variable'dır ve normalde KAPALI durur
+**Variable, secret değil:** gizli bilgi değil, bir anahtar. Değerinin gözden
+geçirilebilir olması istenir; secret yapmak yanlış güvenlik hissi verir.
+**Değer tam olarak `true`** — guard tam eşleşme arar; `True`/`1`/`yes` çalışmaz.
+Bu bilinçlidir: "doğru gibi görünen" bir değerle kazara açılmasın.
+**Yaşam döngüsü:** gerçek deploy'dan hemen önce `true` yapılır, run yeşil olunca hemen
+**`false`** yapılır (silmek yerine `false` bırakmak, değişkenin varlığını ve son
+kullanımını görünür tutar). Böylece depoya yazma yetkisi olan biri "Run workflow"a
+basarak canlıyı ezemez ve "üç kilitten biri kalıcı açık kaldı" hatası yapısal olarak engellenir.
+
