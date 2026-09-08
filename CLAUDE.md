@@ -788,7 +788,13 @@ kartıdır. Pano ve firma detayı aynı iskeleti bu ikisiyle kurar.
   `aria-current="page"`. Aktiflik desenle bulunur (`companies.*`), böylece alt
   ekranlarda da işaretli kalır.
 - Kenar çubuğu altında kullanıcı baş harfi, adı, rol etiketi ve çıkış bağlantısı bulunur.
-- Mobilde hamburger + çekmece (sağdan kayan overlay, `Escape` ile kapanır); içerik tam genişlik.
+- Mobilde hamburger + çekmece (soldan kayan overlay; `Escape`, dışarı tıklama ve kapatma
+  düğmesiyle kapanır); içerik tam genişlik.
+- **Kapalı çekmece `inert`'tir** (`resources/js/app.js`, `matchMedia('(min-width: 768px)')`
+  ile senkronize): mobilde ekran dışındayken içindeki linkler `Tab` sırasından çıkar —
+  aksi hâlde klavye kullanıcısı görünmeyen menüye atlar. Masaüstünde (`md` ve üzeri, kenar
+  çubuğu her zaman sabit) asla uygulanmaz. Bu davranış silinirse gerçek bir klavye
+  tuzağı geri döner (Gün 9.5, `docs/kararlar.md` K-086).
 - Tüm sayfalarda "İçeriğe atla" bağlantısı ve `<main id="icerik">` vardır.
 
 ### 11.5 Tablo ve mobil liste
@@ -797,7 +803,11 @@ kartıdır. Pano ve firma detayı aynı iskeleti bu ikisiyle kurar.
   Gerekçe: 256px kenar çubuğundan sonra `md` genişlikte ~460px kalır ve tablo yatay kaydırma
   gerektirirdi. **Ana tablolarda yatay scroll yoktur.**
 - Zebra stripe kullanılmaz; satır ayrımı ince çizgi iledir.
-- Dokunma hedefi minimum 44px.
+- **Dokunma hedefi minimum 44px** (`min-h-11`) — mobil kart/panel satırlarında satırın
+  TAMAMI (tutar dahil) `<a>` ile sarmalanır, yalnızca başlık metni değil. Padding'e
+  güvenilmez: gerçek yükseklik ölçülerek doğrulanır (Gün 9.5, K-086). İstisna: masaüstü
+  tablosundaki sıralama başlıkları ve satır aksiyonları (yalnızca `lg`/1024px ve üzerinde
+  görünür, fare odaklıdır).
 
 ### 11.6 Finansal ve durum gösterimi
 
@@ -827,9 +837,12 @@ muaf olması gerekirse `data-allow-resubmit` konur.
 ### 11.8 Erişilebilirlik
 
 - Metin kontrastı ≥ 4.5:1, arayüz sınırı/durum göstergesi ≥ 3:1 (WCAG 2.1 1.4.3 / 1.4.11).
-- Görünür odak halkası (`:focus-visible` → 2px turuncu, 2px offset).
+- Görünür odak halkası (`:focus-visible` → 2px altın, 2px offset; kenar çubuğunda açık
+  altın — koyu zeminde okunabilirlik için, bkz. `.nav-surface :focus-visible`).
 - Yalnızca ikon içeren butonlarda `aria-label`. `<html lang="tr">`.
-- Kontrol edilen kırılımlar: 375 / 768 / 1366 / 1920 — hiçbirinde yatay sayfa kaydırması yoktur.
+- Kontrol edilen kırılımlar: **360 / 375 / 390 / 430 / 768 / 1366 / 1920** — hiçbirinde
+  yatay sayfa kaydırması, kırpılmış tutar veya 40px altı dokunma hedefi yoktur (Gün 9.5
+  denetimi: 14 ekran × 6 viewport = 84 kontrol, gerçek Chromium ile).
 
 ### PWA (temel)
 

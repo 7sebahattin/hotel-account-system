@@ -17,7 +17,12 @@
 @endphp
 
 @if ($exists)
-    <a href="{{ route($source['route'], $entry->source_id) }}" class="text-mut underline hover:text-acc">
+    {{--
+        Görsel metin küçük kalsın diye (dar "Kaynak" kolonu / mobil kart),
+        `min-h-11` dokunma yüksekliğini padding tahmini olmadan garanti eder.
+    --}}
+    <a href="{{ route($source['route'], $entry->source_id) }}"
+       class="inline-flex min-h-11 items-center text-mut underline hover:text-acc">
         {{ $source['label'] }}
     </a>
 @else

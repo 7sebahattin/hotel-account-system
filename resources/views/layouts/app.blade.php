@@ -21,7 +21,7 @@
     <aside id="kenar-cubugu" data-sidebar
            class="nav-surface fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-nav transition-transform duration-200 md:translate-x-0">
         <div class="flex h-16 items-center justify-between gap-2 border-b border-nav-line px-4">
-            <a href="{{ route('home') }}" class="min-w-0 rounded-md">
+            <a href="{{ route('home') }}" class="flex min-h-11 min-w-0 items-center rounded-md">
                 @include('partials.brand')
             </a>
 

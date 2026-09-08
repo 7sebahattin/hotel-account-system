@@ -8,21 +8,50 @@ const drawer = {
     panel: null,
     overlay: null,
     toggle: null,
+    mobileQuery: null,
+
+    isOpen() {
+        return !this.panel?.classList.contains('-translate-x-full');
+    },
+
+    /**
+     * Kapalıyken (ekran dışındayken) panel `inert` olur: içindeki linkler ve
+     * "Menüyü kapat" düğmesi Tab sırasından ve ekran okuyucudan çıkar.
+     *
+     * Bu olmadan klavye kullanıcısı "İçeriğe atla"dan sonra görünmeyen, ekran
+     * dışındaki çekmece içeriğine atlıyordu — gerçek bir klavye tuzağıydı.
+     *
+     * Masaüstünde (md ve üzeri) panel CSS ile her zaman görünür ve sabittir;
+     * orada `inert` hiçbir zaman uygulanmaz. Sınır, Tailwind'in `md:` kırılım
+     * noktasıyla (768px) birebir eşleşir — `md:translate-x-0` da aynı sınırı kullanır.
+     */
+    syncInert() {
+        if (!this.panel) return;
+
+        const shouldBeInert = this.mobileQuery !== null && !this.mobileQuery.matches && !this.isOpen();
+        this.panel.toggleAttribute('inert', shouldBeInert);
+    },
 
     open() {
         this.panel?.classList.remove('-translate-x-full');
         this.overlay?.classList.remove('hidden');
         this.toggle?.setAttribute('aria-expanded', 'true');
         document.body.classList.add('overflow-hidden', 'md:overflow-auto');
+        this.syncInert();
     },
 
     close({ restoreFocus = false } = {}) {
-        if (this.panel?.classList.contains('-translate-x-full')) return;
+        if (!this.isOpen()) {
+            this.syncInert();
+
+            return;
+        }
 
         this.panel?.classList.add('-translate-x-full');
         this.overlay?.classList.add('hidden');
         this.toggle?.setAttribute('aria-expanded', 'false');
         document.body.classList.remove('overflow-hidden', 'md:overflow-auto');
+        this.syncInert();
 
         // Klavye kullanıcısı çekmeceyi kapattığında odak boşlukta kalmamalı.
         if (restoreFocus) this.toggle?.focus();
@@ -38,8 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    drawer.mobileQuery = window.matchMedia('(min-width: 768px)');
+    drawer.mobileQuery.addEventListener('change', () => drawer.syncInert());
+    drawer.syncInert();
+
     drawer.toggle.addEventListener('click', () => {
-        drawer.panel.classList.contains('-translate-x-full') ? drawer.open() : drawer.close();
+        drawer.isOpen() ? drawer.close() : drawer.open();
     });
 
     drawer.overlay?.addEventListener('click', () => drawer.close());

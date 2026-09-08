@@ -415,6 +415,33 @@ class DashboardTest extends TestCase
         );
     }
 
+    // ------------------------------------------------------- mobil dokunma
+
+    #[Test]
+    public function panel_satirlari_tutari_da_kapsayan_tek_baglantidir(): void
+    {
+        // Gün 9.5 mobil turunda düzeltilen gerçek hata: satırın yalnızca
+        // firma adı tıklanabilirdi, tutar ve dolgu alanı değildi (CLAUDE.md
+        // §11.6 "Satır/card tamamı kolay dokunulabilir olsun"). Bu test,
+        // <a href="…"> etiketinin adı VE tutarı aynı anda sarmaladığını —
+        // ikisinin arasında </a> ile bölünmediğini — doğrular.
+        $company = Company::factory()->create(['name' => 'Dokunma Testi A.Ş.']);
+        $this->debit($company, '4321.00', Currency::TRY, '2026-09-01');
+
+        $html = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('home'))
+            ->getContent();
+
+        $href = route('companies.show', $company->id);
+        $pattern = '#<a\s+href="'.preg_quote($href, '#').'"[^>]*>((?:(?!</a>).)*)</a>#s';
+
+        $this->assertMatchesRegularExpression($pattern, (string) $html);
+        preg_match($pattern, (string) $html, $matches);
+
+        $this->assertStringContainsString('Dokunma Testi A.Ş.', $matches[1]);
+        $this->assertStringContainsString('4.321,00', $matches[1]);
+    }
+
     // ------------------------------------------------------- boş sistem
 
     #[Test]

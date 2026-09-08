@@ -49,18 +49,17 @@
         </x-ui.card>
     @else
         <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+            {{-- Satırın tamamı dokunulabilir — yalnızca misafir adı/ref değil. --}}
             <x-ui.panel title="Son girdiğiniz konaklamalar" :href="route('stays.index')">
                 @forelse ($summary->recentStays as $stay)
-                    <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
-                        <a href="{{ route('stays.show', $stay) }}"
-                           class="block truncate text-sm text-tx underline-offset-2 hover:underline">
-                            {{ $stay->guest_name }}
-                        </a>
+                    <a href="{{ route('stays.show', $stay) }}"
+                       @class(['block px-4 py-3 hover:bg-well', 'border-t border-line' => ! $loop->first])>
+                        <p class="truncate text-sm text-tx">{{ $stay->guest_name }}</p>
 
                         <p class="mt-1 text-xs tabular-nums text-mut">
                             {{ $stay->check_in_date->format('d.m.Y') }} – {{ $stay->check_out_date->format('d.m.Y') }}
                         </p>
-                    </div>
+                    </a>
                 @empty
                     <x-ui.empty class="m-4 border-0 bg-transparent py-8">Konaklama kaydınız yok.</x-ui.empty>
                 @endforelse
@@ -68,11 +67,9 @@
 
             <x-ui.panel title="Son girdiğiniz tahsilatlar" :href="route('payments.index')">
                 @forelse ($summary->recentPayments as $payment)
-                    <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
-                        <a href="{{ route('payments.show', $payment) }}"
-                           class="block truncate text-sm text-tx underline-offset-2 hover:underline">
-                            {{ $payment->reference_no ?: 'Referans yok' }}
-                        </a>
+                    <a href="{{ route('payments.show', $payment) }}"
+                       @class(['block px-4 py-3 hover:bg-well', 'border-t border-line' => ! $loop->first])>
+                        <p class="truncate text-sm text-tx">{{ $payment->reference_no ?: 'Referans yok' }}</p>
 
                         <p class="mt-1 flex flex-wrap items-center gap-2 text-xs tabular-nums text-mut">
                             {{ $payment->payment_date->format('d.m.Y') }}
@@ -81,7 +78,7 @@
                                 <x-ui.badge tone="danger">İptal</x-ui.badge>
                             @endif
                         </p>
-                    </div>
+                    </a>
                 @empty
                     <x-ui.empty class="m-4 border-0 bg-transparent py-8">Tahsilat kaydınız yok.</x-ui.empty>
                 @endforelse

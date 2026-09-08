@@ -6,7 +6,13 @@
         <h2 class="text-sm font-semibold text-tx">{{ $title }}</h2>
 
         @if ($href)
-            <a href="{{ $href }}" class="shrink-0 rounded text-xs text-acc-tx underline underline-offset-2 hover:text-tx">
+            {{--
+                Görsel metin xs kalsın diye küçük, ama `min-h-11` dokunma
+                yüksekliğini garanti eder — satır çapraz ekseni içerik
+                boyutuna göre belirlendiği için padding tahminine güvenilmez.
+            --}}
+            <a href="{{ $href }}"
+               class="inline-flex min-h-11 shrink-0 items-center rounded px-2 text-xs text-acc-tx underline underline-offset-2 hover:text-tx">
                 {{ $linkLabel }}
             </a>
         @endif

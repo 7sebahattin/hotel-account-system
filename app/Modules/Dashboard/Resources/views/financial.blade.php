@@ -86,23 +86,30 @@
 
         {{-- ---------------------------------------------------------- listeler --}}
         <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+            {{--
+                Panel satırları TÜMÜYLE dokunulabilirdir (CLAUDE.md §11 —
+                "Satır/card tamamı kolay dokunulabilir olsun"): `<a>` yalnızca
+                başlığı değil satırın tamamını (tutar dahil) sarar, tıpkı liste
+                ekranlarının mobil kart deseninde olduğu gibi.
+            --}}
+
             {{-- En yüksek bakiyeli firmalar --}}
             <x-ui.panel title="En yüksek bakiyeli firmalar" :href="route('statements.index')" link-label="Bakiye listesi">
                 @forelse ($summary->topCompanies as $code => $rows)
                     <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
                         <p class="pb-2 text-xs font-medium uppercase tracking-wide text-mut">{{ $code }}</p>
 
-                        <ul class="space-y-2">
+                        <ul>
                             @foreach ($rows as $row)
-                                <li class="flex items-baseline justify-between gap-3">
+                                <li>
                                     <a href="{{ route('companies.show', $row->companyId) }}"
-                                       class="min-w-0 truncate text-sm text-tx underline-offset-2 hover:underline">
-                                        {{ $row->companyName }}
-                                    </a>
+                                       class="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 hover:bg-well">
+                                        <span class="min-w-0 truncate text-sm text-tx">{{ $row->companyName }}</span>
 
-                                    <span class="shrink-0 text-sm font-medium tabular-nums text-debit">
-                                        {{ $row->balance->format($row->currency) }}
-                                    </span>
+                                        <span class="shrink-0 text-sm font-medium tabular-nums text-debit">
+                                            {{ $row->balance->format($row->currency) }}
+                                        </span>
+                                    </a>
                                 </li>
                             @endforeach
                         </ul>
@@ -119,12 +126,12 @@
                 @forelse ($summary->recentEntries as $entry)
                     @php $type = LedgerEntryType::fromEntry($entry); @endphp
 
-                    <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
+                    <a href="{{ route('statements.show', $entry->company_id) }}"
+                       @class(['block px-4 py-3 hover:bg-well', 'border-t border-line' => ! $loop->first])>
                         <div class="flex items-baseline justify-between gap-3">
-                            <a href="{{ route('statements.show', $entry->company_id) }}"
-                               class="min-w-0 truncate text-sm text-tx underline-offset-2 hover:underline">
+                            <span class="min-w-0 truncate text-sm text-tx">
                                 {{ $summary->companyName((int) $entry->company_id) }}
-                            </a>
+                            </span>
 
                             @if ($entry->debitMoney()->isPositive())
                                 <span class="shrink-0 text-sm font-medium tabular-nums text-debit">
@@ -145,7 +152,7 @@
                             <span aria-hidden="true">·</span>
                             <span class="truncate">{{ $entry->description }}</span>
                         </div>
-                    </div>
+                    </a>
                 @empty
                     <x-ui.empty class="m-4 border-0 bg-transparent py-8">Henüz cari hareket yok.</x-ui.empty>
                 @endforelse
@@ -154,12 +161,12 @@
             {{-- Son tahsilatlar --}}
             <x-ui.panel title="Son tahsilatlar" :href="route('payments.index')">
                 @forelse ($summary->recentPayments as $payment)
-                    <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
+                    <a href="{{ route('payments.show', $payment) }}"
+                       @class(['block px-4 py-3 hover:bg-well', 'border-t border-line' => ! $loop->first])>
                         <div class="flex items-baseline justify-between gap-3">
-                            <a href="{{ route('payments.show', $payment) }}"
-                               class="min-w-0 truncate text-sm text-tx underline-offset-2 hover:underline">
+                            <span class="min-w-0 truncate text-sm text-tx">
                                 {{ $summary->companyName((int) $payment->company_id) }}
-                            </a>
+                            </span>
 
                             {{-- İptal edilmiş tahsilat "alacak" rengiyle gösterilmez:
                                  cariye etkisi ters kayıtla sıfırlanmıştır. --}}
@@ -182,7 +189,7 @@
                                 <x-ui.badge tone="danger">İptal</x-ui.badge>
                             @endif
                         </div>
-                    </div>
+                    </a>
                 @empty
                     <x-ui.empty class="m-4 border-0 bg-transparent py-8">Henüz tahsilat yok.</x-ui.empty>
                 @endforelse
@@ -191,12 +198,10 @@
             {{-- Devam eden ve yaklaşan konaklamalar --}}
             <x-ui.panel title="Devam eden ve yaklaşan konaklamalar" :href="route('stays.index')">
                 @forelse ($summary->upcomingStays as $stay)
-                    <div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
+                    <a href="{{ route('stays.show', $stay) }}"
+                       @class(['block px-4 py-3 hover:bg-well', 'border-t border-line' => ! $loop->first])>
                         <div class="flex items-baseline justify-between gap-3">
-                            <a href="{{ route('stays.show', $stay) }}"
-                               class="min-w-0 truncate text-sm text-tx underline-offset-2 hover:underline">
-                                {{ $stay->guest_name }}
-                            </a>
+                            <span class="min-w-0 truncate text-sm text-tx">{{ $stay->guest_name }}</span>
 
                             <span class="shrink-0 text-sm font-medium tabular-nums text-tx">
                                 {{ $stay->amountMoney()->format($stay->currency) }}
@@ -210,7 +215,7 @@
                                 {{ $stay->check_in_date->format('d.m.Y') }} – {{ $stay->check_out_date->format('d.m.Y') }}
                             </span>
                         </div>
-                    </div>
+                    </a>
                 @empty
                     <x-ui.empty class="m-4 border-0 bg-transparent py-8">
                         Devam eden veya yaklaşan konaklama yok.

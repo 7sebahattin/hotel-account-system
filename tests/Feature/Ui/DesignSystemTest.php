@@ -76,6 +76,25 @@ class DesignSystemTest extends TestCase
     }
 
     #[Test]
+    public function mobil_cekmece_erisilebilirlik_kablolamasi_tamdir(): void
+    {
+        // app.js bu data-* öznitelikleriyle elemanları bulur; biri silinirse
+        // JS sessizce çalışmaz olur (bkz. app.js: `if (!panel || !toggle) return`).
+        // Bu test, o regresyonu tarayıcı olmadan CI'da yakalar.
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $response
+            ->assertSee('id="kenar-cubugu"', false)
+            ->assertSee('data-sidebar', false)
+            ->assertSee('data-sidebar-overlay', false)
+            ->assertSee('data-sidebar-toggle', false)
+            ->assertSee('data-sidebar-close', false)
+            ->assertSee('aria-controls="kenar-cubugu"', false)
+            ->assertSee('aria-expanded="false"', false)
+            ->assertSee('aria-label="Menüyü kapat"', false);
+    }
+
+    #[Test]
     public function form_alanlarinin_etiketi_input_ile_eslesir(): void
     {
         $response = $this->actingAs($this->userWithRole(RoleName::Admin))

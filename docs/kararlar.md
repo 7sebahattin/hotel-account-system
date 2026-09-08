@@ -804,3 +804,45 @@ grid öğelerinin varsayılan `min-width: auto` değeri uzun içerikle küçülm
 ekranda yazı küçülüyor ve gerekirse satır kırılıyor.
 **Ayrıca:** iptal edilmiş tahsilat panoda "alacak yeşili" ile görünüyordu; cariye etkisi
 ters kayıtla sıfırlandığı için nötr ve üstü çizili gösterime alındı.
+
+## K-086 · Mobil dokunma turu: gerçek tarayıcı ölçümü, tahmin değil
+**Bağlam:** Gün 9'un "yatay taşma yok" sonucu mobil desteğin yeterli olduğunu göstermiyordu.
+Bu tur 14 ekranı 6 viewport'ta (360/375/390/430/768/1366) gerçek Chromium ile denetledi:
+yatay taşma, kırpılmış tutar ve dokunma hedefi boyutu programatik olarak ölçüldü.
+**Sonuç: 84 kontrolün tamamında (14 ekran × 6 viewport) sıfır yatay taşma, sıfır kırpılmış
+tutar.** Gün 9'daki `min-w-0`/`truncate` düzeltmeleri kalıcı kaldı.
+**Gerçek bulgular (tahmini değil, ölçülmüş):**
+1. Pano panellerinde (en yüksek bakiyeli firmalar, son cari hareketler, son tahsilatlar,
+   yaklaşan konaklamalar) yalnızca firma adı/misafir adı tıklanabilirdi; tutar ve dolgu alanı
+   değildi. Satırlar artık tutarı da kapsayan TEK `<a>` ile sarmalanıyor — liste ekranlarının
+   zaten kullandığı `<a class="block"><x-ui.card>` desenine (payments/stays/companies mobil
+   kart görünümü) hizalandı.
+2. Firma detayında telefon/e-posta linkleri ve "Ekstreyi aç"; panel başlığındaki "Tümü"
+   linki; cari ekstredeki kaynak linkleri ("Konaklama kaydı"/"Tahsilat kaydı") 14-20px
+   yüksekliğindeydi. `min-h-11` ile 44px garanti edildi — `-m-N p-N` negatif kenar boşluğu
+   hilesi yerine, çünkü satır yüksekliği tahmini yanlış çıktı (ilk denemede 32-36px'te kaldı,
+   ölçülerek yakalandı ve düzeltildi).
+3. Checkbox etiketi 20px yükseklikteydi; `<label>` artık `min-h-11 items-center` taşıyor.
+   Görsel kutu (16px) kasıtlı olarak küçük kalıyor — dokunma alanı tüm satırdır.
+**Kalan küçük hedefler yalnızca 1366px'te (masaüstü tablo sıralama başlıkları, satır
+aksiyon düğmeleri) — 360-768px arasının HİÇBİRİNDE yok.** Bu, fare odaklı standart bir
+desendir (CLAUDE.md §11.5: tablolar yalnızca `lg`/1024px ve üzerinde gösterilir); mobil
+kart görünümü zaten tam satır bağlantısı kullanıyor. Değiştirilmedi.
+**Gerçek klavye tuzağı bulundu ve düzeltildi:** kapalı (ekran dışı) mobil çekmece DOM'da
+kalmaya devam ediyor ve `Tab` tuşu "İçeriğe atla"dan sonra doğrudan görünmeyen "Menüyü
+kapat" düğmesine ve menü linklerine atlıyordu. Çözüm: `inert` özniteliği, `matchMedia
+('(min-width: 768px)')` ile senkronize — masaüstünde (`md` ve üzeri, kenar çubuğu her zaman
+sabit/görünür) asla uygulanmaz; mobilde yalnızca çekmece kapalıyken uygulanır. Açılışta/
+kapanışta ve viewport `md` eşiğini geçtiğinde yeniden hesaplanır. Doğrulandı: mobilde Tab
+artık çekmeceyi atlıyor, çekmece açıkken içine giriyor; masaüstünde davranış değişmedi
+(Tab hâlâ kenar çubuğuna doğal olarak giriyor).
+**Değiştirilmeyen (bilerek):** hiçbir yeni JS paketi/framework eklenmedi — `inert` yerleşik
+bir HTML özniteliğidir, `matchMedia` yerleşik bir Web API'sidir. Native `confirm()` diyalogları
+(silme/iptal onayı) zaten viewport-güvenlidir; özel modal hiç yoktu, eklenmedi. Backend, ledger
+kuralları, authorization/policy, finansal hesaplamalar HİÇ değişmedi.
+**Test:** `DesignSystemTest::mobil_cekmece_erisilebilirlik_kablolamasi_tamdir` — app.js'in
+bağımlı olduğu `data-sidebar*`/`aria-*` işaretlemesinin silinmesini CI'da (tarayıcısız)
+yakalar. `DashboardTest::panel_satirlari_tutari_da_kapsayan_tek_baglantidir` — regex ile
+`<a href="…">` etiketinin firma adı VE tutarı `</a>`'dan önce aynı anda sardığını doğrular.
+`inert`/dokunma boyutu/taşma gibi CSS-JS davranışları PHPUnit'te ölçülemediği için asıl kanıt
+gerçek tarayıcı denetimidir (84/84 kontrol temiz); bu, rapor edilen sayılarla birlikte sonuçtur.

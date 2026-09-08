@@ -4,21 +4,27 @@
 @section('content')
     <x-ui.page-header :title="$company->name">
         <x-slot:meta>
-            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
                 @include('companies::_status', ['company' => $company])
 
-                {{-- İletişim bilgileri üstte, tek satırda: ekranı açan kişinin
-                     ilk ihtiyacı firmayı arayabilmek. Boş alanlar hiç çizilmez. --}}
+                {{--
+                    İletişim bilgileri üstte, tek satırda: ekranı açan kişinin
+                    ilk ihtiyacı firmayı arayabilmek. Boş alanlar hiç çizilmez.
+
+                    tel:/mailto: linkleri min-h-11 ile 44px dokunma yüksekliğini
+                    garanti eder (padding tahminine güvenilmez); gap-y-3 satırın
+                    büyümesine zaten pay bırakır.
+                --}}
                 @if ($company->phone)
                     <a href="tel:{{ preg_replace('/[^0-9+]/', '', $company->phone) }}"
-                       class="text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
+                       class="inline-flex min-h-11 items-center text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
                         {{ $company->phone }}
                     </a>
                 @endif
 
                 @if ($company->email)
                     <a href="mailto:{{ $company->email }}"
-                       class="truncate text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
+                       class="inline-flex min-h-11 items-center truncate text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
                         {{ $company->email }}
                     </a>
                 @endif
@@ -71,7 +77,7 @@
                 <h2 id="bakiye-basligi" class="text-sm font-semibold text-tx">Cari bakiye</h2>
 
                 <a href="{{ route('statements.show', $company) }}"
-                   class="rounded text-xs text-acc-tx underline underline-offset-2 hover:text-tx">
+                   class="inline-flex min-h-11 shrink-0 items-center rounded px-2 text-xs text-acc-tx underline underline-offset-2 hover:text-tx">
                     Ekstreyi aç
                 </a>
             </div>
