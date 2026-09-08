@@ -801,14 +801,44 @@ kartıdır. Pano ve firma detayı aynı iskeleti bu ikisiyle kurar.
   `aria-current="page"`. Aktiflik desenle bulunur (`companies.*`), böylece alt
   ekranlarda da işaretli kalır.
 - Kenar çubuğu altında kullanıcı baş harfi, adı, rol etiketi ve çıkış bağlantısı bulunur.
-- Mobilde hamburger + çekmece (soldan kayan overlay; `Escape`, dışarı tıklama ve kapatma
-  düğmesiyle kapanır); içerik tam genişlik.
-- **Kapalı çekmece `inert`'tir** (`resources/js/app.js`, `matchMedia('(min-width: 768px)')`
-  ile senkronize): mobilde ekran dışındayken içindeki linkler `Tab` sırasından çıkar —
-  aksi hâlde klavye kullanıcısı görünmeyen menüye atlar. Masaüstünde (`md` ve üzeri, kenar
-  çubuğu her zaman sabit) asla uygulanmaz. Bu davranış silinirse gerçek bir klavye
-  tuzağı geri döner (Gün 9.5, `docs/kararlar.md` K-086).
 - Tüm sayfalarda "İçeriğe atla" bağlantısı ve `<main id="icerik">` vardır.
+
+**Mobil (< 768px) gezinme (Gün 9.6 — kenar çubuğu artık BİRİNCİL değil):**
+
+- Birincil gezinme sabit **alt gezinme çubuğudur** (`partials/bottom-nav.blade.php`,
+  `[data-bottom-nav]`, `md:hidden`). V1 itibarıyla 4 sabit sekme + Daha Fazla: Ana Sayfa,
+  Firmalar, Konaklamalar, Tahsilatlar. Kasa Defteri (Gün 10) geldiğinde hedef sıra: Ana
+  Sayfa, Kasa, Firmalar, Tahsilatlar, Daha Fazla — Konaklamalar o zaman Daha Fazla'ya
+  taşınır. Sekmeler yetkiye duyarlıdır (aynı `$user->can()` deseni), ikon + kısa metin
+  birlikte gösterilir (yalnızca ikon değil), dokunma hedefi ≥ 44px, `aria-current="page"`
+  ile aktif sekme işaretlenir, `env(safe-area-inset-bottom)` ile iPhone alt çentiği
+  hesaba katılır. Ana içerik (`<main id="icerik">`) alt çubuğun üstüne binmemesi için
+  mobilde ekstra alt boşluk taşır (`md`de normale döner).
+- **"Daha Fazla" yeni bir menü DEĞİLDİR** — mevcut kenar çubuğu çekmecesini ikinci bir
+  tetikleyiciyle açar (aynı `data-sidebar-toggle` işareti, aynı `#kenar-cubugu` paneli).
+  Çekmece artık İKİNCİL gezinmedir: Cari Ekstre, Kullanıcılar (yetkiliyse),
+  Roller/Yetkiler, Denetim Kayıtları, kullanıcı kimliği ve Çıkış oradadır. Ayrı bir
+  Profil/Hesap SAYFASI yoktur (böyle bir route bu turdan önce de yoktu; yeni route
+  eklemek bu turun kapsamı dışıdır — CLAUDE.md §18) — kimlik bilgisi çekmecenin alt
+  bloğunda zaten görünür.
+- Kenar çubuğunu açan HER tetikleyici (üst çubuktaki hamburger + alt çubuktaki
+  "Daha Fazla") `[data-sidebar-toggle]` ile işaretlidir; `resources/js/app.js`'teki
+  `drawer` nesnesi hepsini birlikte yönetir (`aria-expanded`, odak geri dönüşü).
+- **Katman sırası bağlayıcıdır:** alt çubuk `z-20`, çekmece arka planı (overlay) `z-30`,
+  çekmece paneli `z-40`. Çekmece açıkken overlay alt çubuğu GÖRSEL olarak örtmelidir;
+  aksi hâlde ikisi aynı katmanda olursa alt çubuk overlay'in üstünde kalır ve hem yanlış
+  görünür hem de klavye/dokunma etkileşimi çekmeceyi "atlayıp" alttaki sekmelere sızar.
+- **Kapalı çekmece VE açıkken alt çubuk `inert`'tir** (`resources/js/app.js`,
+  `matchMedia('(min-width: 768px)')` ile senkronize): mobilde ekran dışındayken
+  çekmecenin içindeki linkler, çekmece AÇIKKEN de alt çubuğun linkleri `Tab` sırasından
+  çıkar — aksi hâlde klavye kullanıcısı görünmeyen/örtülü içeriğe atlar. Masaüstünde
+  (`md` ve üzeri, kenar çubuğu her zaman sabit) hiçbiri asla uygulanmaz. Bu davranış
+  silinirse gerçek bir klavye tuzağı geri döner (Gün 9.5, `docs/kararlar.md` K-086;
+  Gün 9.6 için K-088).
+- İkon yolları TEK kaynaktan gelir: `App\Modules\Core\Support\NavIcons::PATHS`. Kenar
+  çubuğu ve alt çubuk aynı sabiti kullanır — kopyalanmaz. (Blade `@include` ile
+  paylaşmaya çalışmak İŞE YARAMAZ: bir include içinde tanımlanan değişken üst kapsama
+  geri sızmaz; bu yüzden sınıf sabiti seçildi.)
 
 ### 11.5 Tablo ve mobil liste
 

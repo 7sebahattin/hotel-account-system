@@ -94,6 +94,51 @@ class DesignSystemTest extends TestCase
             ->assertSee('aria-label="Menüyü kapat"', false);
     }
 
+    /**
+     * Gün 9.6: mobil BİRİNCİL gezinme artık alt çubuktur. Beş öğe: Ana Sayfa,
+     * Firmalar, Konaklamalar, Tahsilatlar, Daha Fazla. "Daha Fazla" mevcut
+     * çekmeceyi açar (yeni bir menü kopyalanmaz) — bu yüzden aynı
+     * `data-sidebar-toggle` işaretini taşır ve çekmecedeki ekstre/kullanıcı
+     * bağlantılarını içerir.
+     */
+    #[Test]
+    public function alt_gezinme_cubugu_bes_oge_ile_render_edilir(): void
+    {
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $response
+            ->assertSee('data-bottom-nav', false)
+            ->assertSee('aria-label="Alt menü"', false)
+            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+    }
+
+    #[Test]
+    public function alt_gezinme_cubugundaki_daha_fazla_mevcut_cekmeceyi_acar(): void
+    {
+        // Yeni bir menü/sayfa DEĞİL: aynı çekmece, ikinci bir tetikleyiciyle
+        // açılıyor. Bu yüzden aynı data-sidebar-toggle işaretini taşımalı.
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $html = $response->getContent();
+        $this->assertIsString($html);
+
+        preg_match('/<nav data-bottom-nav.*?<\/nav>/s', $html, $matches);
+        $this->assertNotEmpty($matches, 'Alt gezinme çubuğu bulunamadı');
+
+        $this->assertStringContainsString('data-sidebar-toggle', $matches[0]);
+        $this->assertStringContainsString('aria-controls="kenar-cubugu"', $matches[0]);
+    }
+
+    #[Test]
+    public function personel_alt_cubukta_ayni_dort_birincil_ogeyi_gorur(): void
+    {
+        // Personel'in companies.view/stays.view/payments.view yetkisi var
+        // (CLAUDE.md §7.3); bu yüzden birincil sekmeler admin ile aynı kalır.
+        $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))
+            ->assertSee('data-bottom-nav', false)
+            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+    }
+
     #[Test]
     public function form_alanlarinin_etiketi_input_ile_eslesir(): void
     {

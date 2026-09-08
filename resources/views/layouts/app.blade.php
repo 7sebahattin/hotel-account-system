@@ -50,10 +50,12 @@
             <span class="nav-surface min-w-0">@include('partials.brand', ['compact' => true])</span>
         </header>
 
-        <main id="icerik" class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+        <main id="icerik" class="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 md:pb-6 lg:pb-8 lg:pt-8">
             @include('partials.flash')
             @yield('content')
         </main>
     </div>
+
+    @include('partials.bottom-nav')
 </body>
 </html>

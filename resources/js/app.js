@@ -3,11 +3,19 @@
  *
  * Harici bir JS paketi eklenmedi: bu davranış için birkaç satır yeterli.
  * Masaüstünde kenar çubuğu zaten sabit; bu kod yalnızca mobil çekmeceyi açar/kapatır.
+ *
+ * Gün 9.6: çekmece artık BİRİNCİL gezinme değil — alt gezinme çubuğundaki
+ * "Daha Fazla" sekmesiyle açılan ikincil menüdür. Bu yüzden onu açan İKİ tetikleyici
+ * var (üst çubuktaki hamburger + alt çubuktaki "Daha Fazla"); `[data-sidebar-toggle]`
+ * ile işaretlenmiş HER öğe aynı çekmeceyi açar/kapatır ve `aria-expanded` durumunu
+ * birlikte taşır.
  */
 const drawer = {
     panel: null,
     overlay: null,
-    toggle: null,
+    bottomNav: null,
+    toggles: [],
+    lastToggle: null,
     mobileQuery: null,
 
     isOpen() {
@@ -32,11 +40,16 @@ const drawer = {
         this.panel.toggleAttribute('inert', shouldBeInert);
     },
 
-    open() {
+    open(trigger) {
+        this.lastToggle = trigger ?? this.lastToggle;
         this.panel?.classList.remove('-translate-x-full');
         this.overlay?.classList.remove('hidden');
-        this.toggle?.setAttribute('aria-expanded', 'true');
+        this.toggles.forEach((toggle) => toggle.setAttribute('aria-expanded', 'true'));
         document.body.classList.add('overflow-hidden', 'md:overflow-auto');
+        // Çekmece açıkken alt gezinme çubuğu görsel olarak overlay'in ALTINDA kalır
+        // (bkz. z-index); `inert` bunu klavye/ekran okuyucu için de doğru yapar —
+        // aksi hâlde çekmecedeki son bağlantıdan sonra Tab, örtülü alt çubuğa düşerdi.
+        this.bottomNav?.setAttribute('inert', '');
         this.syncInert();
     },
 
@@ -49,21 +62,24 @@ const drawer = {
 
         this.panel?.classList.add('-translate-x-full');
         this.overlay?.classList.add('hidden');
-        this.toggle?.setAttribute('aria-expanded', 'false');
+        this.toggles.forEach((toggle) => toggle.setAttribute('aria-expanded', 'false'));
         document.body.classList.remove('overflow-hidden', 'md:overflow-auto');
+        this.bottomNav?.removeAttribute('inert');
         this.syncInert();
 
-        // Klavye kullanıcısı çekmeceyi kapattığında odak boşlukta kalmamalı.
-        if (restoreFocus) this.toggle?.focus();
+        // Klavye kullanıcısı çekmeceyi kapattığında odak boşlukta kalmamalı;
+        // hangi tetikleyici açtıysa odak ona döner.
+        if (restoreFocus) this.lastToggle?.focus();
     },
 };
 
 document.addEventListener('DOMContentLoaded', () => {
     drawer.panel = document.querySelector('[data-sidebar]');
     drawer.overlay = document.querySelector('[data-sidebar-overlay]');
-    drawer.toggle = document.querySelector('[data-sidebar-toggle]');
+    drawer.bottomNav = document.querySelector('[data-bottom-nav]');
+    drawer.toggles = Array.from(document.querySelectorAll('[data-sidebar-toggle]'));
 
-    if (!drawer.panel || !drawer.toggle) {
+    if (!drawer.panel || drawer.toggles.length === 0) {
         return;
     }
 
@@ -71,8 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
     drawer.mobileQuery.addEventListener('change', () => drawer.syncInert());
     drawer.syncInert();
 
-    drawer.toggle.addEventListener('click', () => {
-        drawer.isOpen() ? drawer.close() : drawer.open();
+    drawer.toggles.forEach((toggle) => {
+        toggle.addEventListener('click', (event) => {
+            drawer.isOpen() ? drawer.close() : drawer.open(event.currentTarget);
+        });
     });
 
     drawer.overlay?.addEventListener('click', () => drawer.close());
@@ -182,7 +200,14 @@ function initStayPricing() {
     const totalGroups = root.querySelectorAll('[data-pricing-total]');
     const dailyGroups = root.querySelectorAll('[data-pricing-daily]');
     const totalOutput = root.querySelector('[data-daily-total]');
-    const symbols = { TRY: '₺', EUR: '€', GBP: '£' };
+
+    // Sembol JS'de sabit bir listeye bağlanmaz: her <option> kendi sembolünü
+    // `data-symbol` ile taşır (bkz. Currency::symbol(), PHP tarafındaki tek kaynak).
+    // Sembolü bilinmeyen/eşleşmeyen bir para birimi için ISO kodu gösterilir.
+    const currencySymbol = () => {
+        const option = currencySelect?.selectedOptions?.[0];
+        return option?.dataset.symbol || currencySelect?.value || 'TRY';
+    };
 
     // '2.500,50' / '2500.5' → 250050 kuruş. Geçersizse null.
     const toMinorUnits = (raw) => {
@@ -192,10 +217,10 @@ function initStayPricing() {
         return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
     };
 
-    const formatMinorUnits = (minor, currency) => {
+    const formatMinorUnits = (minor, symbol) => {
         const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         const fraction = String(minor % 100).padStart(2, '0');
-        return `${whole},${fraction} ${symbols[currency] ?? currency}`;
+        return `${whole},${fraction} ${symbol}`;
     };
 
     const nights = () => {
@@ -215,9 +240,9 @@ function initStayPricing() {
             totalOutput.textContent = '—';
             return;
         }
-        const currency = currencySelect?.value ?? 'TRY';
+        const symbol = currencySymbol();
         totalOutput.textContent =
-            `${count} gece × ${formatMinorUnits(rate, currency)} = ${formatMinorUnits(rate * count, currency)}`;
+            `${count} gece × ${formatMinorUnits(rate, symbol)} = ${formatMinorUnits(rate * count, symbol)}`;
     };
 
     const applyMode = () => {

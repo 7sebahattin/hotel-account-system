@@ -892,3 +892,45 @@ edildiği (şema güvenliği) ve TRY/EUR/GBP'nin mevcut davranışının bozulma
 Defteri modülü — bu turun kapsamı dışında (§3.2, kullanıcı talimatı). `StatementController`
 ve `DashboardService` filtre/toplama noktaları `Currency::cases()` üzerinde bırakıldı,
 `active()`'e GEÇİRİLMEDİ — kasıtlı, yukarıdaki ayrım gereği.
+
+## K-088 · Mobil birincil gezinme kenar çubuğundan alt gezinme çubuğuna taşındı
+**Bağlam (Gün 9.6):** Mobilde tek gezinme yolu hamburger + soldan kayan çekmeceydi —
+bu, "her ekrana bir dokunuşta erişim" beklentisine uymuyordu (native mobil uygulama
+deseninin aksine). Hedef: 4 sabit sekme + Daha Fazla; Kasa Defteri (Gün 10) geldiğinde
+Konaklamalar'ın Daha Fazla'ya taşınıp yerine Kasa'nın geçeceği bir yapı.
+
+**Çekmece yeniden kullanıldı, kopyalanmadı.** "Daha Fazla" sekmesi YENİ bir menü/sayfa
+DEĞİL — mevcut kenar çubuğu çekmecesini ikinci bir tetikleyiciyle açıyor. Bu, yetkiye
+duyarlı grup/öğe render mantığının (`partials/sidebar.blade.php`) tekrarlanmasını
+önledi ve çekmecenin zaten test edilmiş erişilebilirlik kablolamasını (Escape, dışarı
+tıklama, `inert`, odak yönetimi — K-086) aynen miras aldı. `resources/js/app.js`'teki
+`drawer` nesnesi tek bir `toggle` yerine `toggles` (NodeList) tutacak şekilde
+genelleştirildi; hangi tetikleyici açtıysa kapanışta odak ona döner (`lastToggle`).
+
+**Bulunan ve düzeltilen gerçek hata — katman sırası:** ilk uygulamada alt çubuk ve
+çekmece overlay'i AYNI `z-30` değerini taşıyordu; DOM sırası yüzünden alt çubuk overlay'in
+ÜSTÜNDE kalıyordu — hem görsel olarak (dimlenmemiş, tam parlaklıkta görünüyordu) hem
+işlevsel olarak (`elementFromPoint` alt çubuğu döndürüyordu, yani çekmece açıkken bile
+tıklanabilir/odaklanabilir kalıyordu). Gerçek Chromium ekran görüntüsüyle yakalandı,
+tahmin edilmedi. Düzeltme: katman sırası `bottom-nav(z-20) < overlay(z-30) < panel(z-40)`
+olarak sabitlendi VE çekmece açıkken alt çubuğa da `inert` uygulanır oldu — yalnızca
+görsel örtüşmeyi düzeltmek yetmezdi, klavye/ekran okuyucu için de gerçek bir "arkada
+kalan içerik etkileşilemez olmalı" garantisi gerekiyordu.
+
+**İkon tekrarını önleme denemesi bir kez başarısız oldu, ikinci denemede çözüldü:**
+önce ikon `d` yol verileri Blade `@include` ile paylaşılmaya çalışıldı — ama bir
+`@include` içinde tanımlanan değişken üst kapsama SIZMAZ (her Blade view izole render
+edilir); bu, `Undefined variable $icons` hatasıyla testte yakalandı (tahmin değil,
+gerçek çalıştırma). Çözüm: `App\Modules\Core\Support\NavIcons::PATHS` sınıf sabiti —
+hem kenar çubuğu hem alt çubuk aynı kaynağı okur.
+
+**Yeni testler:** `DesignSystemTest::alt_gezinme_cubugu_bes_oge_ile_render_edilir`,
+`::alt_gezinme_cubugundaki_daha_fazla_mevcut_cekmeceyi_acar`,
+`::personel_alt_cubukta_ayni_dort_birincil_ogeyi_gorur`. `inert`/z-index/dokunma boyutu
+gibi CSS-JS davranışları PHPUnit'te ölçülemez; asıl kanıt gerçek Chromium denetimidir
+(360-768px arası, "Daha Fazla" tıklama + Escape kapama dahil, 0 bulgu).
+
+**Değiştirilmeyen (bilerek):** masaüstü/tablet kenar çubuğu (`md` ve üzeri) hiç
+değişmedi — hâlâ birincil ve sabit. Ayrı bir Profil/Hesap sayfası/route'u EKLENMEDİ;
+böyle bir ekran bu turdan önce de yoktu ve yeni route açmak CLAUDE.md §18'e aykırı
+olurdu — kimlik bilgisi zaten çekmecenin alt bloğunda görünüyor.

@@ -56,7 +56,7 @@
 
     <x-ui.select label="Para birimi" name="currency" required data-currency>
         @foreach ($currencies as $currency)
-            <option value="{{ $currency->value }}"
+            <option value="{{ $currency->value }}" data-symbol="{{ $currency->symbol() }}"
                 @selected(old('currency', $s?->currency?->value ?? 'TRY') === $currency->value)>
                 {{ $currency->value }} — {{ $currency->label() }}
             </option>
