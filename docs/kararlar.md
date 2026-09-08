@@ -934,3 +934,51 @@ gibi CSS-JS davranışları PHPUnit'te ölçülemez; asıl kanıt gerçek Chromi
 değişmedi — hâlâ birincil ve sabit. Ayrı bir Profil/Hesap sayfası/route'u EKLENMEDİ;
 böyle bir ekran bu turdan önce de yoktu ve yeni route açmak CLAUDE.md §18'e aykırı
 olurdu — kimlik bilgisi zaten çekmecenin alt bloğunda görünüyor.
+
+## K-089 · Mobil sayfa header standardı + pano üç bilgi katmanına ayrıldı
+**Bağlam (Gün 9.6):** Liste ekranlarının başlığı sadece `Başlık (sayı)` idi —
+mobilde bu, gerçek bir "durum satırı" değil, küçük bir parantez içi rakamdı.
+Pano ise tek uzun bir widget yığınıydı; "şu anda bilmem gereken ne?" sorusuna
+sırayla cevap vermiyordu.
+
+**Header standardı:** `<x-ui.page-header>` zaten `title`/`count`/`subtitle`/
+`actions` destekliyordu (bileşen DEĞİŞMEDİ) — kullanılmıyordu. Firmalar, Konaklamalar,
+Tahsilatlar, Kullanıcılar, Roller ekranlarına `subtitle` eklendi. Firmalar'da
+`subtitle` sayaç rozetinin TEKRARI değil — `CompanyService::activeCount()` (zaten
+var, Dashboard'ın da kullandığı metot) ile ayrı bir anlam taşıyor: toplam (filtrelenmiş
+sonuç) `count` rozetinde, "kaç tanesi aktif" `subtitle`'da. Diğer ekranlarda ikinci
+bir anlamlı boyut olmadığı için `count` rozeti kaldırıldı, tek bir `subtitle`
+cümlesi ("7 konaklama kaydı" gibi) kullanıldı — aynı sayıyı iki farklı görsel
+biçimde tekrar etmek gerçek bilgi eklemiyordu.
+
+**Bulunan ve düzeltilen bir test kusuru:** `DesignSystemTest::tutar_kolonlari_
+tabular_nums_kullanir` hiç konaklama oluşturmadan `stays.index`'te `tabular-nums`
+sınıfını arıyordu — testi YEŞİL tutan şey tablo hücresi değil, kaldırılan sayaç
+rozetinin KENDİSİydi (`page-header`'ın `count` span'i de aynı sınıfı taşıyor).
+Yani test, adının iddia ettiği şeyi hiç doğrulamıyordu; `count` kaldırılınca bu
+GERÇEK Chromium/PHPUnit çalıştırmasıyla ortaya çıktı (tahmin değil). Düzeltme:
+teste gerçek bir `Stay` eklendi, artık asıl tablo hücresini doğruluyor.
+
+**Pano üç katmana ayrıldı — Bugün / Finansal durum / Dikkat gerekenler:**
+`DashboardService`/`FinancialSummary` HİÇ değişmedi (11 sorguluk bütçe aynı
+kaldı, `DashboardTest` bunu doğruluyor) — bu yalnızca `financial.blade.php`'nin
+GÖRÜNÜM sırası. Aynı veri, üç adlandırılmış `<section>` altında yeniden
+gruplandı: Bugün (hızlı aksiyonlar + yaklaşan konaklama + son hareketler/tahsilat),
+Finansal durum (para birimi kartları + aktif firma), Dikkat gerekenler (en yüksek
+bakiyeli firmalar). Personel panosuna da aynı "Bugün" başlığı eklendi (tutarlılık
+için) — B ve C katmanları personele hiç uygulanmaz (CLAUDE.md §7.4), o yüzden
+personel panosu tek katmanlı kalır.
+
+**Yan düzeltme — başlık hiyerarşisi:** `<x-ui.panel>`'in dahili başlığı `<h2>`'den
+`<h3>`'e indirildi; artık yeni bölüm başlıklarının (`<h2>Bugün</h2>` vb.) altında
+doğru iç içe geçiyor. `panel` yalnızca Dashboard'da kullanıldığı için bu değişiklik
+başka hiçbir ekranı etkilemedi (kontrol edildi: `grep -rl x-ui.panel`).
+
+**Yeni testler:** `DashboardTest::admin_panosu_uc_bilgi_katmanini_da_gorur`,
+`::admin_bugun_katmaninda_hizli_aksiyon_butonlari_gorur`,
+`::personel_panosu_bugun_baslikli_tek_katmandir`.
+
+**Değiştirilmeyen (bilerek):** "Kasada Şu An" kartı YAZILMAZ, sahte veri KONMAZ
+(§3.2) — yalnızca Bugün ile Finansal durum arasına nerede ekleneceğini işaretleyen
+bir yorum satırı var. Dashboard sorgu bütçesi, N+1 koruması, para birimi ayrımı
+(§6/L5) hiç dokunulmadı.

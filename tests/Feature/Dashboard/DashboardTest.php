@@ -338,6 +338,47 @@ class DashboardTest extends TestCase
         }
     }
 
+    /**
+     * Gün 9.6: pano üç adlandırılmış katmana ayrıldı — "Şu anda bilmem
+     * gereken ne?" sırasıyla: Bugün, Finansal durum, Dikkat gerekenler.
+     */
+    #[Test]
+    public function admin_panosu_uc_bilgi_katmanini_da_gorur(): void
+    {
+        $company = Company::factory()->create(['name' => 'Katman Firması']);
+        $this->debit($company, '1500.00', Currency::TRY, '2026-09-01');
+
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertOk()
+            ->assertSeeInOrder(['Bugün', 'Finansal durum', 'Dikkat gerekenler']);
+    }
+
+    #[Test]
+    public function admin_bugun_katmaninda_hizli_aksiyon_butonlari_gorur(): void
+    {
+        $company = Company::factory()->create();
+        $this->debit($company, '100.00', Currency::TRY, '2026-09-01');
+
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertOk()
+            ->assertSee('Yeni konaklama')
+            ->assertSee('Yeni tahsilat')
+            ->assertSee('Yeni firma');
+    }
+
+    #[Test]
+    public function personel_panosu_bugun_baslikli_tek_katmandir(): void
+    {
+        // Personel'in finansal/dikkat katmanlarını görecek yetkisi yok
+        // (CLAUDE.md §7.4); yalnızca kendi üretkenlik özeti "Bugün" başlığı
+        // altında görünür.
+        $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))
+            ->assertOk()
+            ->assertSee('Bugün')
+            ->assertDontSee('Finansal durum')
+            ->assertDontSee('Dikkat gerekenler');
+    }
+
     #[Test]
     public function personel_panosu_hic_finansal_sorgu_calistirmaz(): void
     {

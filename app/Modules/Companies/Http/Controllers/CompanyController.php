@@ -49,6 +49,7 @@ class CompanyController extends Controller
             'companies' => $companies,
             'filter' => $filter,
             'showTrashed' => $showTrashed,
+            'activeCount' => $showTrashed ? null : $this->companies->activeCount(),
             'cities' => $this->cityOptions(),
             'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
         ]);

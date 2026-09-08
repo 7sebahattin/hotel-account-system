@@ -648,13 +648,28 @@ yapılmaz.
 **Sorgu bütçesi sabittir ve kayıt sayısıyla BÜYÜMEZ** — ölçülen değer 11 sorgudur;
 `DashboardTest` hem N+1 yokluğunu hem de 15 sorguluk üst sınırı doğrular.
 
-- **Admin/Patron** (`dashboard.financial`): para birimi bazında **açık alacak,
-  açık borç, net bakiye**, bu ay konaklama ve bu ay tahsilat; aktif firma sayısı;
-  para birimi bazında en yüksek bakiyeli firmalar; son cari hareketler; son
-  tahsilatlar; devam eden ve yaklaşan konaklamalar.
-- **Personel:** bugün/bu hafta girdiği konaklama ve tahsilat **sayısı** ve kendi
-  son kayıtları. **Tutar gösterilmez ve SORGULANMAZ** — `PersonnelSummary`
-  nesnesinde hiç `Money` alanı yoktur, yani gizleme değil yapısal engel vardır.
+**Ekran üç adlandırılmış bilgi katmanına ayrılır (Gün 9.6)** — "Şu anda bilmem
+gereken ne?" sorusuna aynı sırayla cevap verir. Bu yalnızca `financial.blade.php`'nin
+GÖRÜNÜM sırasıdır; veri katmanı (`DashboardService`/`FinancialSummary`) ve
+sorgu bütçesi DEĞİŞMEDİ:
+
+- **A) Bugün** — yetkiye uygun hızlı aksiyonlar (Yeni konaklama/tahsilat/firma,
+  `@can` ile gösterilir) + devam eden ve yaklaşan konaklamalar + son cari
+  hareketler + son tahsilatlar.
+- **B) Finansal durum** — para birimi bazında **açık alacak, açık borç, net
+  bakiye**, bu ay konaklama ve bu ay tahsilat; aktif firma sayısı.
+- **C) Dikkat gerekenler** — para birimi bazında en yüksek bakiyeli firmalar.
+
+Admin/Patron (`dashboard.financial`) üçünü de görür. **Personel:** bugün/bu hafta
+girdiği konaklama ve tahsilat **sayısı** ve kendi son kayıtları — tek katmanlı
+"Bugün" başlığı altında (B ve C katmanları personele hiç uygulanmaz). **Tutar
+gösterilmez ve SORGULANMAZ** — `PersonnelSummary` nesnesinde hiç `Money` alanı
+yoktur, yani gizleme değil yapısal engel vardır.
+
+**"Kasada Şu An" (Kasa Defteri, Gün 10) için doğal bir slot bırakılmıştır:**
+`financial.blade.php`'de Bugün ile Finansal durum arasına ayrı bir `<section>`
+olarak eklenebilecek şekilde yorum satırıyla işaretlidir. Bu turda modül
+YAZILMAZ, sahte veri veya boş kart KONMAZ (§3.2) — yalnızca yerleşim hazırdır.
 
 **Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır:** bir firmanın
 borcu başka firmanın alacağını götürmez. Para birimleri asla birleştirilmez (§6/L5).
@@ -779,7 +794,18 @@ Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` il
 `alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`.
 
 `stat` sayısal özet kutusudur (etiket + değer + ipucu); `panel` başlıklı liste
-kartıdır. Pano ve firma detayı aynı iskeleti bu ikisiyle kurar.
+kartıdır (dahili başlığı `<h3>`'tür — sayfa başlığı `<h1>`, `<x-ui.page-header>`
+altındaki bölüm başlıkları varsa `<h2>` olduğu için). Pano ve firma detayı aynı
+iskeleti bu ikisiyle kurar.
+
+**Mobil sayfa header standardı (Gün 9.6):** her liste ekranı `<x-ui.page-header>`
+ile başlık + kısa durum satırı (`subtitle`) + birincil aksiyon (`actions` slotu)
+üçlüsünü aynı desende kurar — örn. "Firmalar (6) / 5 aktif firma / [Yeni firma]".
+`subtitle` gerçek, ucuz (yeni sorgu gerektirmeyen ya da tek ucuz COUNT sorgusu)
+ve dürüst bir cümledir; sayaç rozetinin (`count`) tekrarı DEĞİLDİR — filtrelenmiş
+sonuç toplamı ile "aktif" gibi ayrı bir anlam taşıyan sayı birlikte gösterilebilir
+(Firmalar: toplam + aktif firma sayısı), ayrı bir anlam yoksa yalnızca `subtitle`
+yeterlidir (`count` atlanır).
 
 - Form kontrolleri hata durumunu `$errors` üzerinden kendisi okur; `aria-invalid` ve
   `aria-describedby` bağlantısını kendisi kurar. Her `<label>` `for` ile input `id`'sine bağlıdır.

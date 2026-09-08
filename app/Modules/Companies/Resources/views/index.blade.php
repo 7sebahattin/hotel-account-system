@@ -2,7 +2,8 @@
 @section('title', 'Firmalar')
 
 @section('content')
-    <x-ui.page-header :title="$showTrashed ? 'Silinmiş firmalar' : 'Firmalar'" :count="$companies->total()">
+    <x-ui.page-header :title="$showTrashed ? 'Silinmiş firmalar' : 'Firmalar'" :count="$companies->total()"
+                      :subtitle="$showTrashed ? null : number_format($activeCount, 0, ',', '.').' aktif firma'">
         <x-slot:actions>
             @can('viewTrashed', \App\Modules\Companies\Models\Company::class)
                 <x-ui.button variant="ghost"

@@ -3,7 +3,7 @@
 {{-- Başlıklı liste kartı: pano bölümleri aynı iskeleti kullansın diye. --}}
 <section {{ $attributes->class('flex min-w-0 flex-col rounded-xl border border-line bg-card') }}>
     <div class="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
-        <h2 class="text-sm font-semibold text-tx">{{ $title }}</h2>
+        <h3 class="text-sm font-semibold text-tx">{{ $title }}</h3>
 
         @if ($href)
             {{--

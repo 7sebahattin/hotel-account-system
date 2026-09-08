@@ -6,6 +6,7 @@ namespace Tests\Feature\Ui;
 
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
+use App\Modules\Stays\Models\Stay;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -166,7 +167,12 @@ class DesignSystemTest extends TestCase
     #[Test]
     public function tutar_kolonlari_tabular_nums_kullanir(): void
     {
-        Company::factory()->create();
+        // Gün 9.6 öncesi bu test yanlışlıkla geçiyordu: sayfada hiç konaklama
+        // yokken bile page-header'ın sayaç rozeti (artık kaldırıldı) aynı
+        // sınıfı taşıyordu. Asıl niyeti karşılaması için gerçek bir tutar
+        // hücresi üretilir.
+        $company = Company::factory()->create();
+        Stay::factory()->create(['company_id' => $company->id]);
 
         $this->actingAs($this->userWithRole(RoleName::Admin))
             ->get(route('stays.index'))

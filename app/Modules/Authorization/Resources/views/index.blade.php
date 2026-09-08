@@ -2,7 +2,8 @@
 @section('title', 'Roller ve Yetkiler')
 
 @section('content')
-    <x-ui.page-header title="Roller ve Yetkiler" :count="$roles->count()">
+    <x-ui.page-header title="Roller ve Yetkiler"
+                      :subtitle="number_format($roles->count(), 0, ',', '.').' rol tanımlı'">
         <x-slot:actions>
             <x-ui.button :href="route('roles.create')">Yeni rol</x-ui.button>
         </x-slot:actions>

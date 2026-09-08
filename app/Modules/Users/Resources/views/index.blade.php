@@ -2,7 +2,8 @@
 @section('title', 'Kullanıcılar')
 
 @section('content')
-    <x-ui.page-header title="Kullanıcılar" :count="$users->total()">
+    <x-ui.page-header title="Kullanıcılar"
+                      :subtitle="number_format($users->total(), 0, ',', '.').' kullanıcı'">
         <x-slot:actions>
             @can('create', \App\Models\User::class)
                 <x-ui.button :href="route('users.create')">Yeni kullanıcı</x-ui.button>

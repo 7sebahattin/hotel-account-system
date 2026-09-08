@@ -11,7 +11,15 @@
         title="Pano"
         :subtitle="'Hoş geldiniz, '.auth()->user()->name" />
 
-    <div class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+    {{--
+        Gün 9.6: personel panosu zaten "Bugün" katmanının kendisidir (kendi
+        üretkenliği + hızlı aksiyon) — finansal/dikkat katmanları personele hiç
+        gösterilmediği için (CLAUDE.md §7.4) ayrı bölümlere bölünmez, ama aynı
+        başlık deseni tutarlılık için burada da kullanılır.
+    --}}
+    <h2 class="mt-6 text-base font-semibold text-tx">Bugün</h2>
+
+    <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <x-ui.card>
             <x-ui.stat label="Bugün konaklama" :value="$summary->staysToday" hint="Girdiğiniz kayıt" />
         </x-ui.card>

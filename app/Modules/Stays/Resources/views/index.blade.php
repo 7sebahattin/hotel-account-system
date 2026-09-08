@@ -2,7 +2,8 @@
 @section('title', 'Konaklamalar')
 
 @section('content')
-    <x-ui.page-header title="Konaklamalar" :count="$stays->total()">
+    <x-ui.page-header title="Konaklamalar"
+                      :subtitle="number_format($stays->total(), 0, ',', '.').' konaklama kaydı'">
         <x-slot:actions>
             @can('create', \App\Modules\Stays\Models\Stay::class)
                 <x-ui.button :href="route('stays.create')">Yeni konaklama</x-ui.button>

@@ -2,7 +2,8 @@
 @section('title', 'Tahsilatlar')
 
 @section('content')
-    <x-ui.page-header title="Tahsilatlar" :count="$payments->total()">
+    <x-ui.page-header title="Tahsilatlar"
+                      :subtitle="number_format($payments->total(), 0, ',', '.').' tahsilat kaydı'">
         <x-slot:actions>
             @can('create', \App\Modules\Payments\Models\Payment::class)
                 <x-ui.button :href="route('payments.create')">Yeni tahsilat</x-ui.button>
