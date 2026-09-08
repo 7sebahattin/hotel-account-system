@@ -408,6 +408,18 @@ Unique `(cash_session_id, currency)`.
   yalnızca bir bekleyen devri olabilir
 - **Tetikleyiciler:** `cash_movements` üzerinde UPDATE ve DELETE reddedilir;
   **KAPALI vardiyaya INSERT reddedilir** (ham SQL dahil her yol kapalıdır)
+- **Tetikleyiciler:** `cash_transfer_amounts` ve `cash_counts` üzerinde de UPDATE
+  ve DELETE reddedilir (`cash_movements` ile AYNI ilke) — devir kabul edildiğinde
+  tutar zaten yeni vardiyanın açılış bakiyesine kopyalanmıştır, sayım satırı da
+  kapanmış bir vardiyanın imzalanmış tanığıdır; ikisi de sonradan değiştirilebilseydi
+  imzalanmış kayıt ile gerçek açılış/kapanış durumu sessizce koparırdı (K-091)
+
+**Eşzamanlılık:** `recordMovement()`, `reverseMovement()`, `startHandover()` ve
+`closeSession()` vardiyayı YAZMADAN ÖNCE `lockForUpdate()` ile satır kilidiyle
+okur ve ancak ondan SONRA kapalı/bekleyen-devir durumunu kontrol eder — kontrol
+ile yazma arasında kilitsiz bir pencere bırakmaz. Aksi hâlde tam o anda başlayan
+bir devir ya da kapanış, devrin zaten bildirdiği tutarı sessizce stale bırakabilirdi
+(K-091, `CashBookConcurrencyTest`'te gerçek InnoDB kilitlenmesiyle kanıtlandı).
 
 ### 5.7 Morph map
 

@@ -393,13 +393,17 @@ class CashBookService
             throw InvalidCashMovement::amountNotPositive();
         }
 
-        $this->guardOpenSession($session);
-
         return DB::transaction(function () use (
             $session, $type, $currency, $amount, $actor, $description, $counterparty, $entryAt
         ): CashMovement {
+            // Kontrol ve yazma ATOMİK olmalıdır: satır kilitlenmeden önce
+            // yapılan bir kontrol, tam bu anda başlayan bir devirle (startHandover)
+            // yarışa girer — devir "kabul bekliyor" olmadan hemen önce sızan bir
+            // hareket, devrin zaten bildirdiği tutarı sessizce stale bırakırdı.
+            $locked = $this->lockOpenSession($session);
+
             $movement = $this->insertMovement(
-                session: $session,
+                session: $locked,
                 type: $type,
                 direction: $type->direction(),
                 currency: $currency,
@@ -444,11 +448,23 @@ class CashBookService
 
         $session = $movement->session;
 
-        if ($session === null || $session->isClosed()) {
+        if ($session === null) {
             throw CannotReverseMovement::sessionClosed($movement->getKey());
         }
 
         return DB::transaction(function () use ($movement, $session, $actor, $reason): CashMovement {
+            // Aynı kilit/guard atomikliği recordMovement()'taki gibi: bekleyen
+            // bir devir varken ters kayıt da YASAKTIR — aksi hâlde devrin zaten
+            // bildirdiği tutar, kabul edilmeden hemen önce sızan bir ters
+            // kayıtla sessizce stale kalırdı. `sessionClosed` istisnası burada
+            // hem "kapalı" hem "devir bekliyor" durumunu kapsar; ikisi de aynı
+            // sonucu doğurur: bu an itibarıyla vardiyaya yazılamaz.
+            try {
+                $locked = $this->lockOpenSession($session);
+            } catch (CashSessionIsClosed|InvalidCashMovement) {
+                throw CannotReverseMovement::sessionClosed($movement->getKey());
+            }
+
             // Yarışta ikinci ters kaydı veritabanındaki tekil kısıt engeller;
             // buradaki kontrol kullanıcıya anlaşılır hata vermek içindir.
             if ($this->isReversed($movement)) {
@@ -457,7 +473,7 @@ class CashBookService
 
             try {
                 $reversal = $this->insertMovement(
-                    session: $session,
+                    session: $locked,
                     type: $movement->type,
                     direction: $movement->direction->opposite(),
                     currency: $movement->currency,
@@ -505,16 +521,19 @@ class CashBookService
         User $actor,
         ?string $note = null,
     ): CashTransfer {
-        $this->guardOpenSession($session);
-
         if ($toUser->getKey() === $actor->getKey()) {
             throw new InvalidCashMovement('Kasa kendi kendine devredilemez.');
         }
 
         try {
             return DB::transaction(function () use ($session, $toUser, $amounts, $actor, $note): CashTransfer {
+                // Aynı kilit: tam bu anda bir hareket/ters kayıt yazılıyorsa
+                // (recordMovement/reverseMovement) o işlem önce biter, devir
+                // ondan SONRAKİ gerçek durumu görür. Sessiz stale tutar oluşmaz.
+                $locked = $this->lockOpenSession($session);
+
                 $transfer = new CashTransfer;
-                $transfer->from_session_id = $session->getKey();
+                $transfer->from_session_id = $locked->getKey();
                 $transfer->from_user_id = $actor->getKey();
                 $transfer->to_user_id = $toUser->getKey();
                 $transfer->status = CashTransferStatus::Pending;
@@ -657,14 +676,15 @@ class CashBookService
         User $actor,
         ?string $note = null,
     ): CashSession {
-        $this->guardOpenSession($session);
-
         return DB::transaction(function () use ($session, $countedAmounts, $actor, $note): CashSession {
-            $locked = CashSession::query()->whereKey($session->getKey())->lockForUpdate()->firstOrFail();
-
-            if ($locked->isClosed()) {
-                throw CashSessionIsClosed::make($locked->getKey());
-            }
+            /*
+             * Bekleyen bir devir varken KAPATMA da yasaktır: aksi hâlde
+             * writeCounts() burada bir kez, acceptHandover() içinde bir daha
+             * çalışır — cash_counts'taki UNIQUE(cash_session_id, currency)
+             * kısıtına çarpar ve devir kabulü sessizce 500'e düşerdi. Devri
+             * önce kabul ettirin ya da iptal edin.
+             */
+            $locked = $this->lockOpenSession($session);
 
             $expected = $this->expectedFor($locked);
 
@@ -805,6 +825,36 @@ class CashBookService
         return $amounts;
     }
 
+    /**
+     * Vardiyayı SATIR KİLİDİYLE okur ve "yazılabilir" durumda olduğunu
+     * doğrular — kontrol ile yazma arasında ATOMİK bir bütün oluşturur.
+     *
+     * ÇAĞIRAN ZATEN BİR `DB::transaction()` İÇİNDE OLMALIDIR. Kilit
+     * olmadan yapılan bir kontrol (`if (! $session->isClosed()) { ... }`)
+     * ile asıl yazma arasındaki pencerede, tam o anda başlayan bir devir
+     * (`startHandover`) ya da tam o anda kapatılan vardiya araya girebilir:
+     * bu durumda devrin zaten bildirdiği tutar sessizce stale kalır —
+     * kullanıcı talimatındaki tam olarak tarif edilen yarış budur. Bu yüzden
+     * `recordMovement`, `reverseMovement`, `startHandover` ve `closeSession`
+     * hepsi BU metottan geçer: aynı anda ikisi çalışırsa biri satır kilidinde
+     * bekler, ilki bitince İKİNCİSİ EN GÜNCEL durumu görür ve doğru kararı verir.
+     *
+     * @throws CashSessionIsClosed
+     * @throws InvalidCashMovement
+     */
+    private function lockOpenSession(CashSession $session): CashSession
+    {
+        $locked = CashSession::query()->whereKey($session->getKey())->lockForUpdate()->firstOrFail();
+
+        $this->guardOpenSession($locked);
+
+        return $locked;
+    }
+
+    /**
+     * @throws CashSessionIsClosed
+     * @throws InvalidCashMovement
+     */
     private function guardOpenSession(CashSession $session): void
     {
         if ($session->isClosed()) {

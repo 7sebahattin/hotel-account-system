@@ -1080,3 +1080,77 @@ entegrasyonu, muhasebe genel defteri, PDF kütüphanesi, Alpine — hiçbiri
 eklenmedi (kullanıcı talimatı §22). `reference_type/reference_id` ileride
 Payments/PMS bağlanabilsin diye şemada açık ama V1'de DOLDURULMUYOR; oda geliri
 V1'de manuel girilir.
+
+## K-091 · Kasa Defteri red-team doğrulaması: gerçek yarış koşulu bulundu ve kapatıldı
+
+**Bağlam:** Gün 10'un ardından, CashBook implementasyonu gerçek otel kasa
+senaryolarıyla (X→Y→ara kasa→Z devir zinciri, kasa eksiği/fazlası, eşzamanlılık,
+ters kayıt, çoklu para birimi, yetki, gün sonu kapanış) kırılmaya çalışıldı.
+Amaç yeni özellik değil, mevcut implementasyonun matematiğini ve devir zincirini
+gerçek testlerle kanıtlamaktı.
+
+**Bulunan gerçek hata — yarış koşulu (kritik):** `recordMovement()`,
+`startHandover()` ve `closeSession()`, `guardOpenSession()` kontrolünü
+`DB::transaction()` dışında, satır kilidi OLMADAN çağırıyordu; `reverseMovement()`
+ise bekleyen devir kontrolünü HİÇ yapmıyordu. Kontrol ile yazma arasındaki
+pencerede, tam o anda başlayan bir devir (`startHandover`) ya da tam o anda
+kapatılan bir vardiya araya girebilir — devrin zaten bildirdiği tutar sessizce
+stale kalırdı. **Düzeltme:** `lockOpenSession()` eklendi — vardiyayı
+`lockForUpdate()` ile satır kilidiyle okur, SONRA kapalı/bekleyen-devir
+durumunu kontrol eder; dördü de (`recordMovement`, `reverseMovement`,
+`startHandover`, `closeSession`) artık BU metottan geçer ve kontrol+yazma
+atomik bir bütündür. Gerçek InnoDB kilitlenmesi (`SELECT ... FOR UPDATE` +
+kısa `innodb_lock_wait_timeout` ile ölçülen kilit bekleyişi) ile ampirik olarak
+kanıtlandı — bkz. `tests/Feature/CashBook/CashBookConcurrencyTest.php`.
+`closeSession()`'daki eski yol ayrıca bir ikincil hata daha üretiyordu:
+bekleyen devir varken kapatma engellenmediği için `acceptHandover()`'daki
+`writeCounts()` ikinci kez çağrılınca `cash_counts`'ın `UNIQUE(cash_session_id,
+currency)` kısıtına çarpıp 500'e düşerdi.
+
+**Bulunan gerçek hata — eksik değişmezlik:** `cash_transfer_amounts` ve
+`cash_counts`, `cash_movements`'ın aksine UPDATE/DELETE'e karşı hiç korumasızdı.
+Devir kabul edildiğinde tutar zaten yeni vardiyanın açılış bakiyesine
+kopyalanmıştır; sonradan değiştirilebilseydi imzalanmış devir kaydı ile gerçek
+açılış bakiyesi sessizce koparırdı. **Düzeltme:** `CashMovement` ile AYNI desen
+— model `booted()` guard'ı + `update()`/`delete()` override'ı + DB tetikleyicisi
+(`protect_cash_transfer_amounts_and_counts_from_writes` migration'ı). Ortak tek
+`CashRecordIsImmutable` istisnası kullanıldı, varlık başına ayrı sınıf açılmadı.
+
+**Doğrulanan, DEĞİŞTİRİLMEYEN karar — "expected mi, counted mi?":** kullanıcı
+talimatının en kritik sorusu, yeni vardiyanın açılış bakiyesinin BEKLENEN
+(hesaplanan) tutardan mı yoksa SAYILAN/gerçekten devredilen tutardan mı
+oluştuğuydu. Denetim: `acceptHandover()` teslim edilen tutarı (`transferAmounts()`)
+HEM sayım satırının "sayılan" alanına HEM yeni vardiyanın açılış hareketine
+aynı değişkenden yazıyor — mevcut implementasyon zaten DOĞRUYDU, kod değişikliği
+gerekmedi. Kasa eksiği/fazlasında yeni personelin kasası her zaman fiilen
+teslim aldığı tutardır; fark ayrı bir `CashCount` satırında görünür, otomatik
+gelir/gider hareketi ÜRETMEZ.
+
+**Sıfır bakiyeli para birimi:** `writeCounts()` hem beklenen hem sayılan 0.00
+olduğunda satır hiç yazmaz — devredilmeyen bir para biriminin ne yeni vardiyada
+gereksiz bir `opening` hareketi NE DE eski vardiyada gereksiz bir sayım satırı
+üretmediği doğrulandı.
+
+**Eklenen testler:** `CashBookScenarioTest` (13, §1-§6/§9/§10/§12 senaryoları),
+`CashTransferTest`'e 2 yeni test (bekleyen devir ters kaydı ve devirsiz
+kapanışı da engeller — önceden yalnızca yeni hareketi engellediği test
+ediliyordu), `CashBookConcurrencyTest` (4 test — `RefreshDatabase` DEĞİL
+`DatabaseTruncation` kullanır, çünkü `RefreshDatabase` her testi tek bir açık
+transaction'a sarar ve bu, iki GERÇEK veritabanı bağlantısının birbirini
+kilitlemesini test etmeyi imkânsız kılar). Toplam: 624 test, 1959 assertion,
+hepsi MySQL/MariaDB üzerinde yeşil.
+
+**Test yazarken bulunan ortam ayrıntısı (gerçek uygulama hatası DEĞİL):**
+`APP_TIMEZONE=Europe/Istanbul` iken Eloquent/Carbon ile yazılan bir zaman damgasını
+ham SQL'in `NOW()`'ı ile karşılaştırmak (ikisi farklı saatleri temsil eder)
+`cash_sessions_closed_after_opened` gibi bir CHECK'i sahte biçimde tetikler.
+Uygulama kodu bunu hiç yapmaz (`closed_at`/`opened_at` ikisi de her zaman
+Carbon üzerinden yazılır); yalnızca ham SQL kullanan test kodu buna dikkat
+etmelidir — concurrency testlerinde `NOW()` yerine PHP'nin `now()`'ı bağlanır.
+
+**Değiştirilmeyen (bilerek):** yeni özellik, UI redesign, gerçek bug dışında
+refactor yapılmadı (kullanıcı talimatı bağlayıcıydı). §11 yetki testleri
+zaten Gün 10'da yeterliydi (`admin_bile_baskasinin_vardiyasina_hareket_ekleyemez`,
+`baskasinin_hareketi_ters_kaydedilemez` — admin'in bile finansal yazma
+işlemlerinde kısayolu olmadığını zaten kanıtlıyordu); §12 gün sonu kapanışı ve
+§9 ters kaydın tersinin alınamaması da Gün 10'da zaten doğru ve testliydi.

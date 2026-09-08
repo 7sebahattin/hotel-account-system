@@ -7,6 +7,7 @@ namespace Tests\Feature\CashBook;
 use App\Modules\CashBook\Enums\CashMovementType;
 use App\Modules\CashBook\Enums\CashSessionStatus;
 use App\Modules\CashBook\Enums\CashTransferStatus;
+use App\Modules\CashBook\Exceptions\CannotReverseMovement;
 use App\Modules\CashBook\Exceptions\CashTransferNotPending;
 use App\Modules\CashBook\Exceptions\InvalidCashMovement;
 use App\Modules\CashBook\Models\CashCount;
@@ -52,6 +53,40 @@ class CashTransferTest extends CashBookTestCase
         $this->expectException(InvalidCashMovement::class);
 
         $this->record($session->refresh(), CashMovementType::RoomIncome, '500.00', $x);
+    }
+
+    /**
+     * §7 kullanıcı talimatı: bekleyen devir yalnızca YENİ hareketi değil, ters
+     * kaydı ve kapanışı da engellemelidir — üçü de aynı `lockOpenSession()`
+     * kapısından geçer (CashBookService).
+     */
+    #[Test]
+    public function devir_beklerken_mevcut_hareket_ters_kaydedilemez(): void
+    {
+        $x = $this->personel('X');
+        $y = $this->personel('Y');
+        $session = $this->openSession($x, ['TRY' => '1000.00']);
+        $movement = $this->record($session->refresh(), CashMovementType::RoomIncome, '500.00', $x);
+
+        $this->cash->startHandover($session->refresh(), $y, $this->amounts(['TRY' => '1500.00']), $x);
+
+        $this->expectException(CannotReverseMovement::class);
+
+        $this->cash->reverseMovement($movement, $x);
+    }
+
+    #[Test]
+    public function devir_beklerken_vardiya_devir_olmadan_kapatilamaz(): void
+    {
+        $x = $this->personel('X');
+        $y = $this->personel('Y');
+        $session = $this->openSession($x, ['TRY' => '1000.00']);
+
+        $this->cash->startHandover($session->refresh(), $y, $this->amounts(['TRY' => '1000.00']), $x);
+
+        $this->expectException(InvalidCashMovement::class);
+
+        $this->cash->closeSession($session->refresh(), $this->amounts(['TRY' => '1000.00']), $x);
     }
 
     #[Test]

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\CashBook\Models;
 
 use App\Models\User;
+use App\Modules\CashBook\Exceptions\CashRecordIsImmutable;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,10 @@ use Illuminate\Support\Carbon;
  *
  * Fark SAKLANMAZ, hesaplanır: hem beklenen hem sayılan tutar değişmez olduğu
  * için fark her zaman aynı çıkar; saklamak üçüncü bir doğruluk kaynağı yaratırdı.
+ *
+ * Satırın kendisi de DEĞİŞMEZDİR: kapanmış bir vardiyanın imzalanmış tanığıdır,
+ * sonradan "düzeltilebilseydi" kapanış raporu ile gerçek sayım birbirinden
+ * kopardı.
  *
  * @property int $id
  * @property int $cash_session_id
@@ -40,6 +45,27 @@ class CashCount extends Model
         'counted_amount',
         'created_by',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (): void {
+            throw CashRecordIsImmutable::cannotUpdate('Kasa sayımı');
+        });
+
+        static::deleting(function (): void {
+            throw CashRecordIsImmutable::cannotDelete('Kasa sayımı');
+        });
+    }
+
+    public function update(array $attributes = [], array $options = []): bool
+    {
+        throw CashRecordIsImmutable::cannotUpdate('Kasa sayımı');
+    }
+
+    public function delete(): bool
+    {
+        throw CashRecordIsImmutable::cannotDelete('Kasa sayımı');
+    }
 
     /**
      * @return array<string, mixed>
