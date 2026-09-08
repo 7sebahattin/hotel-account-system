@@ -141,9 +141,11 @@ class LedgerInvariantsTest extends TestCase
     #[Test]
     public function desteklenen_para_birimleri_enum_ile_sinirlidir(): void
     {
-        $this->assertSame(['TRY', 'EUR', 'GBP'], Currency::values());
-        $this->assertNotContains('USD', Currency::values());
-        $this->assertCount(3, Currency::cases());
+        // Gün 9.6: TRY/EUR/GBP'e sabitlenmiş üçlü kaldırıldı; ISO 4217 tabanlı
+        // genişletilebilir kümeye geçildi (config/hotel.php, CurrencyTest).
+        $this->assertSame(['TRY', 'EUR', 'GBP', 'USD', 'RUB', 'GEL'], Currency::values());
+        $this->assertNotContains('CHF', Currency::values());
+        $this->assertCount(6, Currency::cases());
     }
 
     #[Test]

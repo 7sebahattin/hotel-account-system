@@ -91,7 +91,9 @@ class StayListingTest extends TestCase
         Stay::factory()->create(['guest_name' => 'EUR Misafiri', 'currency' => 'EUR']);
 
         $this->assertSame(['EUR Misafiri'], $this->guests($this->index(['currency' => 'EUR'])));
-        $this->assertCount(2, $this->guests($this->index(['currency' => 'USD'])), 'Geçersiz para birimi filtre uygulamaz');
+        // 'USD' Gün 9.6'dan itibaren desteklenir; "geçersiz kod" örneği artık
+        // enum kümesinin gerçekten dışında kalan bir değer olmalı.
+        $this->assertCount(2, $this->guests($this->index(['currency' => 'CHF'])), 'Geçersiz para birimi filtre uygulamaz');
     }
 
     #[Test]

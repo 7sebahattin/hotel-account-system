@@ -48,7 +48,7 @@ class StayController extends Controller
 
         return view('stays::create', [
             'companies' => $this->companyOptions(),
-            'currencies' => Currency::cases(),
+            'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
             'selectedCompanyId' => $request->integer('company_id') ?: null,
         ]);
@@ -78,7 +78,7 @@ class StayController extends Controller
         return view('stays::edit', [
             'stay' => $stay,
             'companies' => $this->companyOptions(),
-            'currencies' => Currency::cases(),
+            'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
         ]);
     }

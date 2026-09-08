@@ -52,7 +52,7 @@ class PaymentController extends Controller
 
         return view('payments::create', [
             'companies' => $this->companyOptions(),
-            'currencies' => Currency::cases(),
+            'currencies' => Currency::active(),
             'methods' => PaymentMethod::cases(),
             'selectedCompanyId' => $request->integer('company_id') ?: null,
         ]);

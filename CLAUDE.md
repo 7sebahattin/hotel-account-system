@@ -377,7 +377,20 @@ WHERE company_id = ? AND currency = ?
 ```
 Pozitif = firma bize borçlu. **Önbelleklenmiş `balance` kolonu V1'de yoktur.**
 
-**L5.** Bakiye **para birimi bazında** hesaplanır. **TRY, EUR ve GBP bakiyeleri kesinlikle tek toplamda birleştirilmez.** V1'de otomatik kur servisi ve kur çevrimi yoktur; çok para birimli firmanın ekstresi para birimine göre gruplanır ve her grup kendi bakiyesini gösterir.
+**L5.** Bakiye **para birimi bazında** hesaplanır. **Desteklenen hiçbir para birimi bakiyesi bir başkasıyla kesinlikle tek toplamda birleştirilmez.** V1'de otomatik kur servisi ve kur çevrimi yoktur; çok para birimli firmanın ekstresi para birimine göre gruplanır ve her grup kendi bakiyesini gösterir.
+
+> **Para birimi kümesi (Gün 9.6):** `Currency` enum'u (`app/Modules/Core/Enums/Currency.php`)
+> TEKNİK geçerlilik kümesidir — V1 itibarıyla `TRY, EUR, GBP, USD, RUB, GEL`. Yeni bir ISO 4217
+> kodu eklemek yalnızca bu enum'a bir `case` eklemeyi gerektirir; `currency` kolonları zaten
+> `CHAR(3)` olup değeri kısıtlayan bir CHECK taşımaz, bu yüzden migration gerekmez.
+> `config('hotel.currencies')` ise İŞ KARARIdır: enum'un bir alt kümesini, formlarda gösterilme
+> sırasıyla birlikte tanımlar (`Currency::active()`). **Yeni kayıt formları** (Konaklama/Tahsilat
+> oluşturma) `Currency::active()` kullanır; **raporlama/filtre/geçmiş** ekranları (liste filtreleri,
+> ekstre, dashboard) her zaman `Currency::cases()` kullanır — bir para birimi "aktif" listeden
+> çıkarılsa bile geçmiş borç/alacak asla gizlenmez. Hiçbir otomatik kur çevrimi yoktur (§18);
+> `Money` hâlâ sabit 2 ondalıklı (kuruş) varsayımıyla çalışır — bu varsayım
+> `Currency::decimalPlaces()` ile adlandırılmıştır, farklı ondalık basamaklı bir ISO kodu
+> (ör. JPY, BHD) eklenmeden önce `Money`'nin gözden geçirilmesi gerekir.
 
 **L6.** Cariye yazan her işlem, kaynak kaydıyla **aynı `DB::transaction()`** içinde olur. Konaklama kaydedilip cari kaydı düşmemesi mümkün olmamalıdır.
 

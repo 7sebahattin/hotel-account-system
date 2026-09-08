@@ -846,3 +846,49 @@ yakalar. `DashboardTest::panel_satirlari_tutari_da_kapsayan_tek_baglantidir` —
 `<a href="…">` etiketinin firma adı VE tutarı `</a>`'dan önce aynı anda sardığını doğrular.
 `inert`/dokunma boyutu/taşma gibi CSS-JS davranışları PHPUnit'te ölçülemediği için asıl kanıt
 gerçek tarayıcı denetimidir (84/84 kontrol temiz); bu, rapor edilen sayılarla birlikte sonuçtur.
+
+## K-087 · Para birimi kümesi ISO 4217 tabanlı ve config-driven genişletilebilir yapıldı
+**Bağlam (Gün 9.6):** İş modeli TRY/EUR/GBP üçlüsüne sabitliydi — Currency enum'unda
+sadece 3 case, dashboard/ekstre/form kodunda hiçbir yerde "3'ten fazla para birimi"
+varsayımını bozan hard-code YOKTU (audit ile doğrulandı: hiçbir yerde `in_array($c,
+['TRY','EUR','GBP'])` gibi bir kapalı liste bulunmadı), ama enum'un kendisi kapalıydı.
+Hedef: en az TRY, EUR, GBP, USD, RUB, GEL desteklemek; gelecekte yeni bir ISO kodu
+eklemek onlarca dosyaya dokunmayı gerektirmemeli.
+
+**DB migration GEREKMEDİ.** `stays.currency`, `payments.currency`, `ledger_entries.currency`
+zaten `CHAR(3)`; `information_schema.CHECK_CONSTRAINTS` ve canlı şema sorgusuyla doğrulandı —
+değeri kısıtlayan hiçbir CHECK yok. Genişleme tamamen `App\Modules\Core\Enums\Currency`
+enum'unda (TRY/EUR/GBP/USD/RUB/GEL, 6 case) ve `config/hotel.php`'de kaldı.
+
+**İki katman, bilinçli ayrım:**
+- `Currency` enum'u = TEKNİK geçerlilik kümesi (validasyon, DB güvenliği, testler).
+- `config('hotel.currencies')` = İŞ KARARI — hangi kodlar aktif ve hangi sırayla
+  gösterilir; enum'un alt kümesi olmak ZORUNDA (testle korunur), enum'u genişletemez.
+- `Currency::active()` (config'ten, sıralı) YALNIZCA yeni kayıt formlarında (Konaklama/
+  Tahsilat oluşturma/düzenleme) kullanılır. `Currency::cases()` (enum'un tamamı)
+  raporlama/filtre/geçmiş ekranlarında (liste filtreleri, ekstre filtresi, dashboard
+  toplamları) kullanılmaya DEVAM eder — bir kod "aktif" listeden çıkarılsa bile o kodda
+  geçmiş borç/alacak dashboard'da veya ekstrede asla gizlenmemeli.
+- `Currency::decimalPlaces()` eklendi: `Money`'nin sabit ×100 (kuruş) varsayımını
+  ADLANDIRIR ve test eder. Money'nin kendisi değiştirilmedi — V1'in 6 para biriminin
+  tamamı 2 ondalıklı; farklı ondalık basamaklı bir ISO kodu (JPY, BHD gibi) eklenmeden
+  önce bu varsayım yeniden değerlendirilmeli.
+- RUB/GEL için sembol yerine ISO kodu gösterilir (`symbol()` → `'RUB'`/`'GEL'`); ₽/₾
+  glifleri az tanınır ve CLAUDE.md §7'nin "sembole güvenilmez" ilkesiyle çelişir.
+
+**Regresyon:** 4 mevcut test `'USD'`'yi "geçersiz para birimi" örneği olarak kullanıyordu
+— USD artık desteklendiği için bu testler yanlış pozitif üretirdi. Testler ZAYIFLATILMADI;
+geçersiz örnek gerçekten enum dışı kalan `'CHF'` ile değiştirildi
+(`LedgerInvariantsTest`, `PaymentCrudTest`, `StayCrudTest`, `StayListingTest`).
+
+**Yeni test:** `tests/Feature/Core/CurrencyTest.php` — enum/config bütünlüğü, `active()`
+sıralaması ve geçersiz kod filtrelemesi, RUB/GEL/USD ile uçtan uca konaklama+tahsilat+
+cari hareket, farklı para birimlerinin toplanmadığı, ekstre/dashboard/formların yeni
+kodları ayrı ayrı gösterdiği, ham SQL ile herhangi bir 3 harfli kodun DB'de kabul
+edildiği (şema güvenliği) ve TRY/EUR/GBP'nin mevcut davranışının bozulmadığı — 24 test,
+82 assertion.
+
+**Değiştirilmeyen (bilerek):** exchange rate/kur servisi, currency conversion, Kasa
+Defteri modülü — bu turun kapsamı dışında (§3.2, kullanıcı talimatı). `StatementController`
+ve `DashboardService` filtre/toplama noktaları `Currency::cases()` üzerinde bırakıldı,
+`active()`'e GEÇİRİLMEDİ — kasıtlı, yukarıdaki ayrım gereği.

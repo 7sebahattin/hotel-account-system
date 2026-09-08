@@ -193,8 +193,10 @@ class StayCrudTest extends TestCase
     #[Test]
     public function desteklenmeyen_para_birimi_reddedilir(): void
     {
+        // 'USD' Gün 9.6'dan itibaren desteklenir (Currency enum); reddedilmesi
+        // gereken kod, enum kümesinin dışında kalan gerçek bir örnek olmalı.
         $this->actingAs($this->userWithRole(RoleName::Admin))
-            ->post(route('stays.store'), $this->payload(['currency' => 'USD']))
+            ->post(route('stays.store'), $this->payload(['currency' => 'CHF']))
             ->assertSessionHasErrors('currency');
 
         $this->assertSame(0, Stay::query()->count());
