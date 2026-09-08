@@ -1154,3 +1154,69 @@ zaten Gün 10'da yeterliydi (`admin_bile_baskasinin_vardiyasina_hareket_ekleyeme
 `baskasinin_hareketi_ters_kaydedilemez` — admin'in bile finansal yazma
 işlemlerinde kısayolu olmadığını zaten kanıtlıyordu); §12 gün sonu kapanışı ve
 §9 ters kaydın tersinin alınamaması da Gün 10'da zaten doğru ve testliydi.
+
+## K-092 · Dashboard V2: Operasyon/Finans ayrı sorgulanır, Lemon Bar durum verisini yeniden kullanır
+
+**Bağlam (Gün 11):** Admin/Patron panosu tek şablonlu "klasik admin paneli"
+olmaktan çıkarıldı; iki AYRI görünüme bölündü — Operasyon ("otelde şu an ne
+oluyor" — kasa) ve Finans ("para ve cari hesap durumu" — ledger/firma).
+Personel panosu "Vardiyam/Kasam" mantığına geçti.
+
+**Sorgu izolasyonu kritik karardı.** `DashboardService::operations()` ve
+`finance()` birbirinin verisine HİÇ dokunmaz — Operasyon seçiliyken
+`ledger_entries`/`companies`/`stays`/`payments` sorgulanmaz, Finans seçiliyken
+`cash_*` tabloları sorgulanmaz. Controller yalnızca seçilen dalı çağırır; eski
+tek `financial()` metodu ikiye bölündü, `FinancialSummary`'den `recentEntries`
+ve `cash` alanları kaldırıldı (kasa artık `OperationsSummary`'de).
+
+**"Bugün" (Operasyon C) için yeni sorgu YAZILMADI.** Bugünün oda geliri/ek
+gelir/gider/ara kasa toplamı, `CashBookService::sessionsForDate()` +
+`summariesFor()`'un ZATEN hesapladığı `CashSessionTotals` nesnelerini toplayarak
+üretilir (`DashboardService::aggregateTodayTotals()`). Bilinen sınır: bir
+vardiya gece yarısını geçerse "bugün" o vardiyanın TÜM hareketlerini sayar
+(yalnızca o günün hareketlerini değil) — V1'de vardiyalar pratikte aynı gün
+kapandığı için (Gün 10 testleriyle doğrulanmış davranış) bu kabul edilebilir
+bir yaklaşıklıktır; gerçek tarih-bazlı bir sorgu (yeni bir CashBookService
+metodu) yalnızca bu varsayım kırılırsa eklenir.
+
+**Lemon Bar'ın "kritik durum" metni GLOBAL bir sorgu DEĞİLDİR.** İlk tasarımda
+her sayfada (ör. firma düzenleme ekranında da) kasa durumunu göstermek için bir
+View Composer düşünüldü — ama bu, `cashbook.view` yetkisi olan (işletmedeki
+HEMEN HEMEN HERKES) için HER sayfa yüklemesinde +1-2 sorgu demekti, sonsuza
+kadar. Bunun yerine durum metni yalnızca PANO isteğinin zaten yüklediği veriden
+(`@section('lemon-bar-status')`) doldurulur; diğer ekranlarda boş kalır. Bu,
+paylaşımlı hosting gerçeğiyle (§2) ve "yalnızca seçilen view için gerekli veri
+yüklenir" ilkesiyle (kullanıcı talimatı §17) tutarlıdır.
+
+**Personel "Kasam"da artık Money var — bilinçli bir istisna, `PersonnelSummary`
+kısıtının ihlali DEĞİL.** Gün 10'da zaten kurulmuş kural şuydu: personelin
+ELİNDEKİ fiziksel para, FİRMA cari bakiyesinden ayrı bir kategoridir ve
+personel bunu Kasa ekranından zaten görüyordu. Gün 11 bu veriyi panoya da
+taşıdı; `PersonnelSummary` hâlâ hiçbir LEDGER/firma alanı taşımıyor — yapısal
+kısıt orada, olması gereken yerde duruyor.
+
+**Hızlı İşlem menüsü rol bazında FARKLI listeler gösterir, tek bir birleşik
+liste değil.** Personel `payments.create`/`stays.create` yetkisine sahip olsa
+bile global menüde bu kısayollar YOKTUR — kullanıcı talimatı §10 personel için
+yalnızca 5 kasa aksiyonunu listeliyor. Bu kasıtlı bir kapsam daraltmasıdır:
+panonun kendisi zaten "Bugün girdiğim kayıtlar" altında ayrı ekleme butonları
+taşır, global menü kasa-öncelikli kalır.
+
+**Bulunan gerçek test-metodolojisi hatası (uygulama hatası DEĞİL):** ilk N+1
+testi "1 vardiya, 0 devir" durumunu "4 vardiya, 3 devir" durumuyla
+karşılaştırıyordu. Eloquent boş bir eager-load kümesi için sorgu ÇALIŞTIRMAZ
+(ör. hiç devir yoksa `toUser`/`fromUser`/`amounts` sorguları hiç atılmaz), bu
+yüzden "0 devir → 3 devir" geçişi sahte bir "sorgu arttı" izlenimi veriyordu.
+Düzeltme: her iki ölçüm de EN AZ BİR devir içerir (1 devirden 4 devire), asıl
+soru doğru şekilde "devir sayısı arttıkça sorgu sabit mi kalıyor" oldu.
+
+**Gerçek tarayıcı QA'de bulunan gerçek hata:** personel panosundaki "Ek Gelir"/
+"Kasa Çıkışı" ghost butonları dar ekranda gizlenmiyordu — `<x-ui.button
+class="hidden sm:inline-flex">` deseni, bileşenin KENDİ `inline-flex` temel
+sınıfıyla AYNI elemanda çakışıyordu (ikisi de temel/önekli olmayan `display`
+yardımcı sınıfı; hangisinin kazandığı Tailwind'in derleme sırasına bağlı ve
+güvenilmez). Düzeltme: görünürlük SARMALAYICI `<div class="hidden sm:flex">`
+düzeyine taşındı — bileşenin kendi temel sınıfıyla asla aynı elemanda çakışmaz.
+Ayrıca: bekleyen bir devri olan (henüz vardiyası olmayan) kullanıcı için boş
+bir "Vardiyam" başlığı altında hiçbir şey görünmediği fark edildi; o dal artık
+bölümün TAMAMINI atlıyor.

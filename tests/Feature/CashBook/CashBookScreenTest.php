@@ -233,9 +233,10 @@ class CashBookScreenTest extends CashBookTestCase
         $session = $this->openSession($personel, ['TRY' => '7000.00', 'EUR' => '300.00']);
         $this->record($session, CashMovementType::RoomIncome, '1000.00', $personel);
 
+        // Gün 11: kasa kartı artık Operasyon görünümündedir (varsayılan pano).
         $this->actingAs($this->patron())->get(route('home'))
             ->assertOk()
-            ->assertSee('Kasada şu an')
+            ->assertSee('Kasada')
             ->assertSee('Mehmet')
             ->assertSee('8.000,00 ₺')
             ->assertSee('300,00 €')
@@ -248,26 +249,28 @@ class CashBookScreenTest extends CashBookTestCase
     {
         $this->actingAs($this->patron())->get(route('home'))
             ->assertOk()
-            ->assertDontSee('Kasada şu an');
+            ->assertSee('Kasa Kapalı')
+            ->assertDontSee('Kasada');
     }
 
     /**
-     * Personel panosu TUTAR TAŞIMAZ (CLAUDE.md §7.4).
-     *
-     * Kasa kartı finansal panodadır; personel kendi kasasını Kasa ekranından
-     * görür. `PersonnelSummary` nesnesinde hiç Money alanı olmaması yapısal
-     * güvencedir ve Gün 10'da da korunmuştur.
+     * Gün 11: personel panosu artık "Vardiyam / Kasam" mantığıyla çalışır —
+     * personel kendi ELİNDEKİ kasanın tutarını görür (CLAUDE.md §8/Kasa
+     * Defteri: "buradaki tutar personelin ELİNDEKİ paradır ve saymak
+     * zorundadır"). Bu, §7.4'teki "personel firma cari bakiyesini görmez"
+     * kuralıyla ÇELİŞMEZ: farklı bir para kategorisidir. Yasak olan,
+     * BAŞKASININ vardiyasının tutarını görmektir (ayrı testle korunur).
      */
     #[Test]
-    public function personel_panosunda_kasa_tutari_gosterilmez(): void
+    public function personel_panosunda_kendi_kasasinin_tutari_gosterilir(): void
     {
         $personel = $this->personel('Mehmet');
         $this->openSession($personel, ['TRY' => '7000.00']);
 
         $this->actingAs($personel)->get(route('home'))
             ->assertOk()
-            ->assertDontSee('Kasada şu an')
-            ->assertDontSee('7.000,00');
+            ->assertSee('Kasam')
+            ->assertSee('7.000,00');
     }
 
     // ---------------------------------------------------------- gezinme

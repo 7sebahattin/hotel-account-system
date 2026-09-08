@@ -270,7 +270,7 @@ class CurrencyTest extends TestCase
             entryDate: '2026-09-01', description: 'Konaklama', sourceType: 'stay', sourceId: 1, actor: $actor,
         );
 
-        $summary = app(DashboardService::class)->financial(Carbon::create(2026, 9, 15));
+        $summary = app(DashboardService::class)->finance(Carbon::create(2026, 9, 15));
 
         $codes = array_map(fn ($t) => $t->currency->value, $summary->currencies);
         $this->assertContains('RUB', $codes);

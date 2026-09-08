@@ -107,6 +107,61 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
+ * Global "+ Hızlı İşlem" menüsü (Gün 11).
+ *
+ * Sayfada BİRDEN FAZLA tetikleyici olabilir (mobil üst çubuk + masaüstü Lemon
+ * Bar aynı anda DOM'da bulunur, `md:hidden`/`hidden md:flex` ile yalnızca
+ * biri görünür) — `drawer` nesnesindeki desenin aynısı: her tetikleyici kendi
+ * panelini açar/kapatır, aynı anda yalnızca bir panel açık kalır.
+ */
+function initQuickActions() {
+    const roots = Array.from(document.querySelectorAll('[data-quick-action]'));
+    if (roots.length === 0) return;
+
+    const entries = roots.map((root) => ({
+        root,
+        toggle: root.querySelector('[data-quick-action-toggle]'),
+        panel: root.querySelector('[data-quick-action-panel]'),
+    })).filter((entry) => entry.toggle && entry.panel);
+
+    const closeAll = ({ except = null, restoreFocus = false } = {}) => {
+        entries.forEach((entry) => {
+            if (entry === except) return;
+            if (entry.panel.hidden) return;
+
+            entry.panel.hidden = true;
+            entry.toggle.setAttribute('aria-expanded', 'false');
+            if (restoreFocus) entry.toggle.focus();
+        });
+    };
+
+    entries.forEach((entry) => {
+        entry.toggle.addEventListener('click', () => {
+            const isOpen = !entry.panel.hidden;
+            closeAll();
+
+            if (!isOpen) {
+                entry.panel.hidden = false;
+                entry.toggle.setAttribute('aria-expanded', 'true');
+                entry.panel.querySelector('a')?.focus();
+            }
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target;
+        const insideAny = entries.some((entry) => entry.root.contains(target));
+        if (!insideAny) closeAll();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeAll({ restoreFocus: true });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initQuickActions);
+
+/**
  * Çift gönderim koruması.
  *
  * Aynı formun iki kez gönderilmesi, bu uygulamada iki konaklama ya da iki

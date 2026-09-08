@@ -25,6 +25,9 @@ final class NavIcons
         'shield' => 'M10 2l6 2.5V9c0 4-2.6 7.2-6 9-3.4-1.8-6-5-6-9V4.5L10 2z',
         'log' => 'M4 4h12v12H4V4zm3 3h6M7 10h6M7 13h4',
         'more' => 'M3 5h14M3 10h14M3 15h14',
+        'plus' => 'M10 4v12M4 10h12',
+        'warning' => 'M8.57 3.2a1.65 1.65 0 012.86 0l6.28 10.9A1.65 1.65 0 0116.28 16.6H3.72a1.65 1.65 0 01-1.43-2.5L8.57 3.2zM10 8v3.2M10 13.8h.01',
+        'swap' => 'M4 7h11l-3-3M16 13H5l3 3',
     ];
 
     public static function path(string $icon): string

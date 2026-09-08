@@ -38,6 +38,13 @@
     </aside>
 
     <div class="md:pl-64">
+        {{--
+            Mobil üst çubuk. Gün 11 — "Lemon Bar": hamburger + marka solda,
+            Hızlı İşlem ve (varsa) kritik durum göstergesi sağda. Operasyon/
+            Finans sekmeleri BURADA GÖSTERİLMEZ (kullanıcı talimatı §12) —
+            onlar sayfa içeriğinde, `dashboard::_view-switch` ile mobilde
+            ayrı bir satırda görünür.
+        --}}
         <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-nav-line bg-nav px-2 md:hidden">
             <button type="button" data-sidebar-toggle
                     class="flex size-11 items-center justify-center rounded-lg text-nav-mut hover:text-nav-tx"
@@ -47,7 +54,27 @@
                 </svg>
             </button>
 
-            <span class="nav-surface min-w-0">@include('partials.brand', ['compact' => true])</span>
+            <span class="nav-surface min-w-0 flex-1">@include('partials.brand', ['compact' => true])</span>
+
+            @yield('lemon-bar-status-icon')
+
+            @include('partials.quick-action')
+        </header>
+
+        {{--
+            Masaüstü Lemon Bar. Sidebar zaten marka + kullanıcı kimliğini
+            taşıdığı için burada TEKRAR EDİLMEZ (kullanıcı talimatı §9) —
+            yalnızca bağlam (Operasyon/Finans sekmesi, sayfa doldurursa),
+            hızlı işlem ve kritik durum vardır. Hiçbiri doldurulmadıysa
+            (çoğu ekranda) çubuk boş bir bağlam şeridi olarak kalır.
+        --}}
+        <header class="sticky top-0 z-20 hidden h-14 items-center gap-4 border-b border-line bg-card px-6 md:flex">
+            <div class="flex min-w-0 flex-1 items-center gap-4">
+                @yield('lemon-bar-tabs')
+                @yield('lemon-bar-status')
+            </div>
+
+            @include('partials.quick-action')
         </header>
 
         <main id="icerik" class="mx-auto w-full max-w-7xl px-4 pb-28 pt-6 sm:px-6 md:pb-6 lg:pb-8 lg:pt-8">

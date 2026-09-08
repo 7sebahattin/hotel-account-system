@@ -322,6 +322,18 @@ class CashBookService
         );
     }
 
+    /**
+     * Kullanıcı yeni bir vardiya açabilir mi (yetki bazlı).
+     *
+     * Panonun "Kasayı Aç" CTA'sını göstermeden önce sorduğu tek soru budur.
+     * Modüller arası kural gereği (CLAUDE.md §4.3/1) `CashSession::class`
+     * yalnızca burada, kendi modülünde referans alınır; Dashboard bu servisi çağırır.
+     */
+    public function canOpenSession(User $user): bool
+    {
+        return $user->can('create', CashSession::class);
+    }
+
     /** Son tamamlanmış devirler — patron ekranı için. */
     public function recentTransfers(int $limit = 5): Collection
     {

@@ -725,40 +725,88 @@ Uygulama kökü (`/`, route adı `home`) Dashboard modülündedir. Controller in
 yetki → `DashboardService` → view. Ekranda ve controller'da hiçbir finansal hesap
 yapılmaz.
 
-**Sorgu bütçesi sabittir ve kayıt sayısıyla BÜYÜMEZ** — ölçülen değer 11 sorgudur;
-`DashboardTest` hem N+1 yokluğunu hem de 15 sorguluk üst sınırı doğrular.
+**Gün 11 — pano role göre TAMAMEN farklı bir yüzeydir**, klasik tek-şablonlu
+admin paneli değildir. `DashboardController` üç dala ayrılır ve dal seçimi
+**önce** güvenlik kontrolüdür, ikinci planda görünüm tercihidir:
 
-**Ekran üç adlandırılmış bilgi katmanına ayrılır (Gün 9.6)** — "Şu anda bilmem
-gereken ne?" sorusuna aynı sırayla cevap verir. Bu yalnızca `financial.blade.php`'nin
-GÖRÜNÜM sırasıdır; veri katmanı (`DashboardService`/`FinancialSummary`) ve
-sorgu bütçesi DEĞİŞMEDİ:
+1. `canSeeFinancials($user)` (`dashboard.financial` yetkisi) **false** ise
+   kullanıcı `dashboard::personnel` görür — `?view=` parametresi HİÇ okunmaz.
+   Bu sıra bağlayıcıdır: personel `/dashboard?view=finance` yazarak Admin/Patron
+   dallarına asla giremez (kayıt bazlı değil, dalın kendisi kapalıdır).
+2. `dashboard.financial` yetkisi **true** ise `?view=finance` ⇒ `dashboard::finance`,
+   aksi hâlde (varsayılan) `dashboard::operations`.
 
-- **A) Bugün** — yetkiye uygun hızlı aksiyonlar (Yeni konaklama/tahsilat/firma,
-  `@can` ile gösterilir) + devam eden ve yaklaşan konaklamalar + son cari
-  hareketler + son tahsilatlar.
-- **B) Finansal durum** — para birimi bazında **açık alacak, açık borç, net
-  bakiye**, bu ay konaklama ve bu ay tahsilat; aktif firma sayısı.
-- **C) Dikkat gerekenler** — para birimi bazında en yüksek bakiyeli firmalar.
+**Operasyon ve Finans AYRI sorgulanır** — `DashboardService::operations()` hiç
+`ledger_entries`/`companies`/`stays`/`payments` sorgulamaz; `finance()` hiç
+`cash_*` tablosu sorgulamaz. Hangisi seçiliyse yalnız o çalışır
+(`DashboardTest::operasyon_gorunumu_cari_veya_firma_sorgusu_calistirmaz`,
+`finans_gorunumu_kasa_sorgusu_calistirmaz`). İkisi de kayıt sayısıyla BÜYÜMEZ;
+sorgu üst sınırı Finans için 15, Operasyon için vardiya/devir sayısından
+bağımsız sabit bir sayıdır (`CashBookService::summariesFor()` zaten O(1)).
 
-Admin/Patron (`dashboard.financial`) üçünü de görür. **Personel:** bugün/bu hafta
-girdiği konaklama ve tahsilat **sayısı** ve kendi son kayıtları — tek katmanlı
-"Bugün" başlığı altında (B ve C katmanları personele hiç uygulanmaz). **Tutar
-gösterilmez ve SORGULANMAZ** — `PersonnelSummary` nesnesinde hiç `Money` alanı
-yoktur, yani gizleme değil yapısal engel vardır.
+- **Operasyon** ("Otelde şu anda ne oluyor?") — A) Şu an (açık vardiya sahibi +
+  saat + hareket sayısı, `CashBookService::dashboardSnapshot()`'tan), B) Kasada
+  (beklenen fiziksel kasa, para birimi bazında), C) Bugün (bugünün oda geliri/
+  ek gelir/gider/ara kasa çıkışı, `CashSessionTotals` toplanarak — yeni bir
+  sorgu YAZILMAZ, `summariesFor()`'un zaten hesapladığı nesneler toplanır),
+  D) Dikkat gerekenler (yalnızca gerçek sorun varsa: bekleyen devir veya
+  kapanış sayım farkı — sorun yoksa bölüm hiç render edilmez), E) Son
+  hareketler (açık vardiyanın son 6 hareketi).
+- **Finans** ("Para ve cari hesaplarda durum ne?") — A) Cari durum (para
+  birimi bazında açık alacak/borç/net + bu ay konaklama/tahsilat), B) En
+  yüksek bakiyeli firmalar, C) Son tahsilatlar, D) Yaklaşan konaklamalar.
+  "Son cari hareketler" paneli KALDIRILDI: aynı bilgi ekstre ve tahsilat
+  listesinde zaten var, tek panoda iki kez gösterilmez.
 
-**"Kasada Şu An" (Gün 10 — slot DOLDU):** Bugün ile Finansal durum arasında,
-`cashbook.view` yetkisi olana ve AÇIK vardiya varken çizilir: vardiya sahibi,
-devralma saati, hareket sayısı, para birimi bazında beklenen fiziksel kasa ve
-son devir. Veri `CashBookService::dashboardSnapshot()`'tan hazır gelir; açık
-vardiya yoksa tek sorgu döner ve kart hiç render edilmez.
+Admin/Patron ikisini de `?view=` ile gezer (bookmark/geri tuşu doğal çalışır —
+ayrı bir JS state makinesi yoktur, `dashboard::_view-switch` sade bağlantılardır).
+**Personel bu geçişi hiç görmez** — `dashboard::personnel` view'ı bu partial'ı
+hiç include etmediği için ayrı bir kontrol GEREKMEZ.
 
-**Personel panosuna kasa TUTARI eklenmemiştir:** `PersonnelSummary`'de hiç
-`Money` alanı olmaması yapısal güvencesi Gün 10'da da korunur. Personel kendi
-kasasını Kasa ekranından görür.
+**Personel panosu "Vardiyam / Kasam" mantığındadır**, finansal yönetim panosu
+DEĞİLDİR. Öncelik sırası: (0) bekleyen bir kasa devri varsa **her şeyden önce**
+gösterilir ("Kasa devri sizi bekliyor"); (1) Vardiyam — açık vardiyası
+kendisindeyse durum + Kasam (para birimi bazında ELİNDEKİ tutar — bkz. altta)
++ hızlı aksiyonlar + son hareketler + (varsa) bekleyen devir uyarısı; açık
+vardiya yoksa "Açık vardiyanız yok" + (yetkiliyse) "Kasayı Aç", vardiya
+BAŞKASINDAYSA yalnızca var olduğu ve kimde olduğu bilgisi (CLAUDE.md §8/Kasa
+Defteri "Görünürlük" — tutar değil); (2) Bugün girdiğim kayıtlar — bugün/bu
+hafta konaklama ve tahsilat SAYISI ve kendi son kayıtları.
 
-**"Sistem henüz boş" durumu** artık yalnızca cari defter boşken değil, KASA da
-boşken gösterilir: kasa cari hesaptan bağımsızdır ve hiç firma yokken bile
-gerçek para olabilir.
+**Kasam artık Money taşır — bu BİLİNÇLİ bir istisnadır, gizleme değildir:**
+`PersonnelSummary` firma cari bakiyesi/toplam alacak gibi hiçbir LEDGER
+alanı taşımaz (§7.4 hâlâ geçerli — o veri hâlâ hiç sorgulanmaz), ama personelin
+KENDİ ELİNDEKİ fiziksel kasa (Gün 10'dan beri `cashbook.operate` yetkisiyle
+zaten kendi ekranında görünen aynı veri) artık panoda da görünür. Yasak olan,
+BAŞKASININ vardiyasının tutarını görmektir; bu, Policy ve Service katmanında
+zaten korunan bir kuraldır (§8/Kasa Defteri "Görünürlük"), pano yalnızca aynı
+kuralı uygular.
+
+**Lemon Bar** — masaüstünde `layouts/app.blade.php` içinde ayrı bir üst çubuktur
+(kenar çubuğu marka/kullanıcı kimliğini zaten taşıdığı için ikisi TEKRARLANMAZ):
+yalnızca bağlam (Operasyon/Finans sekmesi — yalnızca panoda dolu), Hızlı İşlem
+ve (varsa) kritik durum metni taşır. Kritik durum metni yeni bir sorgu YAZMAZ —
+yalnızca zaten pano isteği için yüklenmiş veriden (`@section('lemon-bar-status')`)
+doldurulur; bu yüzden yalnızca pano sayfalarında görünür, uygulamanın geri
+kalanında boştur (global bir kasa sorgusu her sayfada çalıştırılmaz — performans
+kararı, bkz. `docs/kararlar.md`). Mobilde aynı bilgi `?view=` sekmesi OLMADAN
+(kullanıcı talimatı §12), yalnızca "+" (Hızlı İşlem) ve gerekiyorsa küçük bir
+uyarı ikonuyla üst çubukta, sekmeler ise sayfa içeriğinin başında ayrı satırda
+görünür.
+
+**Hızlı İşlem** (`partials/quick-action.blade.php`) rol/yetkiye duyarlı, global
+bir "+" menüsüdür ve YENİ bir işlem mantığı YAZMAZ — mevcut create route'larına
+yönlendirir (`cashbook.movements.create?type=...` zaten var olan bir query
+parametresidir). Personel ve Patron/Admin FARKLI listeler görür: personel için
+öncelik kasadır (Oda Geliri/Ek Gelir/Gider/Kasa Çıkışı/Devir — `payments.create`
+gibi diğer yetkileri olsa bile global menüde GÖSTERİLMEZ, bu bilinçli bir
+kapsam daraltmasıdır); Patron/Admin için öncelik kayıt oluşturmadır (Kasa
+Hareketi/Tahsilat/Konaklama/Firma/Devir).
+
+**"Sistem henüz boş" durumu** artık yalnızca Finans görünümündedir (cari defter
+boşken): kasa artık ayrı bir görünümde olduğu için "ikisi birden boşken" birleşik
+kontrolü YOKTUR — Operasyon zaten her durumda (açık/kapalı) kendi "Şu an" kartını
+gösterdiği için ayrı bir mega boş-durum bloğuna ihtiyaç duymaz.
 
 **Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır:** bir firmanın
 borcu başka firmanın alacağını götürmez. Para birimleri asla birleştirilmez (§6/L5).
@@ -1020,6 +1068,16 @@ yeterlidir (`count` atlanır).
   paylaşmaya çalışmak İŞE YARAMAZ: bir include içinde tanımlanan değişken üst kapsama
   geri sızmaz; bu yüzden sınıf sabiti seçildi.)
 
+**Lemon Bar (Gün 11):** masaüstünde `md:flex` sabit bir üst çubuktur, mobilde
+mevcut hamburger çubuğuna eklenen sağ taraftır. Kenar çubuğu marka/kullanıcı
+kimliğini zaten taşıdığı için Lemon Bar bunları TEKRARLAMAZ — yalnızca bağlam
+(pano sekmesi), Hızlı İşlem ve kritik durum metni taşır. İçerik `@yield`/`@section`
+ile sayfa tarafından doldurulur; doldurulmazsa çubuk sessizce boş kalır (yeni bir
+sorgu tetiklenmez). Hızlı İşlem (`partials/quick-action.blade.php`) `[data-quick-action]`
+deseniyle `drawer` nesnesindeki AYNI desende yazılmıştır (sayfada birden fazla
+tetikleyici olabilir — mobil + masaüstü aynı anda DOM'dadır, yalnızca biri görünür);
+ESC, dışarı tıklama ve `aria-expanded` ile klavye erişilebilirdir.
+
 ### 11.5 Tablo ve mobil liste
 
 - Tablolar **`lg` (1024px) ve üzerinde** gösterilir; altında aynı veri kart listesine düşer.
@@ -1171,7 +1229,8 @@ kaydedilmelidir.
 | 9 | Dashboard (role duyarlı) + tasarım sistemi | Personel finansal kart görmüyor; pano sorgu sayısı sabit |
 | 10 | **Kasa Defteri** (vardiya, hareket, devir, sayım, günlük defter) | Devir zinciri çalışıyor, beklenen kasa elle hesapla tutuyor |
 | 10.1 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
-| 11 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
+| 11 | **Dashboard V2 + Lemon Bar** — role duyarlı Operasyon/Finans ayrımı, personel "Vardiyam/Kasam", global Hızlı İşlem | Personel finans/kasa sorgusu koşturmaz; Operasyon/Finans birbirinin sorgusunu koşturmaz |
+| 11.1 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
 | 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
 | 13 | Yetki testleri, güvenlik sertleştirme, yedekleme cron'u | Rol matrisi testleri yeşil |
 | 14 | Canlıya alma, kullanıcı eğitimi, paralel kullanım başlangıcı | Patron ve personel gerçek veri giriyor |

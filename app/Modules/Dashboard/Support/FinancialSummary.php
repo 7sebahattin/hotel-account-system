@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Dashboard\Support;
 
-use App\Modules\CashBook\Support\CashSnapshot;
-use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Support\Collection;
 
 /**
- * Admin/Patron panosunun tüm verisi.
+ * Finans görünümünün tüm verisi (Gün 11 — Admin/Patron "Finans" sekmesi).
+ *
+ * Cari hesap ve firma verisi burada, fiziksel kasa verisi DEĞİL: kasa artık
+ * Operasyon görünümündedir (`OperationsSummary`). "Son cari hareketler" paneli
+ * de kaldırıldı — aynı bilgi zaten "Son tahsilatlar" ve ekstre ekranında var,
+ * tekrar tek bir panoda iki kez gösterilmez (kullanıcı talimatı §14).
  *
  * @phpstan-type TopCompanies array<string, array<int, CompanyBalanceRow>>
  */
@@ -20,7 +23,6 @@ final readonly class FinancialSummary
     /**
      * @param  array<int, CurrencyTotals>  $currencies
      * @param  array<string, array<int, CompanyBalanceRow>>  $topCompanies
-     * @param  Collection<int, LedgerEntry>  $recentEntries
      * @param  Collection<int, Payment>  $recentPayments
      * @param  Collection<int, Stay>  $upcomingStays
      * @param  array<int, string>  $companyNames
@@ -29,18 +31,15 @@ final readonly class FinancialSummary
         public array $currencies,
         public int $activeCompanyCount,
         public array $topCompanies,
-        public Collection $recentEntries,
         public Collection $recentPayments,
         public Collection $upcomingStays,
         public array $companyNames,
-        public ?CashSnapshot $cash = null,
     ) {}
 
     /** Sistemde hiç finansal hareket var mı? Boş kurulumda empty-state gösterilir. */
     public function isEmpty(): bool
     {
         return $this->currencies === []
-            && $this->recentEntries->isEmpty()
             && $this->recentPayments->isEmpty()
             && $this->upcomingStays->isEmpty();
     }
