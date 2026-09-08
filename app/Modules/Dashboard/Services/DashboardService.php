@@ -6,6 +6,7 @@ namespace App\Modules\Dashboard\Services;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
+use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
@@ -35,6 +36,7 @@ class DashboardService
         private readonly CompanyService $companies,
         private readonly StayService $stays,
         private readonly PaymentService $payments,
+        private readonly CashBookService $cashBook,
     ) {}
 
     /**
@@ -92,6 +94,12 @@ class DashboardService
             recentPayments: $recentPayments,
             upcomingStays: $upcomingStays,
             companyNames: $companyNames,
+            /*
+             * "Kasada Şu An" (Gün 10). Gün 9.6'da mimarî olarak boş bırakılan
+             * slot gerçek veriyle doldu. Açık vardiya yoksa tek sorgu döner ve
+             * kart hiç çizilmez; sorgu bütçesi kayıt sayısıyla büyümez.
+             */
+            cash: $this->cashBook->dashboardSnapshot(),
         );
     }
 

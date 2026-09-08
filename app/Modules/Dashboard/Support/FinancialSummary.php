@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Dashboard\Support;
 
+use App\Modules\CashBook\Support\CashSnapshot;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Stays\Models\Stay;
@@ -32,6 +33,7 @@ final readonly class FinancialSummary
         public Collection $recentPayments,
         public Collection $upcomingStays,
         public array $companyNames,
+        public ?CashSnapshot $cash = null,
     ) {}
 
     /** Sistemde hiç finansal hareket var mı? Boş kurulumda empty-state gösterilir. */

@@ -8,6 +8,9 @@ use App\Models\User;
 use App\Modules\AuditLog\Models\AuditLog;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Authorization\Models\Role;
+use App\Modules\CashBook\Models\CashMovement;
+use App\Modules\CashBook\Models\CashSession;
+use App\Modules\CashBook\Models\CashTransfer;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
@@ -41,6 +44,9 @@ class AppServiceProvider extends ServiceProvider
             'ledger_entry' => LedgerEntry::class,
             'stay' => Stay::class,
             'payment' => Payment::class,
+            'cash_session' => CashSession::class,
+            'cash_movement' => CashMovement::class,
+            'cash_transfer' => CashTransfer::class,
         ]);
 
         // CLAUDE.md §7.1: admin rolü yetki kontrollerini geçer.

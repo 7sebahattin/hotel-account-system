@@ -982,3 +982,101 @@ başka hiçbir ekranı etkilemedi (kontrol edildi: `grep -rl x-ui.panel`).
 (§3.2) — yalnızca Bugün ile Finansal durum arasına nerede ekleneceğini işaretleyen
 bir yorum satırı var. Dashboard sorgu bütçesi, N+1 koruması, para birimi ayrımı
 (§6/L5) hiç dokunulmadı.
+
+## K-090 · Kasa Defteri ayrı modüldür; fiziksel para ile firma borcu aynı deftere yazılmaz
+**Bağlam (Gün 10):** Otelin günlük kasa defteri ve personel devir sistemi
+dijitalleştirildi. İlk karar: bu veri `ledger_entries`'e YAZILMAZ.
+**Gerekçe:** cari defter firmanın BORCUNU izler (5.000 TRY'lik konaklama, para
+tahsil edilmese bile borçtur); kasa defteri FİZİKSEL PARAYI izler (tahsil
+edilmediyse kasada +0). İkisini tek tabloya sıkıştırmak "bakiye" kelimesini iki
+anlama gelir hâle getirirdi. `CashBookService` Company/Stay/Payment/Ledger
+modellerine hiç dokunmaz.
+
+**Tek açık vardiya — kullanıcı başına DEĞİL, işletme genelinde.** Fiziksel kasa
+tektir; iki açık vardiya olsaydı "kasada şu an ne var" sorusunun tek doğru
+cevabı olmaz ve devir zinciri (X → Y → Z) kopardı. Kısıt veritabanındadır:
+`is_open` kolonu açıkken 1, kapalıyken NULL ve UNIQUE index taşır (MySQL tekil
+indexte NULL'ları tekrarlanabilir sayar). Eşzamanlı ikinci açılış DB tarafından
+reddedilir — gerçek çalıştırmayla doğrulandı.
+
+**Tutar DECIMAL(15,2), `amount_minor` DEĞİL.** Kullanıcı taslağında `amount_minor`
+önerilmişti ("Alanlar örnek" notuyla). CLAUDE.md §5/§13 bağlayıcıdır: veritabanında
+para DECIMAL(15,2) tutulur, tamsayı kuruş aritmetiği PHP'de `Money` ile yapılır.
+Kasa için ayrı saklama birimi kullanmak aynı uygulamada iki para konvansiyonu
+demek olurdu — "en az kırıcı model" tercihi budur.
+
+**`type` ile `direction` AYRI kolonlardır, tutar her zaman POZİTİFtir.** Yön tipin
+doğal yönüdür ve TERS KAYITTA tersine döner. Böylece hem beklenen kasa hem
+gelir-gider raporu ters kayıtları kendiliğinden doğru sayar; negatif tutar ya da
+açıklama metni okumak gerekmez. Ledger'daki debit/credit ayrımının kasa
+karşılığıdır. Veritabanı CHECK'i yön-tip uyumunu zorlar: "gelir ama kasadan
+çıkan" satır yazılamaz.
+
+**Açılış bakiyesi ayrı tablo DEĞİL, `opening` tipli bir harekettir.** Beklenen kasa
+tek formülle (Σ işaretli hareket) hesaplanır ve para için iki kaynak olmaz.
+Ledger'da da `source_type = 'opening'` aynı amaçla kullanılabilir durumdadır.
+
+**Ara kasa/patron teslimi bir HAREKETTİR, devir kaydı değil.** Kullanıcı talimatı
+§6 bunu zaten "ayrı bir cash transfer out hareketi" diye adlandırıyor. `cash_transfers`
+tablosu YALNIZCA personel devri içindir: devir iki taraflı onay ister ve iki
+vardiyayı birbirine bağlar; ara kasa teslimi tek taraflıdır ve anında olur.
+İkisini tek tabloya koymak "kabul bekliyor" durumunu anlamsız kılardı.
+**Ve en kritik kural:** kasa çıkışı gelir-gider raporunda GİDER ÜRETMEZ —
+`CashMovementType::affectsIncomeStatement()` bu ayrımın tek kaynağıdır.
+
+**Devir, kabul edilene kadar tamamlanmaz.** Kabul anında tek transaction içinde:
+kapanış sayımı yazılır → teslim eden vardiya kapanır → teslim alan için yeni
+vardiya açılır → tutarlar yeni vardiyanın açılış hareketleri olur. Sıra önemlidir:
+`UNIQUE(is_open)` yüzünden eski vardiya kapanmadan yenisi açılamaz — veritabanı
+sıralamayı garanti eder. Kabul `lockForUpdate` + koşullu durum kontrolüyle
+alınır; iki kişi aynı devri kabul edemez.
+
+**Sayım kabul/kapanış ANINDA yazılır, devir başlatılırken değil.** İlk tasarımda
+sayım devir başlatılırken yazılacaktı; iptal edilen bir devirden sonra ikinci
+devir `UNIQUE(cash_session_id, currency)` kısıtını ihlal ederdi. Sayımın tek
+yazıldığı an "gerçeğin anı"dır: kabul ya da kapanış.
+
+**Fark saklanmaz, hesaplanır.** Beklenen ve sayılan tutar değişmez olduğu için
+fark her zaman aynı çıkar; saklamak üçüncü bir doğruluk kaynağı yaratırdı.
+
+**Hesap verebilirlik:** vardiyaya hareket girmek/ters kaydetmek/devretmek YALNIZCA
+vardiya sahibine açıktır — **admin dahil**. Kayıt argümanı taşıyan Policy
+yetenekleri `Gate::before` ile kısa devre yapılmaz (CLAUDE.md §7.1), bu yüzden
+admin kısayolu buraya sızmaz; testle doğrulandı. Tek istisna KAPATMAdır: personel
+kapatmadan giderse kasa kilitli kalmasın diye `cashbook.view_all` yetkisi olan da
+kapatabilir.
+
+**Personel `cashbook.view`+`operate` alır, `view_all` ALMAZ.** Bu, §7.4'teki
+"personel finansal toplamları görmez" kuralıyla çelişmez: orada yasaklanan FİRMA
+cari bakiyesi ve toplam alacaktır; buradaki tutar personelin ELİNDEKİ paradır ve
+saymak zorundadır. Başkasının vardiyasının tutarını göremez (ekranda kasanın
+kimde olduğu görünür, tutar görünmez).
+
+**Açılış bakiyesi ters kaydedilemez** (gerçek tarayıcı turunda fark edildi):
+devirle gelen açılış, teslim edenin onayladığı devir kaydıyla birebir eşleşir;
+kullanıcı onu ters kaydedebilseydi devredilen para ile kasadaki para sessizce
+çelişirdi. Kural hem Policy'de hem serviste.
+
+**Bulunan ve düzeltilen gerçek hatalar:**
+1. `CashMovementPolicy::reverse()` her satır için `$movement->session`'ı lazy
+   yüklüyordu — liste ekranında klasik N+1. `preventLazyLoading` testte patlattı;
+   `movementsFor()` artık `session`'ı da eager yükler.
+2. Pano kartı, cari defter boşken hiç çizilmiyordu: "Sistem henüz boş" bloğu
+   kasayı da yutuyordu. Kasa cari hesaptan bağımsızdır — boş durum artık ikisi de
+   boşken gösteriliyor.
+3. Blade bileşen etiketinde `:subtitle="…\"…\"…"` — öznitelik değerindeki gömülü
+   çift tırnak bileşen etiketini erken kapatıyor ve şablon sessizce derlenmiyordu.
+   İfade `@php` bloğuna taşındı. (`@unless` + `@else` de Blade'de geçersizdir.)
+4. Yazdırma düzeni (`layouts/print`) dar ekranda yatay kayıyordu ve araç çubuğu
+   düğmeleri 33px'ti. Bu **mevcut ekstre yazdırmasında da vardı** (429>360 px,
+   ölçüldü). Paylaşılan düzen düzeltildi: mm cinsinden A4 boşluğu yalnızca
+   `@media print`'te, tablolar `.scroll-x` sarmalında, araç çubuğu 44px.
+   Hem kasa hem ekstre kazandı.
+5. "+ Hareket ekle" ana ekranda iki kez çiziliyordu (başlıkta ve aksiyon
+   satırında); ikincisi kaldırıldı.
+
+**Değiştirilmeyen (bilerek):** kur servisi/çevrim, PMS oda yönetimi, banka
+entegrasyonu, muhasebe genel defteri, PDF kütüphanesi, Alpine — hiçbiri
+eklenmedi (kullanıcı talimatı §22). `reference_type/reference_id` ileride
+Payments/PMS bağlanabilsin diye şemada açık ama V1'de DOLDURULMUYOR; oda geliri
+V1'de manuel girilir.

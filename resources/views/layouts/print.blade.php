@@ -54,14 +54,40 @@
                 font-size: 9pt; color: #444; display: flex; justify-content: space-between; gap: 12px; }
 
         .toolbar { margin-bottom: 14px; display: flex; gap: 8px; }
+        /*
+            Araç çubuğu yalnızca EKRANDA vardır (yazdırmada gizlenir) ve parmakla
+            kullanılır: dokunma hedefi 44px'in altına düşmemelidir (CLAUDE.md §11.5).
+        */
         .toolbar button, .toolbar a {
             font: inherit; font-size: 10pt; padding: 6px 12px; border: 1px solid #666;
             background: #fff; color: #111; cursor: pointer; text-decoration: none; border-radius: 4px;
+            min-height: 44px; display: inline-flex; align-items: center;
+        }
+
+        /*
+            Geniş tablo (ekstre satırları, kasa hareketleri) EKRANDA kendi
+            kutusunda kayar; sayfanın kendisi yatay kaymaz. Yazdırmada bu sarmal
+            saydamdır — kağıtta kaydırma diye bir şey yoktur.
+        */
+        .scroll-x { overflow-x: auto; }
+
+        /*
+            Gün 10: yazdırma önizlemesi telefonda da açılıyor (devir raporu
+            operasyonel bir ekran). A4 için tasarlanan mm cinsinden kenar
+            boşluğu dar ekranda tek başına ~90px yiyor ve sayfayı yatay
+            kaydırılabilir yapıyordu. Kağıt ölçüleri @media print'te korunur;
+            ekranda dar viewport'a uyan boşluk kullanılır.
+        */
+        @media screen and (max-width: 640px) {
+            body { padding: 12px 10px; font-size: 12px; }
+            .summaries { gap: 8px; }
+            .summary { min-width: 0; flex: 1 1 100%; }
         }
 
         @media print {
             body { padding: 0; }
             .toolbar { display: none; }
+            .scroll-x { overflow-x: visible; }
             @page { size: A4; margin: 14mm 10mm; }
         }
     </style>

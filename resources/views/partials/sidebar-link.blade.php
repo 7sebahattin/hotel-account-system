@@ -11,6 +11,10 @@
     */
     $patterns = [
         'home' => ['home'],
+        // Kasa defterinin alt ekranları (hareket, devir, vardiya) da Kasa
+        // Defteri'ni aktif tutar; Günlük Defter kendi deseniyle ayrılır.
+        'cashbook.index' => ['cashbook.index', 'cashbook.sessions.*', 'cashbook.movements.*', 'cashbook.transfers.*'],
+        'cashbook.day' => ['cashbook.day'],
         'companies.index' => ['companies.*'],
         'stays.index' => ['stays.*'],
         'payments.index' => ['payments.*'],

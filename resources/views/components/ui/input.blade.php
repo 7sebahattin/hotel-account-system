@@ -5,11 +5,18 @@
     'value' => null,
     'required' => false,
     'hint' => null,
+    /*
+        Doğrulama hatasının okunacağı anahtar. Varsayılan olarak alan adıdır;
+        DİZİ alanlarında ayrışır: HTML adı `amounts[TRY]` iken Laravel hatayı
+        `amounts.TRY` altında tutar. Bu prop olmadan dizi alanları hatayı
+        gösteremez ve `aria-invalid` bağlantısı kurulamazdı.
+    */
+    'errorKey' => null,
 ])
 
 @php
     $id = $attributes->get('id') ?? $name;
-    $error = $errors->first($name);
+    $error = $errors->first($errorKey ?? $name);
 @endphp
 
 <div>

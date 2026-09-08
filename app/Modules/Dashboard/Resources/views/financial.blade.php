@@ -10,7 +10,18 @@
         title="Pano"
         :subtitle="$today->translatedFormat('d F Y').' · '.auth()->user()->name" />
 
-    @if ($summary->isEmpty())
+    @php
+        /*
+            Gün 10: "sistem boş" durumu artık YALNIZCA cari defter boşken değil,
+            kasa da boşken gösterilir. Kasa defteri cari hesaptan BAĞIMSIZDIR:
+            hiç firma/konaklama yokken bile açık bir vardiya ve gerçek para
+            olabilir; o durumda "Sistem henüz boş" demek yanlış olurdu.
+        */
+        $ledgerIsEmpty = $summary->isEmpty();
+        $showEmptyState = $ledgerIsEmpty && $summary->cash === null;
+    @endphp
+
+    @if ($showEmptyState)
         {{-- Boş kurulum: kullanıcı ne yapacağını buradan öğrenir. --}}
         <x-ui.card class="mt-6 p-10 text-center">
             <h2 class="text-base font-semibold text-tx">Sistem henüz boş</h2>
@@ -40,6 +51,7 @@
         --}}
 
         {{-- ============================================================ A) BUGÜN --}}
+        @unless ($ledgerIsEmpty)
         <section class="mt-6">
             <h2 class="text-base font-semibold text-tx">Bugün</h2>
 
@@ -165,16 +177,19 @@
                 </x-ui.panel>
             </div>
         </section>
+        @endunless
 
         {{--
-            Buraya İLERİDE (Kasa Defteri, Gün 10) "Kasada Şu An" kartı eklenecek:
-            para birimi bazında fiziksel nakit, aktif vardiya, vardiya başlangıcı,
-            son devir, işlem sayısı. Bu turda YAZILMAZ ve sahte veri KONMAZ
-            (CLAUDE.md §3.2, kullanıcı talimatı) — yalnızca yerleşim, ayrı bir
-            <section> olarak buraya (Bugün'den sonra, Finansal Durum'dan önce)
-            eklenebilecek şekilde hazır bırakılıyor.
-        --}}
+            KASADA ŞU AN (Gün 10) — Gün 9.6'da mimarî olarak bırakılan slot.
 
+            Yalnızca `cashbook.view` yetkisi olana ve AÇIK vardiya varken çizilir;
+            veri yoksa kart hiç render edilmez (boş kart gösterilmez).
+        --}}
+        @if ($summary->cash && auth()->user()->can(\App\Modules\Authorization\Enums\Permission::CashBookView->value))
+            @include('dashboard::_cash', ['cash' => $summary->cash])
+        @endif
+
+        @unless ($ledgerIsEmpty)
         {{-- ==================================================== B) FİNANSAL DURUM --}}
         <section class="mt-8">
             <h2 class="text-base font-semibold text-tx">Finansal durum</h2>
@@ -272,5 +287,6 @@
                 </x-ui.panel>
             </div>
         </section>
+        @endunless
     @endif
 @endsection

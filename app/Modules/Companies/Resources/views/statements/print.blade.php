@@ -59,6 +59,7 @@
         </div>
     @endforeach
 
+    <div class="scroll-x">
     <table>
         <thead>
             <tr>
@@ -91,6 +92,7 @@
             @endforelse
         </tbody>
     </table>
+    </div>
 
     <div class="foot">
         <span>{{ config('app.name') }}</span>

@@ -15,6 +15,13 @@
             ],
         ],
         [
+            'label' => 'Kasa',
+            'items' => [
+                ['route' => 'cashbook.index', 'label' => 'Kasa Defteri', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
+                ['route' => 'cashbook.day', 'label' => 'Günlük Defter', 'can' => Permission::CashBookViewAll->value, 'icon' => 'log'],
+            ],
+        ],
+        [
             'label' => 'Cari',
             'items' => [
                 ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],

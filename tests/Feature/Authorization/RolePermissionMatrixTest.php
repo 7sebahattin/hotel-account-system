@@ -62,11 +62,13 @@ class RolePermissionMatrixTest extends TestCase
             Permission::DashboardFinancial, Permission::ExportExcel,
             Permission::AuditView, Permission::PaymentsCancel,
             Permission::CompaniesDelete, Permission::StaysDelete,
+            // Gün 10: patron kasayı hem işletir hem tüm vardiyaları görür.
+            Permission::CashBookView, Permission::CashBookOperate, Permission::CashBookViewAll,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
-        $this->assertCount(16, $granted);
+        $this->assertCount(19, $granted);
     }
 
     #[Test]
@@ -81,6 +83,8 @@ class RolePermissionMatrixTest extends TestCase
             Permission::AuditView, Permission::PaymentsCancel,
             Permission::CompaniesDelete, Permission::StaysDelete,
             Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
+            // Personel kendi kasasını görür ama TÜM vardiyaları göremez.
+            Permission::CashBookViewAll,
         ] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted, "personel {$forbidden->value} yetkisine sahip olmamalı");
         }
@@ -94,6 +98,14 @@ class RolePermissionMatrixTest extends TestCase
             Permission::StaysUpdate->value,
             Permission::PaymentsView->value,
             Permission::PaymentsCreate->value,
+            /*
+             * Gün 10 — kasa: personel fiziksel kasadan sorumludur, kendi
+             * vardiyasını görmek ve saymak zorundadır. Bu, "finansal toplamları
+             * görmez" kuralıyla çelişmez: yasak olan FİRMA cari bakiyesi ve
+             * toplam alacaktır; buradaki tutar personelin elindeki paradır.
+             */
+            Permission::CashBookView->value,
+            Permission::CashBookOperate->value,
         ], $granted);
     }
 

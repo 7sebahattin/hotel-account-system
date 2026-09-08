@@ -6,18 +6,15 @@
         Mobil (< 768px) BİRİNCİL gezinme burasıdır — kenar çubuğu/çekmece
         artık birincil değil, "Daha Fazla" ile açılan İKİNCİL menüdür.
 
-        Bugün 4 sabit sekme + Daha Fazla: Ana Sayfa, Firmalar, Konaklamalar,
-        Tahsilatlar. Kasa Defteri (Gün 10) geldiğinde hedef: Ana Sayfa, Kasa,
-        Firmalar, Tahsilatlar, Daha Fazla — Konaklamalar o zaman Daha Fazla'ya
-        taşınacak. Bu yüzden liste burada, tek yerde ve config değil kod
-        olarak tutuluyor: henüz olmayan bir "kasa" öğesi eklenmiyor
-        (CLAUDE.md §3.2 — hazırlık placeholder'ı yasak), ama sıra değiştiğinde
-        tek satır taşınacak kadar izole.
+        Gün 10 itibarıyla sıra: Ana Sayfa, Kasa, Firmalar, Tahsilatlar +
+        Daha Fazla. Konaklamalar "Daha Fazla" çekmecesine taşındı (Gün 9.6'da
+        planlanan hedef sıra): kasa defteri günde onlarca kez, konaklama listesi
+        ise çok daha seyrek açılır.
     */
     $primaryItems = [
         ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null, 'icon' => 'home'],
+        ['route' => 'cashbook.index', 'label' => 'Kasa', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
         ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
-        ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
         ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
     ];
 
@@ -30,14 +27,15 @@
 
     $patterns = [
         'home' => ['home'],
+        'cashbook.index' => ['cashbook.*'],
         'companies.index' => ['companies.*'],
-        'stays.index' => ['stays.*'],
         'payments.index' => ['payments.*'],
     ];
 
     // "Daha Fazla" çekmecesinde yaşayan ekranlar: kendi ekranı yoksa da
-    // sekmenin aktif göründüğü tek yer burası olmalı.
-    $moreActive = request()->routeIs('statements.*', 'users.*', 'roles.*', 'audit.*');
+    // sekmenin aktif göründüğü tek yer burası olmalı. Konaklamalar Gün 10'da
+    // buraya taşındı.
+    $moreActive = request()->routeIs('stays.*', 'statements.*', 'users.*', 'roles.*', 'audit.*');
 
     $columnCount = count($visiblePrimary) + 1;
 @endphp

@@ -55,6 +55,9 @@ enum RoleName: string
                 Permission::PaymentsCancel,
                 Permission::LedgerView,
                 Permission::LedgerViewAll,
+                Permission::CashBookView,
+                Permission::CashBookOperate,
+                Permission::CashBookViewAll,
                 Permission::DashboardFinancial,
                 Permission::ExportExcel,
                 Permission::AuditView,
@@ -69,6 +72,17 @@ enum RoleName: string
                 Permission::StaysUpdate,
                 Permission::PaymentsView,
                 Permission::PaymentsCreate,
+
+                /*
+                 * Kasa: personel fiziksel kasadan SORUMLUDUR — kendi vardiyasını
+                 * görmesi ve sayması gerekir. Bu, §7.4'teki "personel finansal
+                 * toplamları görmez" kuralıyla çelişmez: orada yasaklanan FİRMA
+                 * cari bakiyesi ve toplam alacaktır; buradaki tutar personelin
+                 * elindeki paradır. Tüm vardiyaları görme (view_all) yetkisi
+                 * personelde YOKTUR.
+                 */
+                Permission::CashBookView,
+                Permission::CashBookOperate,
             ],
         };
     }

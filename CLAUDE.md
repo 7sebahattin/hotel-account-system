@@ -75,6 +75,7 @@ Geliştirme ortamı 8.4 çalıştırabilir; bu üç kapı sayesinde fark sessizc
 9. **Search & Filters** — listelerde arama/filtre/sıralama/sayfalama
 10. **Excel Export** — listelerin ve ekstrenin dışa aktarımı
 11. **Basic Audit Log** — kim, ne zaman, neyi değiştirdi
+12. **Cash Book (Kasa Defteri)** — vardiya, kasa hareketi, personel devri, sayım (Gün 10)
 
 ### 3.2 ŞİMDİ YAPILMAYACAKLAR (kesin)
 
@@ -87,7 +88,9 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
 - Oda yönetimi (`room_no` sadece serbest metin)
 - Housekeeping
 - Stay charges / ekstra harcamalar
-- Kasa & banka hesap yönetimi
+- Banka hesap yönetimi, banka entegrasyonu, mutabakat
+  (**Fiziksel kasa defteri Gün 10'da kapsama ALINDI** — vardiya/devir/sayım.
+  Kapsam dışı olan yalnızca BANKA tarafıdır; bkz. §8/Kasa Defteri.)
 - Kur servisi, TCMB entegrasyonu, döviz çevrimi
 - Yaşlandırma (aging) raporları
 - Fatura / e-Fatura / e-Arşiv
@@ -131,6 +134,7 @@ app/
     ├── Payments/
     ├── Ledger/
     ├── Dashboard/
+    ├── CashBook/
     └── AuditLog/
 config/
 ├── hotel.php                       # uygulamaya özel ayarlar
@@ -350,11 +354,68 @@ Index: `(company_id, entry_date)`, `(company_id, currency)`, `(source_type, sour
 
 Kayıt **değiştirilemez ve silinemez**. `updated_at` yoktur. Hiçbir role delete yetkisi verilmez.
 
+### 5.8 Kasa defteri tabloları (Gün 10)
+
+Kasa defteri **cari hesaptan ayrı bir defterdir**: `ledger_entries` firma borcunu,
+kasa tabloları FİZİKSEL parayı izler. Aralarında yazma bağı yoktur.
+
+**`cash_sessions`** — vardiya: `opened_by`, `opened_at`, `closed_at`, `closed_by`,
+`status` (`open`|`closed`), `is_open`, `opening_note`, `closing_note`.
+
+> **İşletmede aynı anda yalnızca BİR açık vardiya olabilir.** Kısıt kullanıcı
+> başına değil işletme genelindedir: fiziksel kasa tektir. `is_open` kolonu
+> açıkken `1`, kapalıyken `NULL`'dur ve `UNIQUE` index taşır; MySQL tekil
+> indexte NULL'ları tekrarlanabilir saydığı için bu "en fazla bir açık vardiya"
+> anlamına gelir ve eşzamanlı ikinci açılışı veritabanı reddeder.
+
+**`cash_movements`** — hareket: `cash_session_id`, `type`, `direction`, `amount`,
+`currency`, `entry_at`, `description`, `counterparty`, `reference_type/id`,
+`is_reversal`, `reverses_movement_id` (**unique**), `created_by`, `created_at`.
+
+- Tutar **her zaman pozitiftir**; işaret `direction` (`in`|`out`) kolonundan gelir.
+  Yön tipin doğal yönüdür, **ters kayıtta tersine döner** — ledger'daki
+  debit/credit ayrımının kasa karşılığıdır.
+- **Açılış bakiyesi ayrı tabloda değil, `opening` tipli bir harekettir**: beklenen
+  kasa tek formülle hesaplanır ve para için iki kaynak olmaz.
+- `reference_type/reference_id` ileride PMS/Payments bağlanabilsin diye açıktır;
+  V1'de uygulama tarafından DOLDURULMAZ (§3.3'teki kaynak izleme deseni).
+- Tutar `DECIMAL(15,2)`'dir (§5 genel kuralı) — `amount_minor` DEĞİL. Tamsayı
+  kuruş aritmetiği PHP tarafında `Core\Support\Money` ile yapılır.
+
+**`cash_transfers`** — personelden personele devir: `from_session_id`,
+`to_session_id`, `from_user_id`, `to_user_id`, `status`
+(`pending`|`accepted`|`cancelled`), `initiated_at`, `responded_at`, `note`.
+Ara kasa/patron teslimi burada TUTULMAZ; o bir `cash_out` **hareketidir**.
+
+**`cash_transfer_amounts`** — devirde teslim edilen tutarlar, para birimi başına
+bir satır. Unique `(cash_transfer_id, currency)`. "Toplam" kolonu yoktur (§6/L5).
+
+**`cash_counts`** — kapanış sayımı, para birimi başına bir satır:
+`expected_amount` (kapanış anındaki hesaplanan tutarın anlık görüntüsü),
+`counted_amount`. **Fark saklanmaz, hesaplanır**: iki kaynak da değişmez olduğu
+için fark her zaman aynı çıkar; saklamak üçüncü bir doğruluk kaynağı yaratırdı.
+Unique `(cash_session_id, currency)`.
+
+**Veritabanı düzeyinde uygulanan değişmezler:**
+- `UNIQUE(cash_sessions.is_open)` — en fazla bir açık vardiya
+- `CHECK` — `status`/`is_open`/`closed_at` tutarlılığı
+- `CHECK (cash_movements.amount > 0)`, tip ve yön beyaz listesi
+- `CHECK` — **yön tiple uyumlu olmalı** (ters kayıtta tersi): "gelir ama kasadan
+  çıkan" gibi anlamsız satır yazılamaz
+- `UNIQUE(reverses_movement_id)` — bir hareket yalnızca bir kez ters kaydedilir
+- `CHECK (cash_transfers.from_user_id <> to_user_id)` — kendine devir yasak
+- `UNIQUE(pending_from_session_id)` (generated column) — bir vardiyanın aynı anda
+  yalnızca bir bekleyen devri olabilir
+- **Tetikleyiciler:** `cash_movements` üzerinde UPDATE ve DELETE reddedilir;
+  **KAPALI vardiyaya INSERT reddedilir** (ham SQL dahil her yol kapalıdır)
+
 ### 5.7 Morph map
 
 `AppServiceProvider::boot()` içinde `Relation::enforceMorphMap([...])` zorunlu:
 `'stay' => Stay::class`, `'payment' => Payment::class`, `'company' => Company::class`,
-`'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`.
+`'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`,
+`'cash_session' => CashSession::class`, `'cash_movement' => CashMovement::class`,
+`'cash_transfer' => CashTransfer::class`.
 Sınıf adı değişse bile veri bozulmaz.
 
 ---
@@ -476,6 +537,9 @@ stays.view, stays.create, stays.update, stays.delete
 payments.view, payments.create, payments.cancel
 ledger.view            # tek firmanın ekstresi
 ledger.view_all        # tüm firmaların bakiyesi / toplam alacak
+cashbook.view          # kasa defteri ve açık vardiya
+cashbook.operate       # hareket girme, vardiya açma/kapatma, devir
+cashbook.view_all      # tüm vardiyalar, günlük defter, kasa farkları
 dashboard.financial    # finansal dashboard kartları
 export.excel
 audit.view
@@ -509,6 +573,10 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | payments.cancel | ✅ | ✅ | ❌ |
 | payments — metadata düzenleme | ✅ | ✅ | ⚠️ kendi kaydı + süre |
 | payments — finansal alan düzenleme | ❌ | ❌ | ❌ |
+| cashbook.view | ✅ | ✅ | ✅ |
+| cashbook.operate | ✅ | ✅ | ✅ |
+| cashbook.view_all | ✅ | ✅ | ❌ |
+| kasa — başkasının vardiyasına hareket | ❌ | ❌ | ❌ |
 | ledger.view | ✅ | ✅ | ❌ |
 | ledger.view_all | ✅ | ✅ | ❌ |
 | dashboard.financial | ✅ | ✅ | ❌ |
@@ -666,10 +734,19 @@ girdiği konaklama ve tahsilat **sayısı** ve kendi son kayıtları — tek kat
 gösterilmez ve SORGULANMAZ** — `PersonnelSummary` nesnesinde hiç `Money` alanı
 yoktur, yani gizleme değil yapısal engel vardır.
 
-**"Kasada Şu An" (Kasa Defteri, Gün 10) için doğal bir slot bırakılmıştır:**
-`financial.blade.php`'de Bugün ile Finansal durum arasına ayrı bir `<section>`
-olarak eklenebilecek şekilde yorum satırıyla işaretlidir. Bu turda modül
-YAZILMAZ, sahte veri veya boş kart KONMAZ (§3.2) — yalnızca yerleşim hazırdır.
+**"Kasada Şu An" (Gün 10 — slot DOLDU):** Bugün ile Finansal durum arasında,
+`cashbook.view` yetkisi olana ve AÇIK vardiya varken çizilir: vardiya sahibi,
+devralma saati, hareket sayısı, para birimi bazında beklenen fiziksel kasa ve
+son devir. Veri `CashBookService::dashboardSnapshot()`'tan hazır gelir; açık
+vardiya yoksa tek sorgu döner ve kart hiç render edilmez.
+
+**Personel panosuna kasa TUTARI eklenmemiştir:** `PersonnelSummary`'de hiç
+`Money` alanı olmaması yapısal güvencesi Gün 10'da da korunur. Personel kendi
+kasasını Kasa ekranından görür.
+
+**"Sistem henüz boş" durumu** artık yalnızca cari defter boşken değil, KASA da
+boşken gösterilir: kasa cari hesaptan bağımsızdır ve hiç firma yokken bile
+gerçek para olabilir.
 
 **Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır:** bir firmanın
 borcu başka firmanın alacağını götürmez. Para birimleri asla birleştirilmez (§6/L5).
@@ -677,6 +754,72 @@ borcu başka firmanın alacağını götürmez. Para birimleri asla birleştiril
 "Bu ay" aralığı cari hareketin `entry_date` alanıyla aynı sütun üzerinden uygulanır:
 konaklamada `check_out_date`, tahsilatta `payment_date`. Böylece ay toplamı, aynı ay
 deftere düşen tutarla birebir tutar. İptal edilmiş kayıtlar sayılmaz.
+
+### Cash Book (Kasa Defteri)
+
+Fiziksel kasanın vardiya/devir defteri. **Cari hesaptan tamamen ayrıdır**:
+`CashBookService` Company/Stay/Payment/Ledger modellerine hiç dokunmaz ve
+`ledger_entries`'e HİÇBİR ŞEY yazmaz. Oda borcunun doğması ile paranın tahsil
+edilmesi ayrı olaylardır: 5.000 TRY'lik konaklama nakit tahsil edilmediyse
+kasada +0'dır.
+
+**Vardiya:** aynı anda yalnızca BİR açık vardiya olur (§5.8). Vardiyayı açan
+kişi kasadan sorumludur.
+
+**Hareket türleri** (`CashMovementType`) ve gelir-gider raporuna etkisi:
+
+| Tür | Kasaya etkisi | Gelir-gider raporu |
+|---|---|---|
+| `opening` (açılış bakiyesi) | + | **hayır** |
+| `room_income` (oda geliri) | + | gelir |
+| `extra_income` (ek gelir) | + | gelir |
+| `expense` (gider) | − | gider |
+| `cash_out` (ara kasa/patron/banka teslimi) | − | **hayır** |
+| `cash_in` (kasaya dışarıdan para) | + | **hayır** |
+
+> **EN KRİTİK KURAL:** ara kasa/patron teslimi **GİDER DEĞİLDİR**. Kasada
+> 14.000 TRY varken patrona 12.000 teslim edilirse fiziksel kasa 2.000'e düşer
+> ama gelir-gider raporunda 12.000'lik bir gider OLUŞMAZ. Ayrım tek yerde
+> tanımlıdır: `CashMovementType::affectsIncomeStatement()`.
+
+**Beklenen kasa** para birimi bazında hesaplanır ve para birimleri ASLA
+birleştirilmez (§6/L5):
+`açılış + oda geliri + ek gelir + kasa girişi − gider − kasa çıkışı`.
+Hesap SQL'de değil serviste, tamsayı kuruş üzerinden yapılır.
+
+**Değişmezlik:** kasa hareketi güncellenemez ve silinemez — ne hard delete ne
+soft delete, ne de route. Düzeltme **ters harekettir**: aynı tip, aynı tutar,
+ters yön, `is_reversal = true`. Böylece hem beklenen kasa hem gelir-gider
+raporu kendiliğinden düzelir. **Açılış bakiyesi ters kaydedilemez** (devredilen
+tutarla bağı kopardı); hatalı açılış kapanış sayımındaki FARK olarak görünür.
+
+**Devir İKİ TARAFLIDIR.** Teslim eden devri başlatır (`pending`); teslim alan
+KENDİ HESABIYLA kabul edene kadar devir tamamlanmaz ve kasa teslim edenin
+vardiyasında görünmeye devam eder. Devir beklerken vardiyaya yeni hareket
+girilemez. Kabul anında tek transaction içinde: kapanış sayımı yazılır →
+teslim eden vardiya kapanır → teslim alan için yeni vardiya açılır → devredilen
+tutarlar yeni vardiyanın `opening` hareketleri olur. Kendi kendine devir
+yasaktır (DB CHECK).
+
+**Sayım:** kapanışta personel her para birimi için FİİLEN saydığı tutarı girer;
+beklenen tutar SUNUCUDA yeniden hesaplanır (formdan alınmaz). Fark para birimi
+bazında ayrı tutulur, birbirine çevrilmez. Beklenen var ama hiç sayılmadıysa
+satır yine yazılır — eksik para sessizce kaybolmaz.
+
+**Hesap verebilirlik:** bir vardiyaya hareket girmek, ters kayıt yazmak ve
+devretmek YALNIZCA vardiya sahibine açıktır — admin/patron dahil kimse
+başkasının vardiyasına hareket yazamaz (kayıt argümanlı Policy yetenekleri
+`Gate::before` ile kısa devre yapılmaz, §7.1). Tek istisna KAPATMAdır:
+personel kapatmadan giderse kasa kilitli kalmasın diye `cashbook.view_all`
+yetkisi olan da kapatabilir; kapatan denetim kaydına yazılır.
+
+**Görünürlük:** açık vardiyanın VARLIĞINI ve sahibini `cashbook.view` olan
+herkes görür (personelin kasanın kimde olduğunu bilmesi operasyonel bir
+ihtiyaçtır); TUTARLARI yalnızca vardiya sahibi ve `cashbook.view_all` olanlar
+görür.
+
+**Denetim kaydı** `Auditable` trait'i ile değil, `CashBookService` tarafından
+açıkça yazılır (finansal kayıt deseni, §8/Payments ile aynı gerekçe).
 
 ### Basic Audit Log
 `Auditable` trait'i ile `Company` ve `User` modellerinde `created/updated/deleted` olayları;
@@ -832,10 +975,9 @@ yeterlidir (`count` atlanır).
 **Mobil (< 768px) gezinme (Gün 9.6 — kenar çubuğu artık BİRİNCİL değil):**
 
 - Birincil gezinme sabit **alt gezinme çubuğudur** (`partials/bottom-nav.blade.php`,
-  `[data-bottom-nav]`, `md:hidden`). V1 itibarıyla 4 sabit sekme + Daha Fazla: Ana Sayfa,
-  Firmalar, Konaklamalar, Tahsilatlar. Kasa Defteri (Gün 10) geldiğinde hedef sıra: Ana
-  Sayfa, Kasa, Firmalar, Tahsilatlar, Daha Fazla — Konaklamalar o zaman Daha Fazla'ya
-  taşınır. Sekmeler yetkiye duyarlıdır (aynı `$user->can()` deseni), ikon + kısa metin
+  `[data-bottom-nav]`, `md:hidden`). **Gün 10 sırası: Ana Sayfa, Kasa, Firmalar,
+  Tahsilatlar + Daha Fazla.** Konaklamalar "Daha Fazla" çekmecesine taşındı: kasa
+  defteri günde onlarca kez, konaklama listesi çok daha seyrek açılır. Sekmeler yetkiye duyarlıdır (aynı `$user->can()` deseni), ikon + kısa metin
   birlikte gösterilir (yalnızca ikon değil), dokunma hedefi ≥ 44px, `aria-current="page"`
   ile aktif sekme işaretlenir, `env(safe-area-inset-bottom)` ile iPhone alt çentiği
   hesaba katılır. Ana içerik (`<main id="icerik">`) alt çubuğun üstüne binmemesi için
@@ -944,6 +1086,20 @@ Test yazılmadan merge edilmeyecek alanlar:
 - Personel: `ledger.*`, `dashboard.financial`, `export.excel` route'ları → 403
 - Personel: form'a `amount` göndererek başkasının kaydını değiştirme denemesi → engellenir
 
+**Kasa Defteri (Feature) — pazarlıksız:**
+1. Beklenen kasa = açılış + gelirler + kasa girişi − gider − kasa çıkışı
+2. Ara kasa/patron teslimi kasayı azaltır ama GİDER TOPLAMINI ARTIRMAZ
+3. Para birimleri ayrı hesaplanır, birbirine eklenmez (RUB/USD/GEL dahil)
+4. Aynı anda ikinci vardiya açılamaz (uygulama + veritabanı)
+5. Kapalı vardiyaya hareket eklenemez (servis + tetikleyici)
+6. Hareket update/delete denemesi exception fırlatır (model + tetikleyici)
+7. Ters kayıt beklenen kasayı ve gelir toplamını düzeltir; ikinci ters kayıt yazılmaz
+8. Açılış bakiyesi ters kaydedilemez
+9. Devri yalnızca hedef kullanıcı kabul eder; kabul edilmiş devir tekrar kabul edilemez
+10. Devirde kapanış sayımı ve fark otomatik yazılır
+11. Personel başka personelin vardiyasına hareket ekleyemez (admin dahil)
+12. Günlük defter sorgu sayısı vardiya sayısıyla büyümez (N+1)
+
 **Diğer:** login rate limit, pasif kullanıcı girişi, cari hareketi olan firmanın silinememesi.
 
 Komut: `php artisan test`. CI yeşil olmadan push edilmez.
@@ -1001,7 +1157,8 @@ kaydedilmelidir.
 | 7 | Payments + iptal + cari entegrasyonu | Tahsilat → doğru credit, iptal geri alıyor |
 | 8 | Cari ekstre + firma bakiye listesi + yazdırma | Ekstre elle hesapla birebir tutuyor |
 | 9 | Dashboard (role duyarlı) + tasarım sistemi | Personel finansal kart görmüyor; pano sorgu sayısı sabit |
-| 10 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
+| 10 | **Kasa Defteri** (vardiya, hareket, devir, sayım, günlük defter) | Devir zinciri çalışıyor, beklenen kasa elle hesapla tutuyor |
+| 10.1 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
 | 11 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
 | 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
 | 13 | Yetki testleri, güvenlik sertleştirme, yedekleme cron'u | Rol matrisi testleri yeşil |
