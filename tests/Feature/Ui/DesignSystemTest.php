@@ -132,13 +132,51 @@ class DesignSystemTest extends TestCase
     }
 
     #[Test]
-    public function tema_tek_ve_koyudur(): void
+    public function tema_tektir_ve_degistirilemez(): void
     {
         $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
 
-        // Tema değiştirici veya açık tema yoktur.
+        // Tema değiştirici, koyu tema veya kullanıcı tercihi yoktur.
         $response->assertDontSee('theme-switch', false);
         $response->assertDontSee('prefers-color-scheme', false);
-        $response->assertSee('content="#0f172a"', false);
+
+        // Mobil tarayıcı çubuğu kenar çubuğuyla aynı yüzeyi kullanır.
+        $response->assertSee('content="#172033"', false);
+    }
+
+    #[Test]
+    public function blade_icinde_ham_hex_rengi_yazilmaz(): void
+    {
+        // Tek renk kaynağı resources/css/app.css içindeki @theme bloğudur
+        // (CLAUDE.md §11.2). Bileşenlerde ham hex, token'ları anlamsızlaştırır.
+        $offenders = [];
+
+        foreach (['resources/views', 'app/Modules'] as $root) {
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator(base_path($root))
+            );
+
+            foreach ($files as $file) {
+                if (! str_ends_with((string) $file, '.blade.php')) {
+                    continue;
+                }
+
+                // Yazdırma görünümü bilinçli olarak kendi kendine yeten sade CSS
+                // taşır ve Vite çıktısını yüklemez (CLAUDE.md §8 / Ledger).
+                if (str_contains((string) $file, 'print.blade.php')) {
+                    continue;
+                }
+
+                // `<meta name="theme-color">` CSS token'ı kabul etmez; tarayıcı
+                // çubuğu rengi HTML'de düz değer olmak zorundadır. Tek muafiyet budur.
+                $contents = (string) preg_replace('/^.*theme-color.*$/m', '', (string) file_get_contents((string) $file));
+
+                if (preg_match('/#[0-9a-fA-F]{3,8}\b/', $contents) === 1) {
+                    $offenders[] = str_replace(base_path().'/', '', (string) $file);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'Blade dosyalarında ham hex rengi bulundu.');
     }
 }

@@ -14,7 +14,7 @@
     <label for="{{ $id }}" class="block text-sm text-mut">
         {{ $label }}
         @if ($required)
-            <span class="text-acc" aria-hidden="true">*</span>
+            <span class="text-acc-tx" aria-hidden="true">*</span>
             <span class="sr-only">(zorunlu)</span>
         @endif
     </label>
@@ -25,8 +25,8 @@
         @required($required)
         @if ($error) aria-invalid="true" aria-describedby="{{ $id }}-error" @endif
         {{ $attributes->except('id')->class([
-            'mt-1 block min-h-11 w-full rounded-lg bg-well px-3 text-tx',
-            'border focus:border-acc',
+            'mt-1 block min-h-11 w-full rounded-lg bg-card px-3 text-tx',
+            'border focus:border-acc-tx',
             $error ? 'border-danger' : 'border-field',
         ]) }}
     >{{ $slot }}</select>

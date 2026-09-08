@@ -4,7 +4,33 @@
 @section('content')
     <x-ui.page-header :title="$company->name">
         <x-slot:meta>
-            <div class="mt-2">@include('companies::_status', ['company' => $company])</div>
+            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                @include('companies::_status', ['company' => $company])
+
+                {{-- İletişim bilgileri üstte, tek satırda: ekranı açan kişinin
+                     ilk ihtiyacı firmayı arayabilmek. Boş alanlar hiç çizilmez. --}}
+                @if ($company->phone)
+                    <a href="tel:{{ preg_replace('/[^0-9+]/', '', $company->phone) }}"
+                       class="text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
+                        {{ $company->phone }}
+                    </a>
+                @endif
+
+                @if ($company->email)
+                    <a href="mailto:{{ $company->email }}"
+                       class="truncate text-sm text-mut underline-offset-2 hover:text-tx hover:underline">
+                        {{ $company->email }}
+                    </a>
+                @endif
+
+                @if ($company->contact_person)
+                    <span class="text-sm text-mut">{{ $company->contact_person }}</span>
+                @endif
+
+                @if ($company->city)
+                    <span class="text-sm text-mut">{{ $company->city }}</span>
+                @endif
+            </div>
         </x-slot:meta>
 
         <x-slot:actions>
@@ -35,7 +61,62 @@
         </x-slot:actions>
     </x-ui.page-header>
 
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
+    @can('ledger.view')
+        {{--
+            Cari bakiye — para birimi bazında AYRI kartlar.
+            TRY, EUR ve GBP hiçbir koşulda tek toplamda birleştirilmez (CLAUDE.md §6/L5).
+        --}}
+        <section class="mt-6" aria-labelledby="bakiye-basligi">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 id="bakiye-basligi" class="text-sm font-semibold text-tx">Cari bakiye</h2>
+
+                <a href="{{ route('statements.show', $company) }}"
+                   class="rounded text-xs text-acc-tx underline underline-offset-2 hover:text-tx">
+                    Ekstreyi aç
+                </a>
+            </div>
+
+            @if ($balances === [])
+                <x-ui.empty class="mt-3">Bu firmanın cari hareketi yok.</x-ui.empty>
+            @else
+                <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    @foreach ($balances as $code => $balance)
+                        @php $currency = \App\Modules\Core\Enums\Currency::from($code); @endphp
+
+                        <x-ui.card>
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-xs font-medium uppercase tracking-wide text-mut">
+                                    {{ $currency->label() }}
+                                </p>
+
+                                <x-ui.badge tone="accent">{{ $code }}</x-ui.badge>
+                            </div>
+
+                            <p @class([
+                                'mt-1 text-xl font-semibold tabular-nums',
+                                'text-debit' => $balance->isPositive(),
+                                'text-credit' => $balance->isNegative(),
+                                'text-tx' => $balance->isZero(),
+                            ])>{{ $balance->format($currency) }}</p>
+
+                            {{-- Anlam renge değil metne bağlıdır (CLAUDE.md §11.6). --}}
+                            <p class="mt-0.5 text-xs text-mut">
+                                @if ($balance->isPositive())
+                                    Firma bize borçlu
+                                @elseif ($balance->isNegative())
+                                    Biz firmaya borçluyuz
+                                @else
+                                    Bakiye kapalı
+                                @endif
+                            </p>
+                        </x-ui.card>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+    @endcan
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
         <x-ui.card title="Bilgiler" class="p-6 lg:col-span-2">
             <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                 @foreach ([

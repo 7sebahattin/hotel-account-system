@@ -367,4 +367,83 @@ class StayService
 
         return $user;
     }
+
+    /**
+     * Bir tarih aralığında cariye YAZILMIŞ konaklama tutarları, para birimi bazında.
+     *
+     * Aralık `check_out_date` üzerinden uygulanır: cari hareketin `entry_date`
+     * değeri budur (CLAUDE.md §8). "Bu ayki konaklama tutarı" bu yüzden aynı ay
+     * içinde deftere düşen tutarla birebir aynıdır.
+     *
+     * İptal edilmiş konaklamalar sayılmaz — cari hareketleri ters kayıtla
+     * sıfırlanmıştır. TEK sorgu; para birimi sayısı kadar satır döner.
+     *
+     * @return array<string, Money>
+     */
+    public function totalsByCurrencyBetween(string $from, string $to): array
+    {
+        $rows = DB::table('stays')
+            ->selectRaw('currency')
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->whereNull('deleted_at')
+            ->where('status', StayStatus::Active->value)
+            ->whereBetween('check_out_date', [$from, $to])
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->get();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $totals[(string) $row->currency] = Money::fromDecimal((string) $row->total);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Bugün devam eden ve yaklaşan konaklamalar.
+     *
+     * "Devam eden" = giriş yapılmış, çıkış tarihi henüz gelmemiş.
+     * Sıralama çıkış tarihine göredir: ekrandaki soru "kim ne zaman çıkıyor".
+     *
+     * @return Collection<int, Stay>
+     */
+    public function currentAndUpcoming(string $today, int $limit = 8): Collection
+    {
+        return Stay::query()
+            ->where('status', StayStatus::Active->value)
+            ->whereDate('check_out_date', '>=', $today)
+            ->orderBy('check_out_date')
+            ->orderBy('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Bir kullanıcının belirli tarihten sonra girdiği konaklama sayısı.
+     *
+     * Personel panosu için: tutar değil, yalnızca ADET (CLAUDE.md §7.4).
+     */
+    public function countCreatedBySince(int $userId, string $since): int
+    {
+        return Stay::query()
+            ->where('created_by', $userId)
+            ->where('created_at', '>=', $since)
+            ->count();
+    }
+
+    /**
+     * Bir kullanıcının son kayıtları.
+     *
+     * @return Collection<int, Stay>
+     */
+    public function recentCreatedBy(int $userId, int $limit = 5): Collection
+    {
+        return Stay::query()
+            ->where('created_by', $userId)
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
 }

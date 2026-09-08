@@ -146,7 +146,7 @@ resources/
     ├── layouts/{app,guest,print}.blade.php
     ├── components/                 # <x-ui.*>, <x-form.*>
     └── partials/
-routes/web.php                      # modül route dosyalarını include eder
+routes/web.php                      # BOŞ: tüm route'lar modüllerdedir (kök dahil)
 tests/{Feature,Unit}/
 ```
 
@@ -627,9 +627,28 @@ finansal hesap yazılmaz. Servis firmayı yalnızca `int $companyId` olarak bili
 - Excel export §10'da; V1'de Gün 10'da gelir.
 
 ### Dashboard
-Role duyarlı, tek sorgu setiyle:
-- **Admin/Patron:** toplam alacak, bu ay konaklama tutarı, bu ay tahsilat, en yüksek bakiyeli 10 firma, son 10 hareket.
-- **Personel:** bugün/bu hafta girdiği konaklama ve tahsilat sayısı, kendi son kayıtları. **Tutar toplamı gösterilmez.**
+
+Uygulama kökü (`/`, route adı `home`) Dashboard modülündedir. Controller ince:
+yetki → `DashboardService` → view. Ekranda ve controller'da hiçbir finansal hesap
+yapılmaz.
+
+**Sorgu bütçesi sabittir ve kayıt sayısıyla BÜYÜMEZ** — ölçülen değer 11 sorgudur;
+`DashboardTest` hem N+1 yokluğunu hem de 15 sorguluk üst sınırı doğrular.
+
+- **Admin/Patron** (`dashboard.financial`): para birimi bazında **açık alacak,
+  açık borç, net bakiye**, bu ay konaklama ve bu ay tahsilat; aktif firma sayısı;
+  para birimi bazında en yüksek bakiyeli firmalar; son cari hareketler; son
+  tahsilatlar; devam eden ve yaklaşan konaklamalar.
+- **Personel:** bugün/bu hafta girdiği konaklama ve tahsilat **sayısı** ve kendi
+  son kayıtları. **Tutar gösterilmez ve SORGULANMAZ** — `PersonnelSummary`
+  nesnesinde hiç `Money` alanı yoktur, yani gizleme değil yapısal engel vardır.
+
+**Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır:** bir firmanın
+borcu başka firmanın alacağını götürmez. Para birimleri asla birleştirilmez (§6/L5).
+
+"Bu ay" aralığı cari hareketin `entry_date` alanıyla aynı sütun üzerinden uygulanır:
+konaklamada `check_out_date`, tahsilatta `payment_date`. Böylece ay toplamı, aynı ay
+deftere düşen tutarla birebir tutar. İptal edilmiş kayıtlar sayılmaz.
 
 ### Basic Audit Log
 `Auditable` trait'i ile `Company` ve `User` modellerinde `created/updated/deleted` olayları;
@@ -682,32 +701,59 @@ Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
 
 ### 11.1 Tasarım dili
 
-Koyu slate zemin + turuncu vurgu. Düz renk; **gölge, gradient, dekoratif öge yoktur**.
+Açık, sıcak nötr zemin + beyaz kartlar + **koyu lacivert kenar çubuğu** + sıcak altın
+vurgu. Düz renk; **gölge, gradient, glassmorphism ve dekoratif öge yoktur**.
 Ayrımlar ince çizgi (1px) ile yapılır. Bu tema uygulamanın **tek** temasıdır —
-light mode, tema değiştirici ve kullanıcı tema tercihi **yoktur**.
+koyu tema, tema değiştirici ve kullanıcı tema tercihi **yoktur**.
 
-**Vurgu (accent) yalnızca** birincil aksiyon butonu, seçili menü öğesi, aktif sıralama
-göstergesi, odak halkası ve zorunlu alan yıldızında kullanılır. Silme/iptal butonları
-turuncu değildir (`danger` varyantı).
+Kenar çubuğu koyu bir yüzeydir ama bu bir "koyu tema" değildir: tek bir bileşenin
+kendi paletidir ve kendi token'larını kullanır (`--color-nav*`).
+
+**Vurgu (altın) yalnızca** birincil aksiyon butonu, aktif menü şeridi, marka
+monogramı, aktif sıralama göstergesi, odak halkası ve zorunlu alan yıldızında
+kullanılır. Silme/iptal butonları altın değildir (`danger` varyantı).
+
+**Altın DOLGU rengidir, metin rengi değildir.** `--color-acc` (#C8A96B) beyaz
+üzerinde yalnızca 2.25 kontrast verir. Metin ve odak halkası için
+`--color-acc-tx` (#8A6A2F, 5.02) kullanılır. Bu ayrım bağlayıcıdır.
 
 ### 11.2 Tasarım token'ları — tek kaynak
 
 Tüm renk ve tipografi token'ları **yalnızca** `resources/css/app.css` içindeki `@theme`
 bloğunda tanımlıdır; Tailwind bu bloktan `bg-card`, `border-line`, `text-mut` gibi
-sınıfları üretir. Blade içinde ham hex kodu yazılmaz.
+sınıfları üretir. **Blade içinde ham hex kodu yazılmaz** — tek muafiyet
+`<meta name="theme-color">`'dır (HTML düz değer ister). Bu kural
+`DesignSystemTest::blade_icinde_ham_hex_rengi_yazilmaz` ile testle korunur.
 
 | Token | Değer | Kullanım |
 |---|---|---|
-| `--color-bg` | `#0f172a` | sayfa zemini |
-| `--color-card` | `#1e293b` | kart / tablo zemini |
-| `--color-line` | `#334155` | ayraç ve kart sınırı |
-| `--color-field` | `#64748b` | **yalnızca** form kontrolü, ikincil buton ve sayfalama sınırı (WCAG 1.4.11 → 3:1) |
-| `--color-tx` | `#e2e8f0` | ana metin |
-| `--color-mut` | `#94a3b8` | ikincil metin, placeholder |
-| `--color-acc` | `#f97316` | vurgu |
-| `--color-well` | `#0b1220` | çukur alan, aktif menü zemini |
-| `--color-success` / `--color-danger` | `#4ade80` / `#f87171` | durum metni |
-| `--color-success-bg` / `--color-danger-bg` | `#1c2b1f` / `#2b1c1c` | durum kutusu zemini |
+| `--color-bg` | `#F7F7F5` | sayfa zemini |
+| `--color-card` | `#FFFFFF` | kart / tablo zemini |
+| `--color-line` | `#E5E4E0` | ayraç ve kart sınırı |
+| `--color-well` | `#F1F0EC` | çukur alan, tablo başlık şeridi, bakiye kolonu |
+| `--color-tx` | `#1F2937` | ana metin (kart 14.68) |
+| `--color-mut` | `#6B7280` | ikincil metin (kart 4.83, sayfa 4.51) |
+| `--color-acc` | `#C8A96B` | **dolgu**: birincil buton, aktif şerit |
+| `--color-acc-strong` | `#B08F52` | dolgunun hover hâli |
+| `--color-acc-tx` | `#8A6A2F` | **metin ve odak halkası** olarak altın |
+| `--color-acc-bg` | `#FAF6EE` | altın rozet zemini |
+| `--color-on-acc` | `#1F2937` | altın dolgu üzerindeki metin (6.53) |
+| `--color-nav` | `#172033` | kenar çubuğu yüzeyi |
+| `--color-nav-well` | `#22304A` | aktif menü zemini |
+| `--color-nav-line` | `#2B3752` | kenar çubuğu ayracı |
+| `--color-nav-tx` / `--color-nav-mut` | `#E8E6E1` / `#9AA3B2` | kenar çubuğu metinleri |
+| `--color-field` | `#8A8A85` | **yalnızca** form kontrolü ve ikincil buton sınırı (WCAG 1.4.11 → 3:1) |
+| `--color-success` / `--color-danger` | `#15803D` / `#B91C1C` | durum metni |
+| `--color-success-bg` / `--color-danger-bg` / `--color-info-bg` | `#ECFDF5` / `#FEF2F2` / `#EFF6FF` | durum kutusu zemini |
+| `--color-debit` / `--color-credit` | `#B45309` / `#15803D` | **cari yön**: Borç / Alacak |
+
+**Kullanım kuralı — `--color-well` üzerine `text-mut` YAZILMAZ**: oran 4.24'te
+kalır ve 4.5 eşiğini geçmez. Çukur alanlarda `text-tx` kullanılır (12.87).
+
+**Borç kırmızı DEĞİLDİR.** Kırmızı bu uygulamada "iptal / tehlike" demektir;
+borç hatalı bir durum değildir. Borç `--color-debit` (amber), alacak
+`--color-credit` (yeşil) kullanır ve her ikisi de **her zaman** metin etiketiyle
+birlikte gösterilir.
 
 Tipografi: `system-ui` yığını, gövde 15px/1.5, form kontrolleri **16px** (mobil zoom'u
 engeller), sayfa başlığı 19px/500. Tüm tutar hücreleri `font-variant-numeric: tabular-nums`
@@ -717,7 +763,10 @@ ve sağa hizalı.
 
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
-`alert`, `errors`, `empty`, `table`, `sort-header`, `th`.
+`alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`.
+
+`stat` sayısal özet kutusudur (etiket + değer + ipucu); `panel` başlıklı liste
+kartıdır. Pano ve firma detayı aynı iskeleti bu ikisiyle kurar.
 
 - Form kontrolleri hata durumunu `$errors` üzerinden kendisi okur; `aria-invalid` ve
   `aria-describedby` bağlantısını kendisi kurar. Her `<label>` `for` ile input `id`'sine bağlıdır.
@@ -730,7 +779,15 @@ Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` il
   aktif öğe `well` zemin + sol turuncu şerit + `aria-current="page"` ile belirtilir.
 - Menü **yetki duyarlıdır**: kullanıcının göremeyeceği bölüm hiç render edilmez.
   Route'u olmayan bir ekran menüye eklenmez (disabled placeholder yazılmaz).
-- Kenar çubuğu altında kullanıcı adı, rol etiketi ve çıkış bağlantısı bulunur.
+- Kenar çubuğu üstünde **marka alanı** vardır (`partials/brand`): logo dosyası
+  (`config('hotel.brand.logo')`, varsayılan `public/images/logo.svg`) varsa
+  kullanılır, yoksa altın zeminli monogram çizilir — kırık görsel gösterilmez.
+- Menü **gruplu**dur: başlıksız ana grup, "Cari", "Yönetim". İçinde görünür öğe
+  kalmayan grup hiç çizilmez.
+- Aktif öğe ÜÇ işaretle belirtilir: sol altın şerit, `nav-well` zemin ve
+  `aria-current="page"`. Aktiflik desenle bulunur (`companies.*`), böylece alt
+  ekranlarda da işaretli kalır.
+- Kenar çubuğu altında kullanıcı baş harfi, adı, rol etiketi ve çıkış bağlantısı bulunur.
 - Mobilde hamburger + çekmece (sağdan kayan overlay, `Escape` ile kapanır); içerik tam genişlik.
 - Tüm sayfalarda "İçeriğe atla" bağlantısı ve `<main id="icerik">` vardır.
 
@@ -753,9 +810,19 @@ Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` il
 
 ### 11.7 JavaScript
 
-`resources/js/app.js` içinde yalnızca kenar çubuğu çekmecesi vardır — sade JavaScript,
-harici paket yok. Alpine.js **kurulu değildir**; ihtiyaç doğarsa (modal, tutar maskesi,
-dinamik firma arama) kullanıcı onayıyla eklenir. JS ile iş mantığı yazılmaz, veri hesaplanmaz.
+`resources/js/app.js` sade JavaScript'tir, harici paket yoktur. İçinde üç şey vardır:
+kenar çubuğu çekmecesi, **çift gönderim koruması** ve konaklama formunun ücret
+önizlemesi.
+
+**Alpine.js kurulu DEĞİLDİR** ve bu bilinçlidir; ihtiyaç doğarsa (modal, tutar
+maskesi, dinamik firma arama) kullanıcı onayıyla eklenir. JS ile iş mantığı
+yazılmaz, veri hesaplanmaz.
+
+**Çift gönderim koruması:** her form gönderiminde submit butonları kilitlenir.
+Kilitleme `setTimeout(0)` ile yapılır — devre dışı bir butonun `name`/`value`
+çifti istek gövdesine girmez. Tarayıcı doğrulaması gönderimi durdurursa
+(`invalid` olayı) ve bfcache'ten geri dönüldüğünde kilit açılır. Bir formun
+muaf olması gerekirse `data-allow-resubmit` konur.
 
 ### 11.8 Erişilebilirlik
 
@@ -851,7 +918,7 @@ kaydedilmelidir.
 | 5–6 | Stays CRUD + cari entegrasyonu | Konaklama → doğru debit |
 | 7 | Payments + iptal + cari entegrasyonu | Tahsilat → doğru credit, iptal geri alıyor |
 | 8 | Cari ekstre + firma bakiye listesi + yazdırma | Ekstre elle hesapla birebir tutuyor |
-| 9 | Dashboard (role duyarlı) | Personel finansal kart görmüyor |
+| 9 | Dashboard (role duyarlı) + tasarım sistemi | Personel finansal kart görmüyor; pano sorgu sayısı sabit |
 | 10 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
 | 11 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
 | 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |

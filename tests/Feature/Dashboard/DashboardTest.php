@@ -1,0 +1,438 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Dashboard;
+
+use App\Models\User;
+use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\Companies\Models\Company;
+use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\Money;
+use App\Modules\Dashboard\Services\DashboardService;
+use App\Modules\Dashboard\Support\CurrencyTotals;
+use App\Modules\Dashboard\Support\FinancialSummary;
+use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Stays\Services\StayService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+/**
+ * Pano: para birimi ayrımı, rol görünürlüğü ve sorgu bütçesi.
+ *
+ * Pano hiçbir tutarı saklamaz; her rakam ledger'dan ve kaynak tablolardan
+ * yeniden hesaplanır. En kritik değişmez: TRY, EUR ve GBP asla toplanmaz
+ * (CLAUDE.md §6/L5).
+ */
+class DashboardTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $actor;
+
+    private LedgerService $ledger;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedRoles();
+
+        $this->actor = $this->userWithRole(RoleName::Admin);
+        $this->ledger = app(LedgerService::class);
+    }
+
+    private function debit(Company $company, string $amount, Currency $currency, string $date): void
+    {
+        $this->ledger->debit(
+            companyId: $company->id,
+            amount: Money::fromDecimal($amount),
+            currency: $currency,
+            entryDate: $date,
+            description: 'Konaklama',
+            sourceType: 'stay',
+            sourceId: 1,
+            actor: $this->actor,
+        );
+    }
+
+    private function credit(Company $company, string $amount, Currency $currency, string $date): void
+    {
+        $this->ledger->credit(
+            companyId: $company->id,
+            amount: Money::fromDecimal($amount),
+            currency: $currency,
+            entryDate: $date,
+            description: 'Tahsilat',
+            sourceType: 'payment',
+            sourceId: 1,
+            actor: $this->actor,
+        );
+    }
+
+    private function summary(): FinancialSummary
+    {
+        return app(DashboardService::class)->financial(Carbon::today());
+    }
+
+    /** @return array<string, CurrencyTotals> */
+    private function byCurrency(FinancialSummary $summary): array
+    {
+        $indexed = [];
+
+        foreach ($summary->currencies as $totals) {
+            $indexed[$totals->currency->value] = $totals;
+        }
+
+        return $indexed;
+    }
+
+    // ------------------------------------------------- para birimi ayrımı
+
+    #[Test]
+    public function farkli_para_birimleri_ayri_toplanir_ve_birlestirilmez(): void
+    {
+        $company = Company::factory()->create();
+
+        $this->debit($company, '1000.00', Currency::TRY, '2026-09-05');
+        $this->debit($company, '200.00', Currency::EUR, '2026-09-05');
+        $this->debit($company, '50.00', Currency::GBP, '2026-09-05');
+
+        $totals = $this->byCurrency($this->summary());
+
+        $this->assertSame('1000.00', $totals['TRY']->receivable->toDecimal());
+        $this->assertSame('200.00', $totals['EUR']->receivable->toDecimal());
+        $this->assertSame('50.00', $totals['GBP']->receivable->toDecimal());
+
+        // Hiçbir yerde 1250 (1000+200+50) gibi birleşik bir toplam üretilmez.
+        foreach ($totals as $currencyTotals) {
+            $this->assertNotSame('1250.00', $currencyTotals->receivable->toDecimal());
+            $this->assertNotSame('1250.00', $currencyTotals->net->toDecimal());
+        }
+    }
+
+    #[Test]
+    public function acik_alacak_ve_acik_borc_firma_bazinda_netlenip_toplanir(): void
+    {
+        // Bir firma bize borçlu, diğerine biz borçluyuz. İkisi birbirini
+        // GÖTÜRMEZ: alacak 1000, borç 300 olarak ayrı ayrı görünür.
+        $borclu = Company::factory()->create();
+        $alacakli = Company::factory()->create();
+
+        $this->debit($borclu, '1000.00', Currency::TRY, '2026-09-01');
+        $this->credit($alacakli, '300.00', Currency::TRY, '2026-09-01');
+
+        $try = $this->byCurrency($this->summary())['TRY'];
+
+        $this->assertSame('1000.00', $try->receivable->toDecimal());
+        $this->assertSame('300.00', $try->payable->toDecimal());
+        $this->assertSame('700.00', $try->net->toDecimal());
+    }
+
+    #[Test]
+    public function ayni_firmanin_borc_ve_alacagi_once_netlenir(): void
+    {
+        $company = Company::factory()->create();
+
+        $this->debit($company, '1000.00', Currency::TRY, '2026-09-01');
+        $this->credit($company, '400.00', Currency::TRY, '2026-09-02');
+
+        $try = $this->byCurrency($this->summary())['TRY'];
+
+        $this->assertSame('600.00', $try->receivable->toDecimal());
+        $this->assertSame('0.00', $try->payable->toDecimal());
+        $this->assertSame('600.00', $try->net->toDecimal());
+    }
+
+    #[Test]
+    public function fazla_tahsilat_acik_borc_olarak_gorunur(): void
+    {
+        $company = Company::factory()->create();
+
+        $this->debit($company, '100.00', Currency::TRY, '2026-09-01');
+        $this->credit($company, '250.00', Currency::TRY, '2026-09-02');
+
+        $try = $this->byCurrency($this->summary())['TRY'];
+
+        $this->assertSame('0.00', $try->receivable->toDecimal());
+        $this->assertSame('150.00', $try->payable->toDecimal());
+        $this->assertSame('-150.00', $try->net->toDecimal());
+    }
+
+    #[Test]
+    public function en_yuksek_bakiyeli_firmalar_para_birimi_bazinda_ayrisir(): void
+    {
+        $tryCompany = Company::factory()->create(['name' => 'TRY Firma']);
+        $eurCompany = Company::factory()->create(['name' => 'EUR Firma']);
+
+        $this->debit($tryCompany, '900.00', Currency::TRY, '2026-09-01');
+        $this->debit($eurCompany, '100.00', Currency::EUR, '2026-09-01');
+
+        $top = $this->summary()->topCompanies;
+
+        $this->assertSame('TRY Firma', $top['TRY'][0]->companyName);
+        $this->assertSame(Currency::TRY, $top['TRY'][0]->currency);
+        $this->assertSame('EUR Firma', $top['EUR'][0]->companyName);
+
+        // Yüksek TRY tutarı EUR listesine sızmaz.
+        $this->assertCount(1, $top['EUR']);
+    }
+
+    #[Test]
+    public function en_yuksek_bakiyeli_listesinde_bize_borclu_olmayan_firma_yer_almaz(): void
+    {
+        $borclu = Company::factory()->create(['name' => 'Borçlu']);
+        $kapali = Company::factory()->create(['name' => 'Kapalı']);
+        $alacakli = Company::factory()->create(['name' => 'Alacaklı']);
+
+        $this->debit($borclu, '500.00', Currency::TRY, '2026-09-01');
+
+        $this->debit($kapali, '100.00', Currency::TRY, '2026-09-01');
+        $this->credit($kapali, '100.00', Currency::TRY, '2026-09-02');
+
+        $this->credit($alacakli, '80.00', Currency::TRY, '2026-09-01');
+
+        $names = array_map(
+            static fn ($row): string => $row->companyName,
+            $this->summary()->topCompanies['TRY'],
+        );
+
+        $this->assertSame(['Borçlu'], $names);
+    }
+
+    // --------------------------------------------------- aylık toplamlar
+
+    #[Test]
+    public function bu_ayki_konaklama_ve_tahsilat_toplamlari_para_birimi_bazindadir(): void
+    {
+        $company = Company::factory()->create();
+        $today = Carbon::create(2026, 9, 15);
+        Carbon::setTestNow($today);
+
+        $stays = app(StayService::class);
+        $payments = app(PaymentService::class);
+
+        // Bu ay: çıkış tarihi ay içinde.
+        $stays->create([
+            'company_id' => $company->id,
+            'guest_name' => 'Bu Ay',
+            'check_in_date' => '2026-09-10',
+            'check_out_date' => '2026-09-12',
+            'pricing_mode' => 'total',
+            'amount' => '1000.00',
+            'currency' => 'TRY',
+        ], $this->actor);
+
+        // Geçen ay: aynı firmaya ama aralık dışında.
+        $stays->create([
+            'company_id' => $company->id,
+            'guest_name' => 'Geçen Ay',
+            'check_in_date' => '2026-08-10',
+            'check_out_date' => '2026-08-12',
+            'pricing_mode' => 'total',
+            'amount' => '7777.00',
+            'currency' => 'TRY',
+        ], $this->actor);
+
+        $payments->create([
+            'company_id' => $company->id,
+            'payment_date' => '2026-09-14',
+            'amount' => '400.00',
+            'currency' => 'EUR',
+        ], $this->actor);
+
+        $totals = $this->byCurrency(app(DashboardService::class)->financial($today));
+
+        $this->assertSame('1000.00', $totals['TRY']->staysThisMonth->toDecimal());
+        $this->assertSame('0.00', $totals['TRY']->paymentsThisMonth->toDecimal());
+        $this->assertSame('400.00', $totals['EUR']->paymentsThisMonth->toDecimal());
+        $this->assertSame('0.00', $totals['EUR']->staysThisMonth->toDecimal());
+
+        Carbon::setTestNow();
+    }
+
+    #[Test]
+    public function iptal_edilen_kayitlar_aylik_toplamlara_girmez(): void
+    {
+        $company = Company::factory()->create();
+        $today = Carbon::create(2026, 9, 15);
+        Carbon::setTestNow($today);
+
+        $stays = app(StayService::class);
+        $payments = app(PaymentService::class);
+
+        $stay = $stays->create([
+            'company_id' => $company->id,
+            'guest_name' => 'İptal',
+            'check_in_date' => '2026-09-10',
+            'check_out_date' => '2026-09-12',
+            'pricing_mode' => 'total',
+            'amount' => '1000.00',
+            'currency' => 'TRY',
+        ], $this->actor);
+
+        $payment = $payments->create([
+            'company_id' => $company->id,
+            'payment_date' => '2026-09-14',
+            'amount' => '400.00',
+            'currency' => 'TRY',
+        ], $this->actor);
+
+        $stays->cancel($stay, $this->actor);
+        $payments->cancel($payment, 'Yanlış giriş', $this->actor);
+
+        $totals = $this->byCurrency(app(DashboardService::class)->financial($today));
+
+        // Ay toplamları sıfırlanır ve bakiye de net sıfıra döner.
+        $this->assertSame('0.00', ($totals['TRY'] ?? null)?->staysThisMonth->toDecimal() ?? '0.00');
+        $this->assertSame('0.00', ($totals['TRY'] ?? null)?->paymentsThisMonth->toDecimal() ?? '0.00');
+        $this->assertSame('0.00', ($totals['TRY'] ?? null)?->net->toDecimal() ?? '0.00');
+
+        Carbon::setTestNow();
+    }
+
+    #[Test]
+    public function aktif_firma_sayisi_pasif_ve_silinmis_firmalari_saymaz(): void
+    {
+        Company::factory()->count(2)->create(['is_active' => true]);
+        Company::factory()->create(['is_active' => false]);
+        Company::factory()->create()->delete();
+
+        $this->assertSame(2, $this->summary()->activeCompanyCount);
+    }
+
+    // -------------------------------------------------- rol görünürlüğü
+
+    #[Test]
+    public function personel_finansal_pano_yerine_kendi_panosunu_gorur(): void
+    {
+        $company = Company::factory()->create(['name' => 'Gizli Firma']);
+        $this->debit($company, '9999.00', Currency::TRY, '2026-09-01');
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'));
+
+        $response->assertOk();
+        $response->assertSee('Bugün konaklama');
+        $response->assertDontSee('Açık alacak');
+        $response->assertDontSee('Net bakiye');
+        $response->assertDontSee('En yüksek bakiyeli firmalar');
+        $response->assertDontSee('9.999,00');
+    }
+
+    #[Test]
+    public function admin_ve_patron_finansal_panoyu_gorur(): void
+    {
+        $company = Company::factory()->create(['name' => 'Görünür Firma']);
+        $this->debit($company, '1500.00', Currency::TRY, '2026-09-01');
+
+        foreach ([RoleName::Admin, RoleName::Patron] as $role) {
+            $this->actingAs($this->userWithRole($role))->get(route('home'))
+                ->assertOk()
+                ->assertSee('Açık alacak')
+                ->assertSee('Net bakiye')
+                ->assertSee('1.500,00 ₺')
+                ->assertSee('Görünür Firma');
+        }
+    }
+
+    #[Test]
+    public function personel_panosu_hic_finansal_sorgu_calistirmaz(): void
+    {
+        $company = Company::factory()->create();
+        $this->debit($company, '1000.00', Currency::TRY, '2026-09-01');
+
+        $personel = $this->userWithRole(RoleName::Personel);
+
+        // Yetki önbelleğini ısıt: ölçüm yalnızca pano sorgularını görsün.
+        $this->actingAs($personel)->get(route('home'));
+
+        // enableQueryLog() var olan günlüğü TEMİZLEMEZ; ısınma isteğinin
+        // sorguları sayıma karışmasın diye açıkça boşaltılır.
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $this->actingAs($personel)->get(route('home'));
+        $queries = DB::getRawQueryLog();
+        DB::disableQueryLog();
+
+        $ledgerQueries = array_filter(
+            $queries,
+            static fn (array $query): bool => str_contains((string) $query['raw_query'], 'ledger_entries'),
+        );
+
+        $this->assertSame([], $ledgerQueries, 'Personel panosu cari defteri sorgulamamalı.');
+    }
+
+    // ------------------------------------------------------- performans
+
+    #[Test]
+    public function pano_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $measure = function () use ($admin): int {
+            // Önbellekleri ısıt, sonra ölç.
+            $this->actingAs($admin)->get(route('home'));
+
+            // enableQueryLog() var olan günlüğü TEMİZLEMEZ: iki ölçüm arka arkaya
+            // yapıldığında ikincisi birincininkileri de sayar ve sahte bir N+1
+            // raporlar. Ölçümden hemen önce boşaltmak şart.
+            DB::enableQueryLog();
+            DB::flushQueryLog();
+            $this->actingAs($admin)->get(route('home'))->assertOk();
+            $count = count(DB::getRawQueryLog());
+            DB::disableQueryLog();
+
+            return $count;
+        };
+
+        foreach (Company::factory()->count(3)->create() as $company) {
+            $this->debit($company, '100.00', Currency::TRY, '2026-09-01');
+        }
+
+        $withThree = $measure();
+
+        foreach (Company::factory()->count(12)->create() as $company) {
+            $this->debit($company, '250.00', Currency::TRY, '2026-09-02');
+            $this->credit($company, '50.00', Currency::EUR, '2026-09-03');
+        }
+
+        $withFifteen = $measure();
+
+        $this->assertSame(
+            $withThree,
+            $withFifteen,
+            "Sorgu sayısı firma sayısıyla arttı ({$withThree} → {$withFifteen}): N+1 var."
+        );
+
+        // Sabit ama yüksek bir sayı da regresyondur: pano bütçesi dardır.
+        $this->assertLessThanOrEqual(
+            15,
+            $withFifteen,
+            "Pano {$withFifteen} sorgu çalıştırdı; bütçe 15."
+        );
+    }
+
+    // ------------------------------------------------------- boş sistem
+
+    #[Test]
+    public function bos_sistemde_yonlendirici_bir_bos_durum_gosterilir(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertOk()
+            ->assertSee('Sistem henüz boş')
+            ->assertSee('Firma ekle');
+    }
+
+    #[Test]
+    public function bos_sistemde_ozet_bos_kabul_edilir(): void
+    {
+        $summary = $this->summary();
+
+        $this->assertTrue($summary->isEmpty());
+        $this->assertSame([], $summary->currencies);
+        $this->assertSame(0, $summary->activeCompanyCount);
+    }
+}

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Companies\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Companies\Exceptions\CompanyHasLedgerEntries;
 use App\Modules\Companies\Filters\CompanyFilter;
 use App\Modules\Companies\Http\Requests\CompanyRequest;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Contracts\View\View;
@@ -23,6 +25,7 @@ class CompanyController extends Controller
         private readonly CompanyService $companies,
         private readonly StayService $stays,
         private readonly PaymentService $payments,
+        private readonly LedgerService $ledger,
     ) {}
 
     public function index(Request $request, CompanyFilter $filter): View
@@ -66,7 +69,7 @@ class CompanyController extends Controller
             ->with('success', 'Firma oluşturuldu.');
     }
 
-    public function show(Company $company): View
+    public function show(Request $request, Company $company): View
     {
         $this->authorize('view', $company);
 
@@ -79,6 +82,13 @@ class CompanyController extends Controller
             'stayCount' => $this->stays->countForCompany($company->getKey()),
             'recentPayments' => $this->payments->recentForCompany($company->getKey(), 5),
             'paymentCount' => $this->payments->countForCompany($company->getKey()),
+
+            // Bakiye para birimi bazındadır ve TEK sorguda gelir. Personel
+            // bakiye göremez (CLAUDE.md §7.4), bu yüzden sorgu bile atılmaz —
+            // gizlenmez, hiç yapılmaz.
+            'balances' => $request->user()?->can(Permission::LedgerView->value) === true
+                ? $this->ledger->balancesForCompanyByCurrency($company->getKey())
+                : [],
         ]);
     }
 

@@ -62,4 +62,37 @@ class CompanyService
             $company->restore();
         });
     }
+
+    /**
+     * Aktif firma sayısı.
+     *
+     * Soft delete edilmiş firmalar Eloquent'in global scope'u sayesinde zaten
+     * dışarıdadır; burada ek olarak pasifleştirilmiş firmalar da sayılmaz.
+     */
+    public function activeCount(): int
+    {
+        return Company::query()->where('is_active', true)->count();
+    }
+
+    /**
+     * Verilen kimlikler için firma adları — TEK sorguda.
+     *
+     * Başka modüller firma adını göstermek için Company modeline uzanmaz
+     * (CLAUDE.md §4.3/1); bu kapıdan toplu olarak çözerler ve N+1 oluşmaz.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, string>
+     */
+    public function namesByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Company::query()
+            ->whereIn('id', array_values(array_unique($ids)))
+            ->pluck('name', 'id')
+            ->map(fn ($name): string => (string) $name)
+            ->all();
+    }
 }

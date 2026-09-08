@@ -35,6 +35,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Marka
+    |--------------------------------------------------------------------------
+    |
+    | Kenar çubuğundaki marka alanı. `logo` public/ altındaki bir yola işaret
+    | eder; dosya yoksa arayüz monogram çizer ve kırık görsel göstermez.
+    |
+    */
+
+    'brand' => [
+        'name' => env('HOTEL_BRAND_NAME', 'Lemon'),
+        'tagline' => env('HOTEL_BRAND_TAGLINE', 'Cari Takip'),
+        'logo' => env('HOTEL_BRAND_LOGO', 'images/logo.svg'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | İlk yönetici hesabı (seeder)
     |--------------------------------------------------------------------------
     |

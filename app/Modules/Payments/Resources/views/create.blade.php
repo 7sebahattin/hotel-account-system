@@ -36,7 +36,8 @@
                 </x-ui.select>
 
                 <x-ui.input label="Tutar" name="amount" required inputmode="decimal"
-                            placeholder="5000,00" class="tabular-nums" />
+                            placeholder="5000,00" class="tabular-nums"
+                            hint="Ondalık için virgül kullanabilirsiniz: 1.250,50" />
 
                 <x-ui.select label="Para birimi" name="currency" required>
                     @foreach ($currencies as $currency)

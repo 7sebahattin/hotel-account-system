@@ -2,14 +2,11 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Route;
-
 /*
 | Modül route'ları kendi ServiceProvider'ları tarafından yüklenir
-| (App\Modules\Core\Providers\ModuleServiceProvider). Bu dosya yalnızca
-| modüle ait olmayan uygulama kökü için kullanılır.
+| (App\Modules\Core\Providers\ModuleServiceProvider).
+|
+| Uygulama kökü (`/`, route adı `home`) Dashboard modülüne taşınmıştır:
+| pano ekranı bir modül ekranıdır ve modülün kendi route dosyasında durur
+| (CLAUDE.md §4.1). Bu dosyada modüle ait olmayan bir route kalmamıştır.
 */
-
-Route::middleware('auth')->group(function (): void {
-    Route::view('/', 'home')->name('home');
-});

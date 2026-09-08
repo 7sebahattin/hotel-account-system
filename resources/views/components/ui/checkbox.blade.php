@@ -9,7 +9,7 @@
         type="checkbox"
         value="{{ $value }}"
         @checked($checked)
-        {{ $attributes->except('id')->class('mt-0.5 size-4 shrink-0 rounded border-field bg-well text-acc focus:ring-acc') }}
+        {{ $attributes->except('id')->class('mt-0.5 size-4 shrink-0 rounded border-field bg-card text-acc-tx focus:ring-acc-tx') }}
     >
     <span>{{ $label }}{{ $slot }}</span>
 </label>

@@ -6,13 +6,18 @@
     $tones = [
         'success' => ['border' => 'border-l-success', 'text' => 'text-success', 'bg' => 'bg-success-bg'],
         'danger' => ['border' => 'border-l-danger', 'text' => 'text-danger', 'bg' => 'bg-danger-bg'],
-        'info' => ['border' => 'border-l-line', 'text' => 'text-tx', 'bg' => 'bg-well'],
+        'info' => ['border' => 'border-l-field', 'text' => 'text-tx', 'bg' => 'bg-info-bg'],
     ];
 
+    $role = $tone === 'danger' ? 'alert' : 'status';
     $tone = $tones[$tone] ?? $tones['info'];
 @endphp
 
-<div role="alert" {{ $attributes->class([
+{{--
+    Duyuru rolü tona göre seçilir: hata kesintiye uğratır (`alert`), başarı ve
+    bilgi ekran okuyucuya sırası gelince okunur (`status`).
+--}}
+<div role="{{ $role }}" {{ $attributes->class([
     'rounded-md border-l-4 px-4 py-3 text-sm',
     $tone['bg'], $tone['border'], $tone['text'],
 ]) }}>

@@ -8,7 +8,7 @@
     Kaydırma tek bir kapta yapılır: iç içe overflow kabı, taşmanın belge düzeyine
     sızmasına yol açıyordu.
 --}}
-<div {{ $attributes->class('hidden overflow-x-auto rounded-[10px] border border-line bg-card lg:block') }}>
+<div {{ $attributes->class('hidden overflow-x-auto rounded-xl border border-line bg-card lg:block') }}>
     <table class="min-w-full text-sm">
         {{ $slot }}
     </table>

@@ -735,3 +735,72 @@ gerçek CLI provası: `APP_ENV=production php artisan db:seed --force` `SEED_ADM
 olmadan RuntimeException verdi ve `users` tablosunda 0 kayıt kaldı; güçlü parolayla
 tek admin oluştu. Toplam test 454 → 466, hepsi yeşil.
 
+## K-082 · Tasarım sistemi açık temaya taşındı; kenar çubuğu kendi paletini kullanır
+**Bağlam:** CLAUDE.md §11 koyu slate + turuncu temayı "tek tema" olarak tanımlıyordu.
+Kullanıcı Gün 9'da açık zemin + beyaz kart + koyu lacivert kenar çubuğu + sıcak altın
+vurgu istedi. §18 gereği aynı commit'te CLAUDE.md §11 yeniden yazıldı.
+**Neden ucuz oldu:** tüm bileşenler zaten token kullanıyordu (`bg-card`, `text-tx`, …)
+ve Blade'de ham hex yoktu. Tema değişimi büyük ölçüde `app.css` içindeki `@theme`
+bloğunun değişmesiyle oldu.
+**Ölçülerek seçilen renkler (WCAG 2.1 formülü):** ana metin #1F2937 kart üzerinde 14.68;
+ikincil #6B7280 kart 4.83 / sayfa 4.51; form sınırı #8A8A85 kart 3.47 / sayfa 3.23 (1.4.11).
+**Kritik bulgu — altın metin olarak KULLANILAMAZ:** #C8A96B beyaz üzerinde 2.25 verir.
+Bu yüzden üç token ayrıldı: `--color-acc` (dolgu), `--color-acc-tx` #8A6A2F (metin ve
+odak halkası, 5.02), `--color-on-acc` #1F2937 (altın dolgu üzerindeki metin, 6.53).
+Odak halkası da `--acc-tx` kullanır; altın dolgu 1.4.11'in 3:1 eşiğini geçmezdi.
+**Kullanım kuralı:** `--color-well` (#F1F0EC) üzerine `text-mut` yazılmaz — 4.24'te kalır.
+Çukur alanlarda `text-tx` kullanılır.
+**Borç kırmızı DEĞİLDİR:** kırmızı "iptal / tehlike" demektir. Borç `--color-debit`
+(#B45309), alacak `--color-credit` (#15803D) ve her ikisi de daima metin etiketiyle birlikte.
+**Testle korunuyor:** `DesignSystemTest::blade_icinde_ham_hex_rengi_yazilmaz` Blade'lerde
+ham hex arar. Tek muafiyet `<meta name="theme-color">` (HTML düz değer ister) ve
+yazdırma görünümü (kendi kendine yeten CSS taşır).
+**Alpine.js EKLENMEDİ.** İstek "mevcut Blade + Tailwind + Alpine mimarisini koru" diyordu
+ama Alpine bu projede hiç kurulu değildi (§11.7). Yeni paket eklemek yerine mevcut sade
+JavaScript korundu ve genişletildi.
+
+## K-083 · Dashboard modülü ve sabit sorgu bütçesi
+**Karar:** Pano `app/Modules/Dashboard/` altında yeni bir modüldür; uygulama kökü (`/`,
+route adı `home`) `routes/web.php`'den modülün kendi route dosyasına taşındı. Route adı
+`home` KORUNDU: kenar çubuğu, giriş sonrası yönlendirme ve mevcut testler bunu kullanır.
+**Modüller arası erişim yalnızca Service'ten (§4.3/1):** `DashboardService` Company, Stay,
+Payment veya LedgerEntry modeline hiç dokunmaz. Gerekli raporlama metotları ilgili
+servislere eklendi (`CompanyService::activeCount/namesByIds`,
+`StayService::totalsByCurrencyBetween/currentAndUpcoming/…`, aynısı PaymentService'te,
+`LedgerStatementService::openBalanceTotalsByCurrency/topDebtorCompanies/recentEntries`).
+**Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır.** Alt sorgu firma+para
+birimi kırılımında bakiye üretir, dış sorgu yöne göre ayırır — tek sorgu, para birimi
+sayısı kadar satır. Bir firmanın borcu başka firmanın alacağını götürmez.
+**"Bu ay" cari hareketin `entry_date` sütunuyla aynı alandan uygulanır:** konaklamada
+`check_out_date`, tahsilatta `payment_date`. Böylece ay toplamı, o ay deftere düşen
+tutarla birebir tutar.
+**Personel panosu tutar TAŞIMAZ:** `PersonnelSummary` nesnesinde hiç `Money` alanı yoktur
+ve controller finansal servisi hiç çağırmaz. Testle doğrulandı: personel isteğinde
+`ledger_entries` sorgusu sıfır.
+**Sorgu bütçesi ölçüldü: 11 sorgu, firma sayısından bağımsız.** `DashboardTest` hem
+N+1 yokluğunu hem 15 sorguluk üst sınırı doğrular.
+**Test tuzağı:** `DB::enableQueryLog()` mevcut günlüğü TEMİZLEMEZ. İki ölçüm arka arkaya
+yapıldığında ikincisi birincininkileri de sayar ve sahte bir N+1 raporlar
+(11 → 22 görüldü). Ölçümden hemen önce `DB::flushQueryLog()` şart.
+
+## K-084 · Çift gönderim koruması sade JavaScript ile
+**Sorun:** Aynı formun iki kez gönderilmesi iki konaklama ya da iki tahsilat demektir;
+defter append-only olduğu için düzeltmesi elle ters kayıt gerektirir.
+**Çözüm:** genel `submit` dinleyicisi; ikinci gönderim `preventDefault` ile durdurulur.
+**İki tuzak ve çözümleri:** (1) devre dışı bırakılan submit butonunun `name`/`value`
+çifti istek gövdesine GİRMEZ — bu yüzden kilitleme `setTimeout(0)` ile gövde
+toplandıktan sonra yapılır; (2) tarayıcı doğrulaması gönderimi iptal ederse form
+kilitli kalmamalı — `invalid` olayında ve bfcache dönüşünde (`pageshow`) kilit açılır.
+Muafiyet gerekirse forma `data-allow-resubmit` konur.
+
+## K-085 · Gerçek tarayıcıda doğrulama iki gerçek hata yakaladı
+**Yöntem:** kurulu Chromium ile 375/768/1366/1920 genişliklerinde ekran görüntüsü ve
+yatay taşma ölçümü.
+**Bulgu 1:** panoda 375px'te 7px yatay taşma. Neden: `<x-ui.panel>` bir grid öğesidir ve
+grid öğelerinin varsayılan `min-width: auto` değeri uzun içerikle küçülmelerini engeller.
+`min-w-0` eklendi.
+**Bulgu 2:** dar ekranda tutarlar `truncate` yüzünden "21.250,5…" olarak kırpılıyordu.
+**Bir finans ekranında kırpılmış tutar yanlış bilgidir**; `truncate` kaldırıldı, dar
+ekranda yazı küçülüyor ve gerekirse satır kırılıyor.
+**Ayrıca:** iptal edilmiş tahsilat panoda "alacak yeşili" ile görünüyordu; cariye etkisi
+ters kayıtla sıfırlandığı için nötr ve üstü çizili gösterime alındı.

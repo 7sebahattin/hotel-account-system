@@ -4,6 +4,7 @@ use App\Modules\AuditLog\Providers\AuditLogServiceProvider;
 use App\Modules\Auth\Providers\AuthServiceProvider;
 use App\Modules\Authorization\Providers\AuthorizationServiceProvider;
 use App\Modules\Companies\Providers\CompaniesServiceProvider;
+use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\Ledger\Providers\LedgerServiceProvider;
 use App\Modules\Payments\Providers\PaymentsServiceProvider;
 use App\Modules\Stays\Providers\StaysServiceProvider;
@@ -18,6 +19,7 @@ return [
     AuthorizationServiceProvider::class,
     AuthServiceProvider::class,
     CompaniesServiceProvider::class,
+    DashboardServiceProvider::class,
     LedgerServiceProvider::class,
     PaymentsServiceProvider::class,
     StaysServiceProvider::class,

@@ -332,4 +332,75 @@ class PaymentService
 
         return $user;
     }
+
+    /**
+     * Bir tarih aralığında cariye YAZILMIŞ tahsilat tutarları, para birimi bazında.
+     *
+     * Aralık `payment_date` üzerinden uygulanır: cari hareketin `entry_date`
+     * değeri budur (CLAUDE.md §8). İptal edilmiş tahsilatlar sayılmaz.
+     *
+     * TEK sorgu; para birimi sayısı kadar satır döner.
+     *
+     * @return array<string, Money>
+     */
+    public function totalsByCurrencyBetween(string $from, string $to): array
+    {
+        $rows = DB::table('payments')
+            ->selectRaw('currency')
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->where('status', PaymentStatus::Active->value)
+            ->whereBetween('payment_date', [$from, $to])
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->get();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $totals[(string) $row->currency] = Money::fromDecimal((string) $row->total);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Son tahsilatlar (iptaller dahil — pano gerçeği gizlemez).
+     *
+     * @return Collection<int, Payment>
+     */
+    public function recent(int $limit = 10): Collection
+    {
+        return Payment::query()
+            ->orderByDesc('payment_date')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Bir kullanıcının belirli tarihten sonra girdiği tahsilat sayısı.
+     *
+     * Personel panosu için: tutar değil, yalnızca ADET (CLAUDE.md §7.4).
+     */
+    public function countCreatedBySince(int $userId, string $since): int
+    {
+        return Payment::query()
+            ->where('created_by', $userId)
+            ->where('created_at', '>=', $since)
+            ->count();
+    }
+
+    /**
+     * Bir kullanıcının son kayıtları.
+     *
+     * @return Collection<int, Payment>
+     */
+    public function recentCreatedBy(int $userId, int $limit = 5): Collection
+    {
+        return Payment::query()
+            ->where('created_by', $userId)
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
 }

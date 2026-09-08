@@ -6,11 +6,11 @@
 ])
 
 @php
-    // Turuncu yalnızca ana aksiyonda; silme/iptal asla primary değildir.
+    // Altın dolgu yalnızca ana aksiyonda; silme/iptal asla primary değildir.
     $styles = [
-        'primary' => 'bg-acc font-bold text-[#111] hover:bg-orange-400',
-        'secondary' => 'border border-field bg-well text-tx hover:border-mut',
-        'danger' => 'border border-danger/50 bg-danger-bg text-danger hover:border-danger',
+        'primary' => 'bg-acc font-semibold text-on-acc hover:bg-acc-strong',
+        'secondary' => 'border border-field bg-card text-tx hover:bg-well',
+        'danger' => 'border border-danger/40 bg-danger-bg text-danger hover:border-danger',
         'ghost' => 'text-mut hover:text-tx',
     ];
 

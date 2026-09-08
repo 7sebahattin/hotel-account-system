@@ -25,19 +25,30 @@
         <div class="mt-6">@include('companies::statements._summary')</div>
     @endif
 
-    <form method="GET" class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <x-ui.input label="Başlangıç tarihi" name="date_from" type="date" :value="request('date_from')" />
-        <x-ui.input label="Bitiş tarihi" name="date_to" type="date" :value="request('date_to')" />
+    <form method="GET" class="mt-6 rounded-xl border border-line bg-card p-4">
+        <p class="text-xs font-semibold uppercase tracking-wide text-mut">Bakiyenin kapsamı</p>
+        <p class="mt-0.5 text-xs text-mut">Bu üç alan hangi hareketlerin hesaba katılacağını belirler.</p>
 
-        <x-ui.select label="Para birimi" name="currency">
-            <option value="">Tümü</option>
-            @foreach ($currencies as $currency)
-                <option value="{{ $currency->value }}" @selected(request('currency') === $currency->value)>
-                    {{ $currency->value }}
-                </option>
-            @endforeach
-        </x-ui.select>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <x-ui.input label="Başlangıç tarihi" name="date_from" type="date" :value="request('date_from')"
+                        hint="Öncesi devreden bakiye olur" />
+            <x-ui.input label="Bitiş tarihi" name="date_to" type="date" :value="request('date_to')" />
 
+            <x-ui.select label="Para birimi" name="currency"
+                         hint="Para birimleri ayrı hesaplanır, toplanmaz">
+                <option value="">Tüm para birimleri</option>
+                @foreach ($currencies as $currency)
+                    <option value="{{ $currency->value }}" @selected(request('currency') === $currency->value)>
+                        {{ $currency->label() }} ({{ $currency->value }})
+                    </option>
+                @endforeach
+            </x-ui.select>
+        </div>
+
+        <p class="mt-5 text-xs font-semibold uppercase tracking-wide text-mut">Yalnızca görünümü daraltır</p>
+        <p class="mt-0.5 text-xs text-mut">Bakiye kolonu bunlardan etkilenmez.</p>
+
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <x-ui.select label="İşlem türü" name="type">
             <option value="">Tümü</option>
             @foreach ($types as $type)
@@ -47,16 +58,15 @@
             @endforeach
         </x-ui.select>
 
-        <div class="sm:col-span-2">
-            <x-ui.input label="Açıklamada ara" name="q" type="search" :value="request('q')" />
-        </div>
+        <x-ui.input label="Açıklamada ara" name="q" type="search" :value="request('q')" />
 
         <x-ui.select label="Sıralama" name="direction">
             <option value="asc" @selected(request('direction') !== 'desc')>Eskiden yeniye</option>
             <option value="desc" @selected(request('direction') === 'desc')>Yeniden eskiye</option>
         </x-ui.select>
+        </div>
 
-        <div class="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-4">
+        <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
             <x-ui.button type="submit">Filtrele</x-ui.button>
             <x-ui.button variant="ghost" :href="route('statements.show', $company)">Temizle</x-ui.button>
         </div>
@@ -70,13 +80,13 @@
     @endif
 
     @foreach ($statement->carryForwards() as $summary)
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-line bg-well px-4 py-3">
-            <span class="text-sm text-mut">
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-field bg-well px-4 py-3">
+            <span class="text-sm text-tx">
                 Devreden bakiye
-                <span class="text-tx">({{ $summary->currency->value }})</span>
+                <span class="font-medium">({{ $summary->currency->value }})</span>
                 · {{ $criteria->dateFrom?->format('d.m.Y') }} öncesi
             </span>
-            <span class="tabular-nums text-tx">{{ $summary->carryForward->format($summary->currency) }}</span>
+            <span class="font-medium tabular-nums text-tx">{{ $summary->carryForward->format($summary->currency) }}</span>
         </div>
     @endforeach
 
@@ -89,7 +99,7 @@
                 <x-ui.th align="right">Borç</x-ui.th>
                 <x-ui.th align="right">Alacak</x-ui.th>
                 <x-ui.th>Para birimi</x-ui.th>
-                <x-ui.th align="right">Bakiye</x-ui.th>
+                <x-ui.th align="right" class="bg-well">Bakiye</x-ui.th>
                 <x-ui.th>Kaynak</x-ui.th>
             </tr>
         </thead>
@@ -100,21 +110,31 @@
                         {{ $row->entry->entry_date->format('d.m.Y') }}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap">
-                        @if ($row->isReversal())
-                            <x-ui.badge tone="danger">{{ $row->type()->label() }}</x-ui.badge>
-                        @else
-                            <span class="text-tx">{{ $row->type()->label() }}</span>
-                        @endif
+                        {{-- Her işlem türü rozetle gösterilir; ters kayıt ayrıca
+                             kırmızı tonla ayrışır ama anlam metinde durur. --}}
+                        <x-ui.badge :tone="match (true) {
+                            $row->isReversal() => 'danger',
+                            $row->entry->isDebit() => 'debit',
+                            default => 'credit',
+                        }">{{ $row->type()->label() }}</x-ui.badge>
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $row->entry->description }}</td>
-                    <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
-                        {{ $row->entry->debitMoney()->isZero() ? '—' : $row->entry->debitMoney()->format($row->currency()) }}
+                    <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums">
+                        @if ($row->entry->debitMoney()->isZero())
+                            <span class="text-mut" aria-hidden="true">—</span>
+                        @else
+                            <span class="font-medium text-debit">{{ $row->entry->debitMoney()->format($row->currency()) }}</span>
+                        @endif
                     </td>
-                    <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
-                        {{ $row->entry->creditMoney()->isZero() ? '—' : $row->entry->creditMoney()->format($row->currency()) }}
+                    <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums">
+                        @if ($row->entry->creditMoney()->isZero())
+                            <span class="text-mut" aria-hidden="true">—</span>
+                        @else
+                            <span class="font-medium text-credit">{{ $row->entry->creditMoney()->format($row->currency()) }}</span>
+                        @endif
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $row->currency()->value }}</td>
-                    <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
+                    <td class="px-4 py-3 text-right whitespace-nowrap bg-well font-semibold tabular-nums text-tx">
                         {{ $row->runningBalance->format($row->currency()) }}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-xs">
@@ -145,14 +165,12 @@
                         </p>
                     </div>
                     <span class="shrink-0 text-right">
+                        <span class="block text-xs text-mut">{{ $row->entry->isDebit() ? 'Borç' : 'Alacak' }}</span>
                         <span @class([
-                            'block tabular-nums',
-                            'text-tx' => $row->entry->isDebit(),
-                            'text-mut' => ! $row->entry->isDebit(),
-                        ])>
-                            {{ $row->entry->isDebit() ? 'Borç' : 'Alacak' }}
-                            {{ $row->entry->amount()->format($row->currency()) }}
-                        </span>
+                            'block font-medium tabular-nums',
+                            'text-debit' => $row->entry->isDebit(),
+                            'text-credit' => ! $row->entry->isDebit(),
+                        ])>{{ $row->entry->amount()->format($row->currency()) }}</span>
                     </span>
                 </div>
 
@@ -162,7 +180,7 @@
                     <span class="text-xs">@include('companies::statements._source-link')</span>
                     <span class="text-sm text-mut">
                         Bakiye
-                        <span class="tabular-nums text-tx">{{ $row->runningBalance->format($row->currency()) }}</span>
+                        <span class="font-semibold tabular-nums text-tx">{{ $row->runningBalance->format($row->currency()) }}</span>
                     </span>
                 </div>
             </x-ui.card>

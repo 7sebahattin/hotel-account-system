@@ -4,8 +4,8 @@
     <span class="mr-3 inline-block whitespace-nowrap text-sm">
         <span @class([
             'tabular-nums',
-            'text-danger' => $balance->isPositive(),
-            'text-success' => $balance->isNegative(),
+            'text-debit' => $balance->isPositive(),
+            'text-credit' => $balance->isNegative(),
             'text-mut' => $balance->isZero(),
         ])>{{ $balance->format($currency) }}</span>
         <span class="text-xs text-mut">

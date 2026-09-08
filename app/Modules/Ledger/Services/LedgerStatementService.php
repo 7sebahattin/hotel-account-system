@@ -12,6 +12,7 @@ use App\Modules\Ledger\Support\Statement;
 use App\Modules\Ledger\Support\StatementCriteria;
 use App\Modules\Ledger\Support\StatementRow;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -126,6 +127,96 @@ class LedgerStatementService
             ->pluck('last_date', 'company_id')
             ->map(fn ($date) => (string) $date)
             ->all();
+    }
+
+    /**
+     * Tüm firmaların açık bakiyelerinin para birimi bazında özeti.
+     *
+     * "Açık alacak" ve "açık borç" firma bazında NET edildikten SONRA toplanır:
+     * bir firmanın 100 borcu ile başka bir firmanın 100 alacağı birbirini
+     * götürmez, ikisi ayrı satırdır. Bu yüzden alt sorgu firma+para birimi
+     * kırılımında bakiyeyi bulur, dış sorgu yönüne göre ayırır.
+     *
+     * TEK sorgu; sonuç en fazla para birimi sayısı kadar satırdır (CLAUDE.md §6/L5:
+     * para birimleri asla tek toplamda birleşmez).
+     *
+     * @return array<string, array{receivable: Money, payable: Money, net: Money}>
+     */
+    public function openBalanceTotalsByCurrency(): array
+    {
+        $inner = DB::table('ledger_entries')
+            ->selectRaw('company_id, currency, (COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) as balance')
+            ->groupBy('company_id', 'currency');
+
+        $rows = DB::query()
+            ->fromSub($inner, 'company_balances')
+            ->selectRaw('currency')
+            ->selectRaw('CAST(SUM(CASE WHEN balance > 0 THEN balance ELSE 0 END) AS CHAR) as receivable')
+            ->selectRaw('CAST(SUM(CASE WHEN balance < 0 THEN -balance ELSE 0 END) AS CHAR) as payable')
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->get();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $receivable = Money::fromDecimal((string) $row->receivable);
+            $payable = Money::fromDecimal((string) $row->payable);
+
+            $totals[(string) $row->currency] = [
+                'receivable' => $receivable,
+                'payable' => $payable,
+                'net' => $receivable->subtract($payable),
+            ];
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Bir para biriminde en yüksek bakiyeli firmalar.
+     *
+     * Para birimi başına ayrı çağrılır (en fazla Currency::cases() kadar, yani
+     * sabit sayıda sorgu) — firma başına sorgu YOKTUR. Yalnızca bize borçlu
+     * olanlar listelenir; sıfır ve negatif bakiye "en yüksek alacak" değildir.
+     *
+     * @return array<int, array{company_id: int, balance: Money}>
+     */
+    public function topDebtorCompanies(Currency $currency, int $limit = 10): array
+    {
+        $rows = DB::table('ledger_entries')
+            ->selectRaw('company_id')
+            ->selectRaw('CAST((COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) AS CHAR) as balance')
+            ->where('currency', $currency->value)
+            ->groupBy('company_id')
+            ->havingRaw('(COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) > 0')
+            ->orderByRaw('(COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) DESC')
+            ->limit($limit)
+            ->get();
+
+        return $rows
+            ->map(fn ($row): array => [
+                'company_id' => (int) $row->company_id,
+                'balance' => Money::fromDecimal((string) $row->balance),
+            ])
+            ->all();
+    }
+
+    /**
+     * Son cari hareketler — kaynak kayıt sorgusu YAPILMADAN.
+     *
+     * Firma adları Ledger'ın işi değildir (CLAUDE.md §4.3/3): çağıran taraf
+     * `company_id` listesini Companies servisine verip adları toplu çözer.
+     *
+     * @return Collection<int, LedgerEntry>
+     */
+    public function recentEntries(int $limit = 10): Collection
+    {
+        return LedgerEntry::query()
+            ->orderByDesc('entry_date')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
     }
 
     // ------------------------------------------------------------------ iç

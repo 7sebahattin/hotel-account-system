@@ -16,11 +16,11 @@
                 @endif
                 <div class="flex justify-between gap-3">
                     <dt class="text-mut">Toplam borç</dt>
-                    <dd class="tabular-nums text-tx">{{ $summary->totalDebit->format($summary->currency) }}</dd>
+                    <dd class="font-medium tabular-nums text-debit">{{ $summary->totalDebit->format($summary->currency) }}</dd>
                 </div>
                 <div class="flex justify-between gap-3">
                     <dt class="text-mut">Toplam alacak</dt>
-                    <dd class="tabular-nums text-tx">{{ $summary->totalCredit->format($summary->currency) }}</dd>
+                    <dd class="font-medium tabular-nums text-credit">{{ $summary->totalCredit->format($summary->currency) }}</dd>
                 </div>
             </dl>
 
@@ -29,8 +29,8 @@
                     <span class="text-sm text-mut">Bakiye</span>
                     <span @class([
                         'text-base tabular-nums',
-                        'text-danger' => $summary->balanceTone() === 'danger',
-                        'text-success' => $summary->balanceTone() === 'success',
+                        'text-debit' => $summary->balanceTone() === 'danger',
+                        'text-credit' => $summary->balanceTone() === 'success',
                         'text-tx' => $summary->balanceTone() === 'neutral',
                     ])>{{ $summary->closing->format($summary->currency) }}</span>
                 </div>

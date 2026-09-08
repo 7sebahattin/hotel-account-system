@@ -9,39 +9,78 @@
 | Tasarım token'ları — tek kaynak
 |--------------------------------------------------------------------------
 |
-| Bu uygulamanın TEK teması koyu temadır: açık tema, tema değiştirici veya
-| kullanıcı tema tercihi yoktur.
+| Bu uygulamanın TEK teması açık temadır: koyu tema, tema değiştirici veya
+| kullanıcı tema tercihi yoktur. Kenar çubuğu koyu lacivert bir yüzeydir;
+| bu bir "koyu tema" değil, tek bir bileşenin kendi paletidir.
 |
 | Buradaki her değer Tailwind yardımcı sınıfı üretir: bg-bg, bg-card,
-| border-line, text-tx, text-mut, bg-acc, text-success ...
+| border-line, text-tx, text-mut, bg-acc, text-success, bg-nav ...
+|
+| Blade içinde HAM HEX YAZILMAZ. Bir renge ihtiyaç varsa önce buraya token
+| eklenir. Aşağıdaki kontrast ölçümleri WCAG 2.1 formülüyle hesaplanmıştır.
 */
 @theme {
-    --color-bg: #0f172a;
-    --color-card: #1e293b;
-    --color-line: #334155;
-    --color-tx: #e2e8f0;
-    --color-mut: #94a3b8;
-    --color-acc: #f97316;
-    --color-well: #0b1220;
+    /* --- Yüzeyler ------------------------------------------------------ */
+    --color-bg: #f7f7f5; /* sayfa zemini */
+    --color-card: #ffffff; /* kart / tablo zemini */
+    --color-line: #e5e4e0; /* ayraç ve kart sınırı (dekoratif, 1.4.11 muaf) */
 
     /*
-        Form kontrolü sınırı — YALNIZCA input/select/textarea için.
+        Çukur alan: tablo başlık şeridi, ikincil buton zemini, salt okunur kutu.
 
-        WCAG 1.4.11 arayüz bileşeni sınırları için 3:1 ister. Ölçüm: --line
-        (#334155) kart üzerinde 1.41, arka planda 1.72 kalıyor; dolgu farkı
-        (well/card) da 1.28. Yani sınır da dolgu da alanı tanımlamaya yetmiyor.
-        Bu token kart üzerinde 3.07, arka planda 3.75 verir.
-
-        Ayırıcı ve kart çizgileri --line olarak KALIR; değişen yalnızca form
-        kontrollerinin sınırıdır.
+        KULLANIM KURALI: bu zemin üzerine `text-mut` YAZILMAZ — #6B7280 ile
+        oranı 4.24 kalır ve 4.5 eşiğini geçmez. Çukur alanlarda `text-tx`
+        kullanılır (12.87). Ölçüldü.
     */
-    --color-field: #64748b;
+    --color-well: #f1f0ec;
 
-    --color-success: #4ade80;
-    --color-danger: #f87171;
+    /* --- Metin --------------------------------------------------------- */
+    --color-tx: #1f2937; /* kart 14.68 · sayfa 13.68 */
+    --color-mut: #6b7280; /* kart  4.83 · sayfa  4.51 */
 
-    --color-success-bg: #1c2b1f;
-    --color-danger-bg: #2b1c1c;
+    /* --- Vurgu (sıcak altın) ------------------------------------------- */
+    /*
+        Altın DOLGU rengidir, metin rengi değildir: #C8A96B beyaz üzerinde
+        yalnızca 2.25 verir. Bu yüzden üç ayrı token vardır ve hangisinin
+        nerede kullanılacağı bağlayıcıdır.
+    */
+    --color-acc: #c8a96b; /* dolgu: birincil buton, aktif şerit */
+    --color-acc-strong: #b08f52; /* dolgunun hover/active hâli */
+    --color-acc-tx: #8a6a2f; /* METİN ve odak halkası olarak altın (kart 5.02) */
+    --color-acc-bg: #faf6ee; /* altın rozet/işaret zemini */
+    --color-on-acc: #1f2937; /* altın dolgu ÜZERİNDEKİ metin (6.53) */
+
+    /* --- Kenar çubuğu (kendi paleti olan koyu yüzey) -------------------- */
+    --color-nav: #172033;
+    --color-nav-well: #22304a; /* aktif menü zemini */
+    --color-nav-line: #2b3752;
+    --color-nav-tx: #e8e6e1; /* nav üzerinde 13.04 */
+    --color-nav-mut: #9aa3b2; /* nav üzerinde  6.40 */
+
+    /*
+        Form kontrolü sınırı — YALNIZCA input/select/textarea ve ikincil buton.
+
+        WCAG 1.4.11 arayüz bileşeni sınırları için 3:1 ister. --line (#E5E4E0)
+        kart üzerinde 1.27 kalır: ayraç olarak doğru, kontrol sınırı olarak
+        yetersiz. Bu token kart üzerinde 3.47, sayfa üzerinde 3.23 verir.
+    */
+    --color-field: #8a8a85;
+
+    /* --- Durum renkleri ------------------------------------------------- */
+    --color-success: #15803d; /* kart 5.02 */
+    --color-danger: #b91c1c; /* kart 6.47 */
+    --color-success-bg: #ecfdf5; /* metinle 4.76 */
+    --color-danger-bg: #fef2f2; /* metinle 5.91 */
+    --color-info-bg: #eff6ff;
+
+    /*
+        Cari yön renkleri. Kırmızı BİLEREK kullanılmaz: kırmızı bu uygulamada
+        "iptal / tehlike" demektir; borç hatalı bir durum değildir.
+        Renk tek başına anlam taşımaz — her tutar ayrıca "Borç"/"Alacak"
+        etiketiyle veya kendi kolonunda gösterilir (CLAUDE.md §11.6).
+    */
+    --color-debit: #b45309; /* Borç — kart 5.02 */
+    --color-credit: #15803d; /* Alacak — kart 5.02 */
 
     /*
         Sistem font yığını: derleme anında veya tarayıcıda hiçbir dış servise
@@ -59,18 +98,22 @@
     --tx: var(--color-tx);
     --mut: var(--color-mut);
     --acc: var(--color-acc);
+    --acc-tx: var(--color-acc-tx);
     --well: var(--color-well);
     --field: var(--color-field);
+    --nav: var(--color-nav);
     --success: var(--color-success);
     --danger: var(--color-danger);
     --success-bg: var(--color-success-bg);
     --danger-bg: var(--color-danger-bg);
+    --debit: var(--color-debit);
+    --credit: var(--color-credit);
 }
 
 @layer base {
     html {
-        /* Tarayıcı kaydırma çubuğu ve form kontrolleri de koyu tema kullansın. */
-        color-scheme: dark;
+        /* Tarayıcı kaydırma çubuğu ve form kontrolleri de açık tema kullansın. */
+        color-scheme: light;
     }
 
     body {
@@ -91,13 +134,27 @@
         font-size: 16px;
     }
 
-    /* Klavye ile gezinmede odak her zaman görünür olmalı. */
+    /*
+        Klavye ile gezinmede odak her zaman görünür olmalı. Halka rengi
+        --acc değil --acc-tx: açık zeminde altın dolgu 1.4.11'in 3:1
+        eşiğini geçmez, koyu altın 4.68 verir.
+    */
     :focus-visible {
-        outline: 2px solid var(--color-acc);
+        outline: 2px solid var(--color-acc-tx);
         outline-offset: 2px;
     }
 
     ::placeholder {
         color: var(--color-mut);
+    }
+}
+
+@layer components {
+    /*
+        Kenar çubuğu koyu bir ada olduğu için odak halkası orada altın dolgu
+        rengini kullanır (nav üzerinde 7.24); koyu altın koyu zeminde kaybolurdu.
+    */
+    .nav-surface :focus-visible {
+        outline-color: var(--color-acc);
     }
 }

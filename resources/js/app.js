@@ -16,11 +16,16 @@ const drawer = {
         document.body.classList.add('overflow-hidden', 'md:overflow-auto');
     },
 
-    close() {
+    close({ restoreFocus = false } = {}) {
+        if (this.panel?.classList.contains('-translate-x-full')) return;
+
         this.panel?.classList.add('-translate-x-full');
         this.overlay?.classList.add('hidden');
         this.toggle?.setAttribute('aria-expanded', 'false');
         document.body.classList.remove('overflow-hidden', 'md:overflow-auto');
+
+        // Klavye kullanıcısı çekmeceyi kapattığında odak boşlukta kalmamalı.
+        if (restoreFocus) this.toggle?.focus();
     },
 };
 
@@ -39,14 +44,89 @@ document.addEventListener('DOMContentLoaded', () => {
 
     drawer.overlay?.addEventListener('click', () => drawer.close());
 
-    document.querySelector('[data-sidebar-close]')?.addEventListener('click', () => drawer.close());
+    document
+        .querySelector('[data-sidebar-close]')
+        ?.addEventListener('click', () => drawer.close({ restoreFocus: true }));
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            drawer.close();
+            drawer.close({ restoreFocus: true });
         }
     });
 });
+
+/**
+ * Çift gönderim koruması.
+ *
+ * Aynı formun iki kez gönderilmesi, bu uygulamada iki konaklama ya da iki
+ * tahsilat kaydı demektir; cari defter append-only olduğu için sonucu elle
+ * ters kayıtla düzeltmek gerekir. Bu yüzden ikinci gönderim engellenir.
+ *
+ * Buton `disabled` yapılırken iki tuzak vardır ve ikisi de burada çözülür:
+ *
+ *  1. Devre dışı bırakılan bir submit butonunun `name`/`value` çifti istek
+ *     gövdesine GİRMEZ. Bu yüzden devre dışı bırakma `setTimeout(0)` ile
+ *     tarayıcı gövdeyi topladıktan SONRA yapılır.
+ *  2. Doğrulama hatası veya `formnovalidate` yüzünden gönderim iptal olursa
+ *     form kilitli kalmamalıdır; `invalid` olayında kilit açılır.
+ */
+function initSubmitGuard() {
+    document.addEventListener(
+        'submit',
+        (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-allow-resubmit')) return;
+
+            if (form.dataset.submitting === '1') {
+                event.preventDefault();
+                return;
+            }
+
+            form.dataset.submitting = '1';
+
+            const buttons = form.querySelectorAll('button[type="submit"], button:not([type])');
+
+            window.setTimeout(() => {
+                buttons.forEach((button) => {
+                    button.disabled = true;
+                    button.setAttribute('aria-disabled', 'true');
+                });
+            }, 0);
+        },
+        true
+    );
+
+    // Tarayıcı doğrulaması gönderimi durdurduysa form yeniden denenebilmeli.
+    document.addEventListener(
+        'invalid',
+        (event) => {
+            const form = event.target instanceof HTMLElement ? event.target.closest('form') : null;
+            if (!form) return;
+
+            delete form.dataset.submitting;
+            form.querySelectorAll('button[aria-disabled="true"]').forEach((button) => {
+                button.disabled = false;
+                button.removeAttribute('aria-disabled');
+            });
+        },
+        true
+    );
+
+    // Geri tuşuyla bfcache'ten dönen sayfada butonlar kilitli kalmasın.
+    window.addEventListener('pageshow', (event) => {
+        if (!event.persisted) return;
+
+        document.querySelectorAll('form[data-submitting]').forEach((form) => {
+            delete form.dataset.submitting;
+            form.querySelectorAll('button[aria-disabled="true"]').forEach((button) => {
+                button.disabled = false;
+                button.removeAttribute('aria-disabled');
+            });
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initSubmitGuard);
 
 /**
  * Konaklama formu — ücret giriş şekli.
