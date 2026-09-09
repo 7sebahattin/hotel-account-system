@@ -289,7 +289,9 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
               cPanel cron (dakikada bir)
                         ↓
        işaret var mı? → php artisan migrate --force
-                        → config:cache / route:cache / view:cache
+                        → php artisan db:seed --class=RolePermissionSeeder --force
+                        → config:clear / route:clear / view:clear / event:clear
+                        → config:cache / route:cache / view:cache / event:cache
                         ↓
         başarılı → günlüğe yaz + işaret dosyasını SİL
         başarısız → işaret dosyası KALIR + hata günlüğe yazılır
@@ -516,11 +518,19 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
 
 10. Dry-run temizse `DEPLOY_ENABLED=true` oluşturulur ve workflow
     `mode: deploy` + `confirm_target: lemon.derspros.com.tr` ile çalıştırılır.
-11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6):
-    `php artisan key:generate --force`, `migrate --force`, `storage:link`,
-    `config:cache route:cache view:cache`.
+11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6), TAM
+    SIRAYLA — **`docs/release-checklist-v2.1.1.md`**'nin bağlayıcı sırasıdır:
+    `php artisan key:generate --force`, `migrate --force`,
+    **`db:seed --class=RolePermissionSeeder --force`** (HER deploy'da,
+    migrate'ten hemen sonra — atlanırsa production "no permission named X"
+    hatası verir, gerçek üretim olayı), `storage:link`, sonra önbellek
+    ÖNCE temizlenir SONRA kurulur:
+    `config:clear route:clear view:clear event:clear`,
+    `config:cache route:cache view:cache event:cache`.
     **`migrate --force` burada TRIGGER yetkisinin gerçek sınavıdır (§8).**
     Hata verirse durun ve Aşama 4'e **geçmeyin**.
+    Ardından `docs/release-checklist-v2.1.1.md` §4'teki finansal duman
+    testinin TAMAMI çalıştırılır.
 
 ### Aşama 4 — DocumentRoot değişikliği (EN SON)
 

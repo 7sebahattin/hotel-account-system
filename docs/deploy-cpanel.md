@@ -63,9 +63,20 @@ nedenle depodan kaldırılmıştır.
    ```
 4. `php artisan key:generate --force`
 5. `php artisan migrate --force`
-6. `php artisan storage:link`
-7. Önbellekler: `php artisan config:cache route:cache view:cache`
+6. **`php artisan db:seed --class=RolePermissionSeeder --force`** — HER
+   deploy'da, migrate'ten hemen sonra, ATLANMAZ. Gerekçe: kodda yeni bir
+   `Permission` case'i eklenip deploy edildiğinde, bu adım koşulmazsa
+   production'da "There is no permission named X for guard web" hatası
+   üretir (gerçek üretim olayı — bkz. `docs/release-checklist-v2.1.1.md`
+   §1). Seeder idempotenttir, kullanıcı rol atamalarını bozmaz.
+7. `php artisan storage:link`
+8. Önbellekler — ÖNCE temizle, SONRA kur (bayat cache yeni `.env`
+   değerlerini görmezden bırakabilir):
+   `php artisan config:clear route:clear view:clear event:clear`
+   `php artisan config:cache route:cache view:cache event:cache`
    (her deploy sonrası tekrarlanır)
+
+**Tam sıra ve finansal duman testi için: `docs/release-checklist-v2.1.1.md`.**
 
 ## 4. Deploy sonrası güvenlik doğrulaması
 

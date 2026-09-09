@@ -1562,7 +1562,14 @@ Kurallar:
 - Vite build çıktısı (`public/build`) CI'da üretilir, repoya commit edilmez.
 - `APP_DEBUG=false`, `APP_ENV=production`, HTTPS zorunlu.
 - Cron: günlük `mysqldump` + şifreli yedek kopyası (offsite). `schedule:run` V1'de sadece yedek için.
-- Deploy sonrası: `php artisan migrate --force`, `config:cache`, `route:cache`, `view:cache`.
+- Deploy sonrası, bu SIRAYLA (bağlayıcı, K-099 — tam kontrol listesi
+  `docs/release-checklist-v2.1.1.md`): `php artisan migrate --force` →
+  **`php artisan db:seed --class=RolePermissionSeeder --force`** (HER
+  deploy'da, migrate'ten hemen sonra, ATLANMAZ — koddaki yeni bir
+  `Permission` case'i bu adım koşulmadan production'da "no permission
+  named X for guard web" hatası üretir, gerçek üretim olayı) →
+  `config:clear route:clear view:clear event:clear` (bayat cache temizliği) →
+  `config:cache route:cache view:cache event:cache`.
 - **Migration'lar geri alınabilir olmalı** (`down()` yazılır) ama canlıda `migrate:rollback` yerine ileri düzeltme migration'ı tercih edilir.
 
 ---

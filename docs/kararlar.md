@@ -1672,3 +1672,75 @@ etkilenmedi.
 (`data-cash-movement-trigger`), `app.js` (`initRecipientToggle()` adlandırılmış
 fonksiyona taşındı, `initCashMovementDialog()` yeni), `app.css` (`.cash-dialog`
 bileşeni).
+
+## K-099 · v2.1.1 yayın sertleştirmesi: yetki seed'i deploy sırasına bağlayıcı olarak eklendi
+
+**Bağlam:** v2.1.1 (A/A.1/B/B.1, `470009f`→`0185b15`) production'a taşınmadan
+önce genel bir sertleştirme turu istendi — yeni özellik YOK, yalnızca yayın
+güvenliği. Denetim 5 alanı kapsadı: migration'lar, yetki senkronizasyonu,
+saat dilimi, production config güvenliği, makbuz config güvenliği.
+
+**Bulgu 1 (KÖK NEDEN, düzeltildi) — yetki seed'i deploy dokümantasyonunda
+HİÇ YOKTU:** `CLAUDE.md §15`, `docs/deploy-lemon.md`, `docs/deploy-cpanel.md`
+ve `docs/deploy-github-actions.md`'nin belgelediği "deploy sonrası" komut
+sırası yalnızca `migrate --force` + cache komutlarını içeriyordu —
+`php artisan db:seed --class=RolePermissionSeeder --force` HİÇBİR YERDE
+YAZILI DEĞİLDİ. Bu, gerçek üretimde görülen "There is no permission named
+cashbook.operate for guard web" hatasının BİREBİR kök nedenidir: kodda yeni
+bir `Permission` case'i deploy edilir ama veritabanının `permissions`
+tablosu hiç senkronlanmaz. Kod tarafı zaten SAĞLAMDIR (her yetki kontrolü
+`Permission::X->value` üzerinden gider, hiçbir ham string YOKTUR — grep ile
+doğrulandı, PHPStan da yakalardı); açık olan yalnızca DEPLOY SÜRECİYDİ.
+Düzeltme: dört dokümanın hepsine bu adım migrate'ten HEMEN SONRA, cache'ten
+ÖNCE, atlanamaz olarak eklendi; ayrıca tek kaynak olarak
+`docs/release-checklist-v2.1.1.md` oluşturuldu. `RolePermissionSeeder`
+idempotenttir (`findOrCreate`+`syncPermissions`) — kullanıcı rol atamalarını
+BOZMADAN her deploy'da güvenle tekrar çalıştırılabilir.
+
+**Bulgu 2 — migration'ların hepsi zaten production-güvenliydi, kod değişikliği
+GEREKMEDİ:** 19 modül migration'ı tek tek incelendi (CashBook 9, Payments 4,
+Companies/Ledger/Stays/AuditLog/Authorization 6). Hiçbiri `migrate:fresh`e
+bağımlı değil; mevcut satıra eklenen HER kolon `nullable()`dır (varsayılan
+NULL, backfill gerekmez); CHECK kısıtları DROP+CREATE deseniyle yalnızca
+GENİŞLETİLİR (mevcut değerler her zaman yeni kısıtta da geçerlidir);
+`down()` metotları veri varsa BİLEREK başarısız olur (sessiz veri kaybı
+yerine). Production bugün BOŞTUR (`docs/deploy-lemon.md` §5) — bu ilk gerçek
+deploy, "mevcut satır" riski bu turda fiilen yoktur, ama disiplin gelecekteki
+deploy'lar için doğrulandı.
+
+**Bulgu 3 — saat dilimi: kod değişikliği GEREKMEDİ, yalnızca doğrulama
+adımı belgelendi.** `APP_TIMEZONE=Europe/Istanbul` tüm PHP/Eloquent
+zaman damgalarını yönetir (`Carbon::now()`, `date_default_timezone_set()`
+üzerinden). `config/database.php`'nin mysql bağlantısında AÇIK bir
+`'timezone'` anahtarı YOKTUR — ama uygulama kodunda HİÇBİR yerde (grep ile
+doğrulandı: tüm `selectRaw`/`whereRaw` yalnızca `SUM`/`CAST`/`LIKE`
+içerir) MySQL'in kendi `NOW()`/`CURDATE()`/`CURRENT_TIMESTAMP()` fonksiyonu
+kullanılmaz — her "şimdi"/"bugün" karşılaştırması PHP'de hesaplanıp SQL'e
+literal değer olarak geçirilir. `useCurrent()` DB varsayılanları (bazı
+append-only tablolarda) yalnızca Eloquent'i BAYPAS EDEN ham SQL için bir
+güvenlik ağıdır ve normal uygulama akışında hiç TETİKLENMEZ (Eloquent
+`created_at`'i her zaman PHP'de açıkça yazar). Sonuç: veritabanı sunucusunun
+KENDİ saat dilimi ayarı bu uygulamada doğruluğu ETKİLEMEZ; `+03:00`'a
+KÖRLEMESİNE zorlama yapılmadı (istenmediği gibi). Production doğrulama
+sorgusu `docs/release-checklist-v2.1.1.md`'ye eklenmedi çünkü kod
+değişikliği gerektirmiyor — gerekirse `SELECT @@session.time_zone, NOW();`
+ile tek seferlik kontrol yeterlidir.
+
+**Bulgu 4 — production config/makbuz güvenliği: mevcut durum ZATEN
+sağlamdı, ek düzeltme gerekmedi.** `.gitignore` `.env`/`vendor`/
+`node_modules`/`public/build`'i kapsıyor; git'te başka hiçbir `.env*`
+dosyası izlenmiyor; `docs/deploy-lemon.md` §5 zaten `SESSION_SECURE_COOKIE=
+true`, `APP_DEBUG=false`, `LOG_LEVEL=error` içeriyor; `DatabaseSeeder::
+guardProductionCredentials()` varsayılan/boş admin kimlik bilgisiyle
+production seed'ini zaten reddediyor; FTP deploy workflow'u `storage/` ve
+`bootstrap/cache/`'i hem build artifact'ından hem transfer listesinden
+ÇIKARIYOR ve bunu CI'da bir guard ile doğruluyor. Makbuz ekranındaki firma
+başlık bilgisi zaten `config('hotel.company.*')` üzerinden gelir, HİÇBİR
+Blade dosyasında hardcoded değer YOKTUR (grep ile doğrulandı) ve her alan
+`@if` ile korunur — eksik config sayfayı ÇÖKERTMEZ.
+
+**Etkilenen dosyalar:** `CLAUDE.md` §15, `docs/deploy-lemon.md`,
+`docs/deploy-cpanel.md`, `docs/deploy-github-actions.md` (dördü de seed
+adımı eklendi), yeni `docs/release-checklist-v2.1.1.md` (tek kaynak
+kontrol listesi + 12 maddelik finansal duman testi). Hiçbir uygulama kodu
+DEĞİŞMEDİ — bu tamamen bir dokümantasyon/süreç düzeltmesidir.
