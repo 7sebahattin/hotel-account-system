@@ -2,10 +2,14 @@
 <html lang="tr" class="h-full">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{-- viewport-fit=cover: env(safe-area-inset-*) olmadan iPhone/Android çentik
+         payı sıfır döner — standalone (PWA) modda alt gezinme çubuğu cihaz ev
+         göstergesinin ALTINDA kalırdı (kullanıcı talimatı §3). --}}
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Mobil tarayıcı çubuğu kenar çubuğuyla aynı yüzeyi kullanır. --}}
     <meta name="theme-color" content="#172033">
+    @include('partials.pwa-head')
     <title>@yield('title', config('app.name'))</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -39,26 +43,17 @@
 
     <div class="md:pl-64">
         {{--
-            Mobil üst çubuk. Gün 11 — "Lemon Bar": hamburger + marka solda,
-            Hızlı İşlem ve (varsa) kritik durum göstergesi sağda. Operasyon/
-            Finans sekmeleri BURADA GÖSTERİLMEZ (kullanıcı talimatı §12) —
-            onlar sayfa içeriğinde, `dashboard::_view-switch` ile mobilde
-            ayrı bir satırda görünür.
+            Mobil üst çubuk (PWA + mobil temizlik turu). Artık yalnızca marka
+            taşır — hamburger ve "+" KALDIRILDI (kullanıcı talimatı §2):
+            birincil gezinme alt çubuktur, "Daha Fazla" ikincil gezinmeyi
+            zaten karşılar; üstteki hamburger bu yüzden TEKRARDI. "+" (Hızlı
+            İşlem) da kaldırıldı — her kısayolun kendi index sayfasında zaten
+            aynı "oluştur" butonu vardır (ör. Konaklamalar → "Yeni konaklama"),
+            bu yüzden hiçbir yetenek kaybolmaz, yalnızca çubuk sadeleşir.
+            Masaüstü Lemon Bar'a (aşağıda) DOKUNULMADI.
         --}}
-        <header class="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-nav-line bg-nav px-2 md:hidden">
-            <button type="button" data-sidebar-toggle
-                    class="flex size-11 items-center justify-center rounded-lg text-nav-mut hover:text-nav-tx"
-                    aria-label="Menüyü aç" aria-expanded="false" aria-controls="kenar-cubugu">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" class="size-5" aria-hidden="true">
-                    <path d="M3 5h14M3 10h14M3 15h14" stroke-linecap="round"/>
-                </svg>
-            </button>
-
-            <span class="nav-surface min-w-0 flex-1">@include('partials.brand', ['compact' => true])</span>
-
-            @yield('lemon-bar-status-icon')
-
-            @include('partials.quick-action')
+        <header class="pwa-safe-top sticky top-0 z-20 flex h-12 items-center border-b border-nav-line bg-nav px-4 md:hidden">
+            <span class="nav-surface min-w-0">@include('partials.brand', ['compact' => true])</span>
         </header>
 
         {{--

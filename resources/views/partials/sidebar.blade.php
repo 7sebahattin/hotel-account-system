@@ -81,6 +81,37 @@
     @endforeach
 </nav>
 
+<div>
+    {{--
+        PWA kurulumu — "Daha Fazla" (kullanıcı talimatı §4): kalıcı büyük bir
+        pano kartı DEĞİLDİR, bu çekmecenin ikincil bir eylemidir. `md:hidden`:
+        masaüstü kenar çubuğu bu turda DEĞİŞTİRİLMEMELİDİR (kullanıcı
+        talimatı) — bu blok yalnızca mobilde (< 768px) görünür olabilir.
+        Varsayılan olarak `hidden`dır; `app.js`teki `initPwaInstall()` yalnızca
+        kurulum GERÇEKTEN mümkünse (`beforeinstallprompt` ateşlenirse) veya
+        iOS Safari'de henüz kurulu değilse gösterir — tarayıcı desteklemiyorsa
+        veya uygulama ZATEN kuruluysa hiç görünmez.
+    --}}
+    <div data-pwa-install hidden class="mt-5 md:hidden">
+        <p class="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-nav-mut">Uygulama</p>
+        <button type="button" data-pwa-install-button
+                class="mx-3 flex min-h-11 w-[calc(100%-1.5rem)] items-center gap-2.5 rounded-lg px-3 text-sm text-nav-tx hover:bg-nav-well">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" class="size-4 shrink-0 text-nav-mut" aria-hidden="true">
+                <path d="M10 3v10m0 0l-4-4m4 4l4-4M4 15v1a2 2 0 002 2h8a2 2 0 002-2v-1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Uygulamayı Yükle
+        </button>
+    </div>
+
+    <div data-pwa-ios-hint hidden class="mt-5 px-3 md:hidden">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-nav-mut">Uygulama</p>
+        <p class="mt-1.5 text-xs text-nav-mut">
+            Bu cihaza yüklemek için: <strong class="text-nav-tx">Paylaş</strong> →
+            <strong class="text-nav-tx">Ana Ekrana Ekle</strong>
+        </p>
+    </div>
+</div>
+
 <div class="border-t border-nav-line p-3">
     <div class="flex min-w-0 items-center gap-2.5 px-1 pb-2.5">
         <span aria-hidden="true"

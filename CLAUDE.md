@@ -1350,9 +1350,12 @@ yeterlidir (`count` atlanır).
   Profil/Hesap SAYFASI yoktur (böyle bir route bu turdan önce de yoktu; yeni route
   eklemek bu turun kapsamı dışıdır — CLAUDE.md §18) — kimlik bilgisi çekmecenin alt
   bloğunda zaten görünür.
-- Kenar çubuğunu açan HER tetikleyici (üst çubuktaki hamburger + alt çubuktaki
-  "Daha Fazla") `[data-sidebar-toggle]` ile işaretlidir; `resources/js/app.js`'teki
-  `drawer` nesnesi hepsini birlikte yönetir (`aria-expanded`, odak geri dönüşü).
+- Kenar çubuğunu açan tetikleyici (yalnızca alt çubuktaki "Daha Fazla" —
+  K-103'te üst çubuktaki hamburger KALDIRILDI, aşağıya bakınız)
+  `[data-sidebar-toggle]` ile işaretlidir; `resources/js/app.js`'teki `drawer`
+  nesnesi bunu (ve gelecekte eklenebilecek başka tetikleyicileri) genel olarak
+  yönetir (`aria-expanded`, odak geri dönüşü) — sabit bir tetikleyici sayısına
+  bağlı DEĞİLDİR.
 - **Katman sırası bağlayıcıdır:** alt çubuk `z-20`, çekmece arka planı (overlay) `z-30`,
   çekmece paneli `z-40`. Çekmece açıkken overlay alt çubuğu GÖRSEL olarak örtmelidir;
   aksi hâlde ikisi aynı katmanda olursa alt çubuk overlay'in üstünde kalır ve hem yanlış
@@ -1369,10 +1372,21 @@ yeterlidir (`count` atlanır).
   paylaşmaya çalışmak İŞE YARAMAZ: bir include içinde tanımlanan değişken üst kapsama
   geri sızmaz; bu yüzden sınıf sabiti seçildi.)
 
-**Lemon Bar (Gün 11):** masaüstünde `md:flex` sabit bir üst çubuktur, mobilde
-mevcut hamburger çubuğuna eklenen sağ taraftır. Kenar çubuğu marka/kullanıcı
-kimliğini zaten taşıdığı için Lemon Bar bunları TEKRARLAMAZ — yalnızca bağlam
-(pano sekmesi), Hızlı İşlem ve kritik durum metni taşır. İçerik `@yield`/`@section`
+> **Mobil üst çubuk temizliği (K-103):** hamburger ve "+" (Hızlı İşlem)
+> KALDIRILDI — birincil gezinme alt çubuktur, "Daha Fazla" ikincil gezinmeyi
+> zaten karşılar; üstteki hamburger TEKRARDI. "+" de kaldırıldı: her
+> kısayolun kendi index sayfasında zaten aynı "oluştur" butonu var (ör.
+> Konaklamalar → "Yeni konaklama"), bu yüzden hiçbir yetenek KAYBOLMADI.
+> Mobil üst çubuk artık yalnızca marka taşır (`h-12`, önceki `h-14` +
+> butonlardan belirgin şekilde daha kısa/hafif) — `partials/pwa-head.blade.
+> php` ile PWA meta'larını da taşır. Masaüstü Lemon Bar'a (aşağıda)
+> DOKUNULMADI.
+
+**Lemon Bar (Gün 11):** masaüstünde `md:flex` sabit bir üst çubuktur; mobil
+üst çubuk artık ayrıdır (yukarı bakınız, K-103) ve Hızlı İşlem'i TAŞIMAZ.
+Kenar çubuğu marka/kullanıcı kimliğini zaten taşıdığı için Lemon Bar bunları
+TEKRARLAMAZ — yalnızca bağlam (pano sekmesi), Hızlı İşlem ve kritik durum
+metni taşır. İçerik `@yield`/`@section`
 ile sayfa tarafından doldurulur; doldurulmazsa çubuk sessizce boş kalır (yeni bir
 sorgu tetiklenmez). Hızlı İşlem (`partials/quick-action.blade.php`) `[data-quick-action]`
 deseniyle `drawer` nesnesindeki AYNI desende yazılmıştır (sayfada birden fazla
@@ -1426,12 +1440,37 @@ muaf olması gerekirse `data-allow-resubmit` konur.
   yatay sayfa kaydırması, kırpılmış tutar veya 40px altı dokunma hedefi yoktur (Gün 9.5
   denetimi: 14 ekran × 6 viewport = 84 kontrol, gerçek Chromium ile).
 
-### PWA (temel)
+### PWA (temel) — K-103
 
-- `manifest.json` (ad, ikonlar 192/512 + maskable, `display: standalone`, tema rengi)
-- Service worker: **sadece statik varlık ve app-shell cache**; sürüm damgalı cache adı, yeni sürümde eski cache temizlenir.
-- Çevrimdışı: bilgilendirme sayfası gösterilir. **Çevrimdışı veri girişi, form kuyruğa alma ve arka plan senkronizasyonu yoktur** — kaybolan tahsilat kaydı güveni bitirir.
-- `sw.js` site kökünden servis edilir (`/sw.js`).
+- `public/manifest.json` — statik dosyadır (Blade/route ile üretilmez): `name`/
+  `short_name` "Lemon", `display: standalone`, `start_url`/`scope` `/`,
+  `theme_color`/`background_color` mevcut tasarım token'larıyla AYNI
+  (`#172033`/`#F7F7F5`), 192/512 "any" + 192/512 "maskable" ikon seti.
+  İkonlar (`public/icons/*.png`) `partials/brand.blade.php`'nin monogram
+  fallback'ıyla AYNI görsel dili kullanır (altın zemin, koyu "L").
+- `public/sw.js`, site kökünden servis edilir. Kapsam bilerek DAR
+  tutulur: **yalnızca statik app-shell** (Vite `build/` çıktısı — içerik-
+  hash'li olduğu için cache-first güvenlidir —, ikonlar, manifest,
+  `offline.html`) cache'lenir; kimlik doğrulanmış/finansal sayfa
+  navigasyonu HER ZAMAN ağdan istenir ve ASLA cache'lenmez, yalnızca ağ
+  tamamen başarısız olursa statik `public/offline.html`'e düşülür.
+  **GET dışındaki hiçbir istek (POST/PUT/PATCH/DELETE) yakalanmaz** —
+  çevrimdışı finansal mutasyon kuyruğa alma/tekrar oynatma KESİNLİKLE
+  yoktur. Sürüm damgalı cache adı (`CACHE_VERSION`), yeni sürümde eski
+  cache `activate` olayında silinir.
+- Kurulum eylemi kalıcı bir pano kartı DEĞİLDİR — "Daha Fazla" çekmecesinde
+  (`[data-pwa-install]`, `md:hidden`) ikincil bir eylemdir, yalnızca
+  `beforeinstallprompt` gerçekten ateşlenirse veya uygulama ZATEN
+  standalone modda kuruluysa/DEĞİLSE görünür. iOS/iPadOS Safari bu olayı
+  hiç ateşlemez — orada bağlamsal bir "Paylaş → Ana Ekrana Ekle" ipucu
+  gösterilir (`[data-pwa-ios-hint]`). Masaüstü kenar çubuğu bu blok
+  `md:hidden` olduğu için ETKİLENMEZ.
+- `viewport-fit=cover` (her iki layout) olmadan `env(safe-area-inset-*)`
+  sıfır döner — standalone modda cihazın durum çubuğu/ev göstergesi alanı
+  telafi edilmezdi. `.pwa-safe-top` (mobil üst çubuk) yalnızca
+  `@media (display-mode: standalone)` içinde üst boşluk ekler; normal
+  tarayıcı sekmesinde tarayıcının kendi arayüzü bu alanı zaten ayırdığı
+  için gereksiz büyümez.
 
 ---
 

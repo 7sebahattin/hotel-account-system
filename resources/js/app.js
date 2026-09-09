@@ -5,10 +5,11 @@
  * Masaüstünde kenar çubuğu zaten sabit; bu kod yalnızca mobil çekmeceyi açar/kapatır.
  *
  * Gün 9.6: çekmece artık BİRİNCİL gezinme değil — alt gezinme çubuğundaki
- * "Daha Fazla" sekmesiyle açılan ikincil menüdür. Bu yüzden onu açan İKİ tetikleyici
- * var (üst çubuktaki hamburger + alt çubuktaki "Daha Fazla"); `[data-sidebar-toggle]`
- * ile işaretlenmiş HER öğe aynı çekmeceyi açar/kapatır ve `aria-expanded` durumunu
- * birlikte taşır.
+ * "Daha Fazla" sekmesiyle açılan ikincil menüdür. Mobil PWA/temizlik turunda
+ * üst çubuktaki hamburger KALDIRILDI (kullanıcı talimatı §2) — artık onu açan
+ * tek tetikleyici alt çubuktaki "Daha Fazla"dır. Kod yine de `[data-sidebar-
+ * toggle]` ile işaretlenmiş HER öğeyi genel olarak yönetir (sabit bir sayıya
+ * bağlı değildir), böylece tetikleyici sayısı değişse de bozulmaz.
  */
 const drawer = {
     panel: null,
@@ -109,10 +110,12 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Global "+ Hızlı İşlem" menüsü (Gün 11).
  *
- * Sayfada BİRDEN FAZLA tetikleyici olabilir (mobil üst çubuk + masaüstü Lemon
- * Bar aynı anda DOM'da bulunur, `md:hidden`/`hidden md:flex` ile yalnızca
- * biri görünür) — `drawer` nesnesindeki desenin aynısı: her tetikleyici kendi
- * panelini açar/kapatır, aynı anda yalnızca bir panel açık kalır.
+ * Mobil PWA/temizlik turunda mobil üst çubuktaki tetikleyici KALDIRILDI
+ * (kullanıcı talimatı §2 — her kısayolun kendi index sayfasında zaten aynı
+ * "oluştur" butonu var); kalan tek tetikleyici masaüstü Lemon Bar'dadır
+ * (`hidden md:flex`). Kod genel kalır — `drawer` nesnesindeki desenin aynısı:
+ * sıfır veya daha fazla tetikleyiciyle çalışır, her biri kendi panelini
+ * açar/kapatır, aynı anda yalnızca bir panel açık kalır.
  */
 function initQuickActions() {
     const roots = Array.from(document.querySelectorAll('[data-quick-action]'));
@@ -459,3 +462,74 @@ function initStayPricing() {
 }
 
 document.addEventListener('DOMContentLoaded', initStayPricing);
+
+/**
+ * Service worker kaydı (mobil PWA turu).
+ *
+ * Kayıt başarısız olursa (tarayıcı desteklemiyor, HTTPS dışı bağlam vb.)
+ * uygulama service worker OLMADAN normal çalışmaya devam eder — bu yüzden
+ * hata sessizce yutulur, kullanıcıya hiçbir şey gösterilmez.
+ */
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
+
+/**
+ * PWA kurulum eylemi ("Daha Fazla" çekmecesi, kullanıcı talimatı §4).
+ *
+ * Kalıcı bir buton DEĞİLDİR: `beforeinstallprompt` desteklenmiyorsa veya
+ * uygulama ZATEN standalone modda kuruluysa hiçbir şey gösterilmez. iOS/
+ * iPadOS Safari bu olayı HİÇ ateşlemez (platform sınırlaması) — bunun
+ * yerine, henüz kurulu değilse, bağlamsal bir "Paylaş → Ana Ekrana Ekle"
+ * ipucu gösterilir.
+ */
+function initPwaInstall() {
+    const installSection = document.querySelector('[data-pwa-install]');
+    const installButton = document.querySelector('[data-pwa-install-button]');
+    const iosHint = document.querySelector('[data-pwa-ios-hint]');
+
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+
+    if (isStandalone) {
+        return;
+    }
+
+    let deferredPrompt = null;
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredPrompt = event;
+        if (installSection) installSection.hidden = false;
+    });
+
+    installButton?.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if (installSection) installSection.hidden = true;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+        if (installSection) installSection.hidden = true;
+    });
+
+    // iOS/iPadOS Safari tespiti — `beforeinstallprompt` orada hiç ateşlenmez.
+    // iPadOS masaüstü modunda Mac UA'sını taklit eder; dokunma noktası sayısı
+    // gerçek Mac'ten ayırt eder (Mac'te 0, iPad'de > 1).
+    const ua = window.navigator.userAgent;
+    const isIos = /iphone|ipad|ipod/i.test(ua)
+        || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+    const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
+
+    if (isIos && isSafari && iosHint) {
+        iosHint.hidden = false;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initPwaInstall);

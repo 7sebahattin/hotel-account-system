@@ -1972,3 +1972,81 @@ koşullarda migrator'un `rooms`'u `stays`'ten ÖNCE keşfettiğini ve FK'yi
 doğru kurduğunu doğrulayan bir regresyon testi, (2) production'daki kısmi
 durumu (kolon var, FK yok, migration kaydı silinmiş) simüle edip
 `Artisan::call('migrate')`'in güvenle kurtardığını doğrulayan bir test.
+
+---
+
+## K-103 · Mobil PWA + mobil üst çubuk temizliği
+
+**Bağlam:** Kullanıcı iki sıkı kapsamlı hedef verdi: (1) Lemon'u gerçek
+kurulabilir bir PWA yapmak, (2) mobil üst çubuktaki hamburger + "+" ile alt
+çubuğun oluşturduğu gezinme tekrarını temizlemek. Veritabanı/migration/
+Rooms/CashBook/Payments/Companies/Stays iş mantığı/yetki/finansal hesap
+KESİNLİKLE dokunulmayacak alanlar olarak sıralandı — bu tur tamamen
+frontend/PWA'dır.
+
+**Karar 1 — mobil üst çubuk sadeleştirildi:** hamburger (`data-sidebar-
+toggle`) ve "+" (Hızlı İşlem) `layouts/app.blade.php`'nin mobil `<header>`'ından
+KALDIRILDI. Gerekçe: birincil gezinme zaten alt çubuktur (Gün 9.6); "Daha
+Fazla" zaten AYNI çekmeceyi ikinci bir tetikleyiciyle açıyordu — üstteki
+hamburger TAM BİR TEKRARDI. "+" kaldırılınca hiçbir yetenek kaybolmadı:
+Hızlı İşlem'in her kısayolu (Kasa Hareketi, Cari Tahsilat, Yeni Konaklama,
+Yeni Firma, Kasa Devri) zaten kendi index sayfasında birebir aynı "oluştur"
+butonuna sahip, o sayfalara da alt çubuktan (Ana Sayfa/Kasa/Firmalar/
+Tahsilatlar) veya "Daha Fazla" (Konaklamalar) üzerinden ulaşılıyor. Masaüstü
+Lemon Bar'daki Hızlı İşlem'e DOKUNULMADI (`hidden md:flex`, ayrı DOM kökü).
+Mobil üst çubuk artık yalnızca marka taşır, `h-14`'ten `h-12`'ye indi ve iki
+buton kalktı — belirgin şekilde daha kısa/hafif. Ölü bir `@yield
+('lemon-bar-status-icon')` (hiçbir view onu doldurmuyordu) bu sırada
+kaldırıldı.
+
+**Karar 2 — PWA gerçek anlamda kuruldu (önceden CLAUDE.md §11.8'de
+YAZILI ama hiç İNŞA EDİLMEMİŞTİ):** `public/manifest.json` (statik dosya —
+yeni bir route/controller AÇILMADI, gereksiz soyutlama önlendi), `public/
+sw.js`, dört PNG ikon (`public/icons/*.png`, PHP GD ile üretildi — `partials/
+brand.blade.php`'nin monogram fallback'ıyla AYNI görsel dil: altın zemin,
+koyu "L"), `public/offline.html` (Vite'a bağımsız, `layouts/print` ile AYNI
+"kendi kendine yeten sade CSS" ilkesi). Yeni `partials/pwa-head.blade.php`
+her iki layout'a (`app`/`guest`) `@include` edilir — kopyalanmaz.
+
+- Service worker kapsamı BİLEREK dar: yalnızca Vite `build/` çıktısı
+  (içerik-hash'li, cache-first güvenli), ikonlar, manifest, `offline.html`
+  cache'lenir. Sayfa navigasyonu HER ZAMAN ağdan istenir — kimlik doğrulanmış/
+  finansal HTML ASLA cache'lenmez; yalnızca ağ tamamen başarısız olursa
+  statik çevrimdışı sayfasına düşülür. GET DIŞINDAKİ hiçbir istek (POST/PUT/
+  PATCH/DELETE) yakalanmaz — çevrimdışı finansal mutasyon kuyruğa alma/tekrar
+  oynatma KESİNLİKLE yoktur (kullanıcı talimatının en kesin çizgisi).
+- Kurulum eylemi ("Daha Fazla" çekmecesi, `[data-pwa-install]`, `md:hidden`):
+  yalnızca `beforeinstallprompt` gerçekten ateşlenirse görünür; uygulama
+  ZATEN standalone modda kuruluysa (`display-mode: standalone` / iOS
+  `navigator.standalone`) hiç görünmez. Masaüstü kenar çubuğu bu blok
+  `md:hidden` olduğu için HİÇ ETKİLENMEZ (kullanıcı talimatı: "Desktop
+  sidebar/navigation must remain unchanged"). iOS/iPadOS Safari
+  `beforeinstallprompt`'u hiç ateşlemediği için orada ayrı bir bağlamsal
+  ipucu (`[data-pwa-ios-hint]`, "Paylaş → Ana Ekrana Ekle") gösterilir.
+- `viewport-fit=cover` her iki layout'a eklendi — bu OLMADAN `env(safe-area-
+  inset-*)` her zaman sıfır döner (bottom-nav'ın ZATEN kullandığı
+  `env(safe-area-inset-bottom)` bile bu meta olmadan etkisizdi — gerçek bir
+  ön-koşul boşluğuydu, bu turda kapatıldı). `.pwa-safe-top` yalnızca
+  `@media (display-mode: standalone)` içinde üst boşluk ekler — normal
+  tarayıcı sekmesinde mobil üst çubuğu gereksiz büyütmez.
+
+**Doğrulama:** Playwright ile 360/375/390/430 genişliklerinde gerçek
+Chromium üzerinden test edildi — hamburger/`+` mobilde YOK, alt çubuk ve
+"Daha Fazla" çalışıyor, yatay kaydırma YOK, service worker gerçekten kayıt
+oluyor ve `activated` durumuna geçiyor, `manifest.json`/`sw.js`/ikonlar/
+`offline.html` 200 dönüyor. 1366px masaüstünde install bloğu (elle
+`hidden=false` yapılsa bile) `md:hidden` sayesinde GÖRÜNMEZ kaldı — desktop
+sidebar/Lemon Bar birebir aynı, hamburger orada da hiç YOKTU (zaten
+gerekmiyordu). `DesignSystemTest`'e hamburger'in KALDIRILDIĞINI doğrulayan
+yeni bir test eklendi; eski `aria-label="Menüyü aç"` beklentisi kaldırıldı.
+
+**Kapsam:** Hiçbir migration/veritabanı komutu ÇALIŞTIRILMADI/YAZILMADI.
+Rooms/CashBook/Payments/Companies/Stays iş mantığı, yetki matrisi ve
+finansal hesaplara HİÇ DOKUNULMADI — değişen her dosya `resources/`, `public/`
+veya `tests/Feature/Ui/` altındadır.
+
+**Etkilenen dosyalar:** `resources/views/layouts/{app,guest}.blade.php`,
+`resources/views/partials/{sidebar,pwa-head}.blade.php`, `resources/js/
+app.js`, `resources/css/app.css`, `public/manifest.json`, `public/sw.js`,
+`public/offline.html`, `public/icons/*.png`, `tests/Feature/Ui/
+DesignSystemTest.php`, `CLAUDE.md` (§11.4, §11.7 çevresi, "PWA (temel)").

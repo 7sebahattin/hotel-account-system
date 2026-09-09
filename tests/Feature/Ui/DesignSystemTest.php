@@ -72,8 +72,21 @@ class DesignSystemTest extends TestCase
             ->assertSee('İçeriğe atla')
             ->assertSee('id="icerik"', false)
             ->assertSee('aria-label="Ana menü"', false)
-            ->assertSee('aria-label="Menüyü aç"', false)
             ->assertSee('lang="tr"', false);
+    }
+
+    /**
+     * PWA/mobil temizlik turu: mobil üst çubuktaki hamburger ve "+" KALDIRILDI
+     * — birincil gezinme alt çubuktur, "Daha Fazla" ikincil gezinmeyi zaten
+     * karşılar. Çekmecenin kendisi ve onu açan tetikleyici (artık tek başına
+     * alt çubuktaki "Daha Fazla") hâlâ vardır — bkz. `mobil_cekmece_
+     * erisilebilirlik_kablolamasi_tamdir`.
+     */
+    #[Test]
+    public function mobil_ust_cubuktaki_hamburger_ve_hizli_islem_kaldirilmistir(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertDontSee('aria-label="Menüyü aç"', false);
     }
 
     #[Test]

@@ -214,4 +214,20 @@
             padding-bottom: env(safe-area-inset-bottom);
         }
     }
+
+    /*
+        PWA standalone modu (kurulu uygulama, mobil temizlik turu): sayfa
+        artık tarayıcı çubuğu OLMADAN tam ekran render edilir, bu yüzden
+        cihazın durum çubuğu/çentik alanı BAŞKA hiçbir şey tarafından telafi
+        edilmez. Normal sekme modunda (`browser`) tarayıcının kendi arayüzü
+        bu alanı zaten ayırdığı için `env(safe-area-inset-top)` orada 0
+        döner — bu yüzden kural yalnızca `standalone` modda uygulanır,
+        normal tarayıcıda mobil üst çubuğu gereksiz yere büyütmez.
+    */
+    @media (display-mode: standalone) {
+        .pwa-safe-top {
+            padding-top: env(safe-area-inset-top);
+            height: calc(3rem + env(safe-area-inset-top));
+        }
+    }
 }
