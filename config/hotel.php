@@ -69,6 +69,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Şirket / yasal bilgiler (v2.1.1-B — Tahsilat Makbuzu başlığı)
+    |--------------------------------------------------------------------------
+    |
+    | GEÇİCİ YERLEŞİM: proje çapında ayrı, DB-tabanlı, ekrandan düzenlenebilir
+    | bir "Ayarlar" modülü V1'de YOKTUR (böyle bir modül bu paketin kapsamı
+    | dışıdır — kullanıcı talimatı §14: "Do not build a giant Settings module
+    | in this package"). Makbuz başlığının TEK doğruluk kaynağı olması için
+    | bu değerler Blade'e saçılmak yerine burada toplandı; ekrandan düzenleme
+    | isteniyorsa gelecekte gerçek bir Settings tablosuna taşınmalıdır — bu,
+    | bilinen ve kabul edilmiş bir sınırlamadır (bkz. docs/kararlar.md).
+    |
+    */
+
+    'company' => [
+        'legal_name' => env('HOTEL_COMPANY_LEGAL_NAME', env('HOTEL_BRAND_NAME', 'Lemon')),
+        'address' => env('HOTEL_COMPANY_ADDRESS'),
+        'phone' => env('HOTEL_COMPANY_PHONE'),
+        'email' => env('HOTEL_COMPANY_EMAIL'),
+        'tax_office' => env('HOTEL_COMPANY_TAX_OFFICE'),
+        'tax_number' => env('HOTEL_COMPANY_TAX_NUMBER'),
+        'trade_registry_no' => env('HOTEL_COMPANY_TRADE_REGISTRY_NO'),
+        'mersis_no' => env('HOTEL_COMPANY_MERSIS_NO'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | İlk yönetici hesabı (seeder)
     |--------------------------------------------------------------------------
     |

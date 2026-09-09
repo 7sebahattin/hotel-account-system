@@ -4,23 +4,26 @@ declare(strict_types=1);
 
 namespace App\Modules\CashBook\Http\Requests;
 
-use App\Modules\CashBook\Enums\CashMovementType;
+use App\Modules\CashBook\Models\CashMovementCategory;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Tek kasa hareketi.
+ * Tek kasa hareketi — v2.1.1-B'de tür seçimi artık admin tanımlı bir
+ * KATEGORİDİR, ham `CashMovementType` DEĞİL. `category_id` yalnızca AKTİF
+ * kategoriler arasından geçerlidir; pasif bir kategori yeni hareket için
+ * seçilemez (geçmiş hareketlerde görünmeye devam eder, bkz. model).
  *
- * `opening` tipi kullanıcıdan ALINMAZ: açılış bakiyesini yalnızca servis
- * (vardiya açılışı ve devir kabulü) üretir. Aksi hâlde personel vardiya
- * ortasında açılış bakiyesi yazarak beklenen kasayı bozabilirdi.
- *
- * Yön (`direction`) de kullanıcıdan alınmaz; tipin doğal yönüdür.
+ * `opening` tipi hâlâ kullanıcıdan ALINMAZ: açılış bakiyesini yalnızca
+ * servis üretir. Yön (`direction`) de kullanıcıdan alınmaz; kategorinin
+ * sabit `system_type`ının doğal yönüdür.
  */
 class StoreCashMovementRequest extends FormRequest
 {
+    private ?CashMovementCategory $resolvedCategory = null;
+
     public function authorize(): bool
     {
         // Kayıt bazlı yetki (açık + kendi vardiyası) controller'da denetlenir;
@@ -34,11 +37,17 @@ class StoreCashMovementRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => ['required', Rule::in(array_column(CashMovementType::selectable(), 'value'))],
+            'category_id' => [
+                'required',
+                Rule::exists('cash_movement_categories', 'id')->where('is_active', true),
+            ],
             'currency' => ['required', Rule::enum(Currency::class)],
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
             'description' => ['nullable', 'string', 'max:255'],
-            'counterparty' => ['nullable', 'string', 'max:150'],
+            'counterparty' => [
+                Rule::requiredIf(fn (): bool => $this->category()?->requires_recipient === true),
+                'nullable', 'string', 'max:150',
+            ],
         ];
     }
 
@@ -48,7 +57,7 @@ class StoreCashMovementRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'type' => 'hareket türü',
+            'category_id' => 'hareket türü',
             'currency' => 'para birimi',
             'amount' => 'tutar',
             'description' => 'açıklama',
@@ -64,13 +73,20 @@ class StoreCashMovementRequest extends FormRequest
         return [
             'amount.gt' => 'Tutar sıfırdan büyük olmalıdır.',
             'amount.decimal' => 'Tutar en fazla iki ondalık basamak içerebilir.',
-            'type.in' => 'Geçersiz hareket türü.',
+            'category_id.exists' => 'Geçersiz ya da pasif hareket türü.',
+            'counterparty.required' => 'Bu hareket türü için teslim alan bilgisi zorunludur.',
         ];
     }
 
-    public function movementType(): CashMovementType
+    /** Aktif olsun olmasın — doğrulamadan sonra çağrılır, cache'lenir. */
+    public function category(): ?CashMovementCategory
     {
-        return CashMovementType::from($this->validated()['type']);
+        if ($this->resolvedCategory === null) {
+            $id = $this->input('category_id');
+            $this->resolvedCategory = is_numeric($id) ? CashMovementCategory::query()->find((int) $id) : null;
+        }
+
+        return $this->resolvedCategory;
     }
 
     public function currency(): Currency

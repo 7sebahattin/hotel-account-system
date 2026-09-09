@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Authorization\Enums\Permission;
 use App\Modules\CashBook\Http\Controllers\CashBookController;
+use App\Modules\CashBook\Http\Controllers\CashMovementCategoryController;
 use App\Modules\CashBook\Http\Controllers\CashMovementController;
 use App\Modules\CashBook\Http\Controllers\CashSessionController;
 use App\Modules\CashBook\Http\Controllers\CashTransferController;
@@ -90,4 +91,26 @@ Route::middleware('auth')->prefix('cash')->name('cashbook.')->group(function ():
     Route::get('day', [CashSessionController::class, 'day'])
         ->middleware('can:'.Permission::CashBookViewAll->value)
         ->name('day');
+
+    // --------------------------------------------------- hareket türleri
+    // (v2.1.1-B §5) — SİLME UCU YOKTUR, yalnızca pasifleştirme.
+    Route::get('categories', [CashMovementCategoryController::class, 'index'])
+        ->middleware('can:'.Permission::CashBookManageCategories->value)
+        ->name('categories.index');
+
+    Route::get('categories/create', [CashMovementCategoryController::class, 'create'])
+        ->middleware('can:'.Permission::CashBookManageCategories->value)
+        ->name('categories.create');
+
+    Route::post('categories', [CashMovementCategoryController::class, 'store'])
+        ->middleware('can:'.Permission::CashBookManageCategories->value)
+        ->name('categories.store');
+
+    Route::get('categories/{category}/edit', [CashMovementCategoryController::class, 'edit'])
+        ->middleware('can:'.Permission::CashBookManageCategories->value)
+        ->name('categories.edit');
+
+    Route::put('categories/{category}', [CashMovementCategoryController::class, 'update'])
+        ->middleware('can:'.Permission::CashBookManageCategories->value)
+        ->name('categories.update');
 });

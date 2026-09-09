@@ -3,47 +3,32 @@
     use App\Modules\Core\Support\NavIcons;
 
     /*
-        Global "+ Hızlı İşlem" (Gün 11, kullanıcı talimatı §10). Role/permission
-        aware: her satır kendi yetkisini kontrol eder, hiçbiri yeni bir işlem
-        mantığı YAZMAZ — mevcut create route'larına yönlendirir.
+        Global "+ Hızlı İşlem" (Gün 11 §10, v2.1.1-B §6 ile SADELEŞTİRİLDİ).
+        Rol/yetki duyarlıdır: her satır KENDİ yetkisini kontrol eder, hiçbiri
+        yeni bir işlem mantığı YAZMAZ — mevcut create route'larına yönlendirir.
 
-        Personel ve Patron/Admin FARKLI listeler görür: personel için öncelik
-        kasadır (Oda Geliri/Ek Gelir/Gider/Kasa Çıkışı/Devir); Patron/Admin
-        için öncelik kayıt oluşturmadır (Kasa Hareketi/Tahsilat/Konaklama/
-        Firma/Devir). Aynı ekranda ikisi birden gösterilmez.
+        v2.1.1-B ÖNCESİ: personel ve patron/admin için TAMAMEN farklı liste
+        vardı (personel için kasa hareket TÜRÜ başına ayrı kısayol —
+        Oda Geliri/Ek Gelir/Gider/Kasa Çıkışı). Kasa hareket türü artık admin
+        tanımlı, dinamik bir kategoridir (bkz. CashMovementCategory) — sabit
+        bir enum değeri gibi TEK bir kategoriye önceden bağlanamaz (aynı sistem
+        davranışına birden fazla aktif kategori eşlenebilir, ör. "Mini Bar" ve
+        "Market" ikisi de extra_income'dur). Bu yüzden liste TEK, herkes için
+        aynı ve rol farkı yalnızca hangi satırın yetki kontrolünden geçtiğiyle
+        ortaya çıkar — kullanıcı talimatının önerdiği liste budur (docs/
+        kararlar.md K-097).
     */
     $user = auth()->user();
 
-    $canCash = $user->can(Permission::CashBookOperate->value);
-    $isFinancialRole = $user->can(Permission::DashboardFinancial->value);
+    $candidates = [
+        ['route' => 'cashbook.movements.create', 'params' => [], 'label' => 'Kasa Hareketi', 'icon' => 'cash', 'permission' => Permission::CashBookOperate->value],
+        ['route' => 'payments.create', 'params' => [], 'label' => 'Cari Tahsilat', 'icon' => 'cash', 'permission' => Permission::PaymentsCreate->value],
+        ['route' => 'stays.create', 'params' => [], 'label' => 'Yeni Konaklama', 'icon' => 'bed', 'permission' => Permission::StaysCreate->value],
+        ['route' => 'companies.create', 'params' => [], 'label' => 'Yeni Firma', 'icon' => 'building', 'permission' => Permission::CompaniesCreate->value],
+        ['route' => 'cashbook.transfers.create', 'params' => [], 'label' => 'Kasa Devri', 'icon' => 'swap', 'permission' => Permission::CashBookOperate->value],
+    ];
 
-    $items = [];
-
-    if ($canCash && ! $isFinancialRole) {
-        $items = [
-            ['route' => 'cashbook.movements.create', 'params' => ['type' => 'room_income'], 'label' => 'Oda Geliri', 'icon' => 'cash'],
-            ['route' => 'cashbook.movements.create', 'params' => ['type' => 'extra_income'], 'label' => 'Ek Gelir', 'icon' => 'cash'],
-            ['route' => 'cashbook.movements.create', 'params' => ['type' => 'expense'], 'label' => 'Gider', 'icon' => 'cash'],
-            ['route' => 'cashbook.movements.create', 'params' => ['type' => 'cash_out'], 'label' => 'Kasa Çıkışı', 'icon' => 'cash'],
-            ['route' => 'cashbook.transfers.create', 'params' => [], 'label' => 'Kasa Devri', 'icon' => 'swap'],
-        ];
-    } else {
-        if ($canCash) {
-            $items[] = ['route' => 'cashbook.movements.create', 'params' => [], 'label' => 'Kasa Hareketi', 'icon' => 'cash'];
-        }
-        if ($user->can(Permission::PaymentsCreate->value)) {
-            $items[] = ['route' => 'payments.create', 'params' => [], 'label' => 'Tahsilat', 'icon' => 'cash'];
-        }
-        if ($user->can(Permission::StaysCreate->value)) {
-            $items[] = ['route' => 'stays.create', 'params' => [], 'label' => 'Konaklama', 'icon' => 'bed'];
-        }
-        if ($user->can(Permission::CompaniesCreate->value)) {
-            $items[] = ['route' => 'companies.create', 'params' => [], 'label' => 'Firma', 'icon' => 'building'];
-        }
-        if ($canCash) {
-            $items[] = ['route' => 'cashbook.transfers.create', 'params' => [], 'label' => 'Kasa Devri', 'icon' => 'swap'];
-        }
-    }
+    $items = array_values(array_filter($candidates, fn (array $item): bool => $user->can($item['permission'])));
 @endphp
 
 @if ($items !== [])

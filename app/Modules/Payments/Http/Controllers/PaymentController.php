@@ -55,7 +55,7 @@ class PaymentController extends Controller
         return view('payments::create', [
             'companies' => $this->companyOptions(),
             'currencies' => Currency::active(),
-            'methods' => PaymentMethod::cases(),
+            'methods' => PaymentMethod::primary(),
             'selectedCompanyId' => $request->integer('company_id') ?: null,
         ]);
     }
@@ -77,7 +77,24 @@ class PaymentController extends Controller
         $this->authorize('view', $payment);
 
         return view('payments::show', [
-            'payment' => $payment->load(['company', 'creator', 'updater', 'canceller']),
+            'payment' => $payment->load(['company', 'creator', 'updater', 'canceller', 'cashSession']),
+        ]);
+    }
+
+    /**
+     * Yazdırılabilir Tahsilat Makbuzu (v2.1.1-B §12).
+     *
+     * `receipt_no` yoksa (bu özellikten ÖNCEKİ eski kayıt) makbuz üretilmez —
+     * geçmiş veri tahmin edilmez (K-094/K-095 ile aynı ilke).
+     */
+    public function receipt(Payment $payment): View
+    {
+        $this->authorize('view', $payment);
+
+        abort_if($payment->receipt_no === null, 404, 'Bu tahsilat için makbuz numarası yok (eski kayıt).');
+
+        return view('payments::receipt', [
+            'payment' => $payment->load(['company', 'creator']),
         ]);
     }
 

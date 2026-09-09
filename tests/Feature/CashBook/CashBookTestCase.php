@@ -6,8 +6,10 @@ namespace Tests\Feature\CashBook;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\CashBook\Database\Seeders\CashMovementCategorySeeder;
 use App\Modules\CashBook\Enums\CashMovementType;
 use App\Modules\CashBook\Models\CashMovement;
+use App\Modules\CashBook\Models\CashMovementCategory;
 use App\Modules\CashBook\Models\CashSession;
 use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Core\Enums\Currency;
@@ -32,7 +34,17 @@ abstract class CashBookTestCase extends TestCase
         parent::setUp();
 
         $this->seedRoles();
+        $this->seed(CashMovementCategorySeeder::class);
         $this->cash = app(CashBookService::class);
+    }
+
+    /**
+     * HTTP üzerinden hareket gönderirken kullanılacak varsayılan kategori
+     * kimliği (v2.1.1-B'den itibaren form `type` değil `category_id` alır).
+     */
+    protected function categoryIdFor(CashMovementType $type): int
+    {
+        return CashMovementCategory::query()->where('system_type', $type->value)->firstOrFail()->id;
     }
 
     protected function personel(string $name = 'Personel'): User

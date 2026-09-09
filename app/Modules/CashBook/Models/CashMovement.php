@@ -26,6 +26,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $cash_session_id
  * @property CashMovementType $type
+ * @property int|null $category_id
+ * @property string|null $category_label
  * @property CashMovementDirection $direction
  * @property string $amount
  * @property Currency $currency
@@ -41,6 +43,7 @@ use Illuminate\Support\Carbon;
  * @property-read CashSession|null $session
  * @property-read User|null $creator
  * @property-read CashMovement|null $reversedMovement
+ * @property-read CashMovementCategory|null $category
  */
 class CashMovement extends Model
 {
@@ -61,6 +64,7 @@ class CashMovement extends Model
     {
         return [
             'cash_session_id' => 'integer',
+            'category_id' => 'integer',
             'reference_id' => 'integer',
             'reverses_movement_id' => 'integer',
             'created_by' => 'integer',
@@ -101,6 +105,11 @@ class CashMovement extends Model
         return $this->belongsTo(CashSession::class, 'cash_session_id');
     }
 
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(CashMovementCategory::class, 'category_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -129,12 +138,20 @@ class CashMovement extends Model
         return $this->direction === CashMovementDirection::In;
     }
 
-    /** Ekranda gösterilecek etiket: ters kayıtlar açıkça işaretlenir. */
+    /**
+     * Ekranda gösterilecek etiket: ters kayıtlar açıkça işaretlenir.
+     *
+     * `category_label` (v2.1.1-B) varsa TERCİH EDİLİR — "Ek Gelir" yerine
+     * "Mini Bar" gibi kayıt anında SNAPSHOT alınmış, daha spesifik bir ad
+     * gösterir. Kategori sonradan yeniden adlandırılsa bile bu metin
+     * DEĞİŞMEZ (tarihsel doğruluk). Kategorisiz hareketler (sistem üretimi:
+     * `opening`, `company_collection`) hâlâ tipin genel etiketini kullanır.
+     */
     public function label(): string
     {
-        return $this->is_reversal
-            ? '[İPTAL] '.$this->type->label()
-            : $this->type->label();
+        $base = $this->category_label ?? $this->type->label();
+
+        return $this->is_reversal ? '[İPTAL] '.$base : $base;
     }
 
     protected static function newFactory(): CashMovementFactory

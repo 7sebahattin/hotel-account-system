@@ -754,27 +754,34 @@ class DashboardTest extends TestCase
 
     // ------------------------------------------------------- Hızlı işlem
 
+    /**
+     * v2.1.1-B: Hızlı İşlem artık TEK, birleşik, yetkiye duyarlı bir listedir
+     * — personel/yönetici için ayrı dallar YOKTUR (Gün-11 tasarımının kasıtlı
+     * yerini alır, kategori artık admin tanımlı olduğu için `?type=` bazlı
+     * tek-tip kısayollar anlamsızlaştı). Personel'in sahip olduğu her yetki
+     * için ilgili kısayol görünür.
+     */
     #[Test]
-    public function personel_hizli_islem_menusunde_yalnizca_kasa_islemlerini_gorur(): void
+    public function personel_hizli_islem_menusunde_sahip_oldugu_yetkilerin_kisayollarini_gorur(): void
     {
         $html = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))->getContent();
 
-        $this->assertStringContainsString('Oda Geliri', (string) $html);
+        $this->assertStringContainsString('Kasa Hareketi', (string) $html);
+        $this->assertStringContainsString('Cari Tahsilat', (string) $html);
+        $this->assertStringContainsString('Yeni Konaklama', (string) $html);
+        $this->assertStringContainsString('Yeni Firma', (string) $html);
         $this->assertStringContainsString('Kasa Devri', (string) $html);
-        // Global menüde firma/konaklama/tahsilat KISAYOLU yok (kullanıcı talimatı §10).
-        $this->assertMatchesRegularExpression('/hizli-islem-menu[\s\S]*?Oda Geliri/', (string) $html);
     }
 
     #[Test]
-    public function personel_hizli_islem_menusunde_yetkisiz_aksiyon_gorunmez(): void
+    public function hizli_islem_menusunde_yetkisiz_aksiyon_gorunmez(): void
     {
-        // Personel'in payments.create yetkisi VAR ama global hızlı işlem
-        // menüsünde bu personel için gösterilmez — kasa öncelikli listedir.
-        $html = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))->getContent();
+        // Rolü olmayan (dolayısıyla hiçbir kayıt yetkisi olmayan) kullanıcı
+        // için hızlı işlem widget'ı hiç çizilmez (boş liste → `@if` bloğu).
+        $html = $this->actingAs(User::factory()->create())->get(route('home'))->getContent();
 
-        preg_match('/id="hizli-islem-menu"[^>]*>(.*?)<\/div>\s*<\/div>/s', (string) $html, $matches);
-        $menu = $matches[1] ?? '';
-
-        $this->assertStringNotContainsString('>Firma<', $menu);
+        $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
+        $this->assertStringNotContainsString('Kasa Hareketi', (string) $html);
+        $this->assertStringNotContainsString('Yeni Firma', (string) $html);
     }
 }

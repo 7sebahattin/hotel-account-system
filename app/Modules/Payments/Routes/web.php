@@ -23,6 +23,12 @@ Route::middleware('auth')->prefix('payments')->name('payments.')->group(function
         ->middleware('can:'.Permission::PaymentsView->value)
         ->name('show');
 
+    // Yazdırılabilir Tahsilat Makbuzu — görüntüleyebilen herkes yazdırabilir,
+    // yeni bir yetki AÇILMADI (v2.1.1-B §12).
+    Route::get('{payment}/receipt', [PaymentController::class, 'receipt'])
+        ->middleware('can:'.Permission::PaymentsView->value)
+        ->name('receipt');
+
     // Düzenleme YALNIZCA metadata içindir (referans no / açıklama). Yeni bir
     // yetki açılmadı: tahsilat girebilen herkes kendi girdiği kaydın referansını
     // düzeltebilmelidir; kayıt bazlı kısıt PaymentPolicy::update'tedir.

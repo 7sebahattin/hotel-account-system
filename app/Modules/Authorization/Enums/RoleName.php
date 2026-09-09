@@ -58,6 +58,7 @@ enum RoleName: string
                 Permission::CashBookView,
                 Permission::CashBookOperate,
                 Permission::CashBookViewAll,
+                Permission::CashBookManageCategories,
                 Permission::DashboardFinancial,
                 Permission::ExportExcel,
                 Permission::AuditView,

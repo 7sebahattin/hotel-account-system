@@ -141,9 +141,14 @@ class CompanyPaymentsPanelTest extends TestCase
     {
         $this->company->delete();
 
+        // Not: sayfa genelindeki "+ Hızlı İşlem" widget'ı `payments.create`
+        // yetkisi olan herkes için "Cari Tahsilat" metnini HER sayfada
+        // gösterir (v2.1.1-B, firmadan bağımsız genel kısayol) — bu yüzden
+        // burada FİRMAYA ÖZGÜ (company_id sorgu parametreli) bağlantının
+        // yokluğu doğrulanır, genel metnin yokluğu değil.
         $this->actingAs($this->admin)
             ->get(route('companies.show', $this->company->id))
             ->assertOk()
-            ->assertDontSee('Tahsilat ekle');
+            ->assertDontSee(route('payments.create', ['company_id' => $this->company->id]), false);
     }
 }

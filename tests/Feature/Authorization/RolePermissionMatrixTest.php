@@ -64,11 +64,13 @@ class RolePermissionMatrixTest extends TestCase
             Permission::CompaniesDelete, Permission::StaysDelete,
             // Gün 10: patron kasayı hem işletir hem tüm vardiyaları görür.
             Permission::CashBookView, Permission::CashBookOperate, Permission::CashBookViewAll,
+            // v2.1.1-B: patron kasa hareket türlerini (kategori) de yönetir.
+            Permission::CashBookManageCategories,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
-        $this->assertCount(19, $granted);
+        $this->assertCount(20, $granted);
     }
 
     #[Test]

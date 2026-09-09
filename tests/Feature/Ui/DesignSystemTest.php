@@ -233,13 +233,20 @@ class DesignSystemTest extends TestCase
 
                 // Yazdırma görünümü bilinçli olarak kendi kendine yeten sade CSS
                 // taşır ve Vite çıktısını yüklemez (CLAUDE.md §8 / Ledger).
-                if (str_contains((string) $file, 'print.blade.php')) {
+                // Muafiyet dosya ADINA değil, `layouts.print`'i GENİŞLETMEYE
+                // bağlıdır: bu layout'u kullanan HER ekran (ör. `receipt.blade.php`)
+                // aynı gerekçeyle @theme token'larına erişemez — yalnızca
+                // literal `print.blade.php` isimli dosyaları muaf tutmak
+                // v2.1.1-B'nin `receipt.blade.php`'i yanlışlıkla yakalardı.
+                $contents = (string) file_get_contents((string) $file);
+
+                if (str_contains((string) $file, 'print.blade.php') || str_contains($contents, "@extends('layouts.print')")) {
                     continue;
                 }
 
                 // `<meta name="theme-color">` CSS token'ı kabul etmez; tarayıcı
                 // çubuğu rengi HTML'de düz değer olmak zorundadır. Tek muafiyet budur.
-                $contents = (string) preg_replace('/^.*theme-color.*$/m', '', (string) file_get_contents((string) $file));
+                $contents = (string) preg_replace('/^.*theme-color.*$/m', '', $contents);
 
                 if (preg_match('/#[0-9a-fA-F]{3,8}\b/', $contents) === 1) {
                     $offenders[] = str_replace(base_path().'/', '', (string) $file);

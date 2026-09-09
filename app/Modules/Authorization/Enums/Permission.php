@@ -42,6 +42,7 @@ enum Permission: string
     case CashBookView = 'cashbook.view';
     case CashBookOperate = 'cashbook.operate';
     case CashBookViewAll = 'cashbook.view_all';
+    case CashBookManageCategories = 'cashbook.manage_categories';
 
     case DashboardFinancial = 'dashboard.financial';
 
@@ -61,7 +62,8 @@ enum Permission: string
             self::StaysUpdate, self::StaysDelete => 'Konaklamalar',
             self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
             self::LedgerView, self::LedgerViewAll => 'Cari Hesap',
-            self::CashBookView, self::CashBookOperate, self::CashBookViewAll => 'Kasa Defteri',
+            self::CashBookView, self::CashBookOperate, self::CashBookViewAll,
+            self::CashBookManageCategories => 'Kasa Defteri',
             self::DashboardFinancial => 'Dashboard',
             self::ExportExcel => 'Dışa Aktarma',
             self::AuditView => 'Denetim Kaydı',
@@ -84,13 +86,14 @@ enum Permission: string
             self::StaysUpdate => 'Konaklama düzenle',
             self::StaysDelete => 'Konaklama sil',
             self::PaymentsView => 'Tahsilatları görüntüle',
-            self::PaymentsCreate => 'Tahsilat ekle',
+            self::PaymentsCreate => 'Cari tahsilat',
             self::PaymentsCancel => 'Tahsilat iptal et',
             self::LedgerView => 'Firma cari ekstresini görüntüle',
             self::LedgerViewAll => 'Tüm firma bakiyelerini ve toplam alacağı görüntüle',
             self::CashBookView => 'Kasa defterini ve açık vardiyayı görüntüle',
             self::CashBookOperate => 'Kasa hareketi gir, vardiya aç/kapat, devir yap',
             self::CashBookViewAll => 'Tüm vardiyaları, günlük defteri ve kasa farklarını görüntüle',
+            self::CashBookManageCategories => 'Kasa hareket türlerini (kategori) yönet',
             self::DashboardFinancial => 'Finansal dashboard kartlarını görüntüle',
             self::ExportExcel => 'Excel dışa aktarma',
             self::AuditView => 'Denetim kaydını görüntüle',

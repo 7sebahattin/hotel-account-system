@@ -394,6 +394,14 @@ class CashBookService
      * CashBookService bu değerlerin ANLAMINI bilmez — yalnızca saklar; bu
      * yüzden Payments modülüne bağımlılık DOĞMAZ (CLAUDE.md §4.3).
      *
+     * `categoryId`/`categoryLabel` (v2.1.1-B): elle girilen hareketin admin
+     * tanımlı TÜRÜ. `categoryLabel` kayıt anında alınan bir anlık görüntüdür
+     * — kategori sonradan yeniden adlandırılsa bile bu hareketin ekranda
+     * gösterdiği ad DEĞİŞMEZ. Çağıran (`CashMovementController`), `type`in
+     * kategori nesnesinin `system_type`ı ile AYNI olduğunu ZATEN doğrulamış
+     * olmalıdır — bu servis kategori-tip eşleşmesini burada TEKRAR kontrol
+     * etmez (tek doğruluk kaynağı controller'daki seçim mantığıdır).
+     *
      * @throws CashSessionIsClosed
      * @throws InvalidCashMovement
      */
@@ -408,6 +416,8 @@ class CashBookService
         DateTimeInterface|string|null $entryAt = null,
         ?string $referenceType = null,
         ?int $referenceId = null,
+        ?int $categoryId = null,
+        ?string $categoryLabel = null,
     ): CashMovement {
         if (! $amount->isPositive()) {
             throw InvalidCashMovement::amountNotPositive();
@@ -415,7 +425,7 @@ class CashBookService
 
         return DB::transaction(function () use (
             $session, $type, $currency, $amount, $actor, $description, $counterparty, $entryAt,
-            $referenceType, $referenceId,
+            $referenceType, $referenceId, $categoryId, $categoryLabel,
         ): CashMovement {
             // Kontrol ve yazma ATOMİK olmalıdır: satır kilitlenmeden önce
             // yapılan bir kontrol, tam bu anda başlayan bir devirle (startHandover)
@@ -435,6 +445,8 @@ class CashBookService
                 entryAt: $entryAt,
                 referenceType: $referenceType,
                 referenceId: $referenceId,
+                categoryId: $categoryId,
+                categoryLabel: $categoryLabel,
             );
 
             $this->auditLogger->log(
@@ -533,6 +545,8 @@ class CashBookService
                     entryAt: null,
                     referenceType: $movement->reference_type,
                     referenceId: $movement->reference_id,
+                    categoryId: $movement->category_id,
+                    categoryLabel: $movement->category_label,
                     isReversal: true,
                     reversesMovementId: $movement->getKey(),
                 );
@@ -866,12 +880,16 @@ class CashBookService
         DateTimeInterface|string|null $entryAt,
         ?string $referenceType = null,
         ?int $referenceId = null,
+        ?int $categoryId = null,
+        ?string $categoryLabel = null,
         bool $isReversal = false,
         ?int $reversesMovementId = null,
     ): CashMovement {
         return CashMovement::query()->create([
             'cash_session_id' => $session->getKey(),
             'type' => $type->value,
+            'category_id' => $categoryId,
+            'category_label' => $categoryLabel !== null ? mb_substr($categoryLabel, 0, 100) : null,
             'direction' => $direction->value,
             'amount' => $amount->toDecimal(),
             'currency' => $currency->value,
@@ -994,6 +1012,8 @@ class CashBookService
             'cash_movement_id' => $movement->getKey(),
             'cash_session_id' => $movement->cash_session_id,
             'type' => $movement->type->value,
+            'category_id' => $movement->category_id,
+            'category_label' => $movement->category_label,
             'direction' => $movement->direction->value,
             'amount' => $movement->amountMoney()->toDecimal(),
             'currency' => $movement->currency->value,

@@ -33,7 +33,7 @@ enum PaymentMethod: string
             self::Cash => 'Nakit',
             self::BankTransfer => 'Havale / EFT',
             self::CreditCard => 'Kredi Kartı',
-            self::Cheque => 'Çek',
+            self::Cheque => 'Çek / Senet',
             self::Other => 'Diğer',
         };
     }
@@ -42,5 +42,20 @@ enum PaymentMethod: string
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
+    }
+
+    /**
+     * Cari Tahsilat formunda gösterilen dört ana kanal (v2.1.1-B §9).
+     *
+     * `Other` burada YOKTUR — arayüzü karmaşıklaştırmaz (kullanıcı talimatı:
+     * "do not clutter user UI unless actually required") ama teknik olarak
+     * hâlâ geçerlidir (`Rule::enum` bunu reddetmez); raporlama/filtre
+     * ekranları hâlâ `cases()` kullanır, geçmiş `other` kayıtları gizlenmez.
+     *
+     * @return array<int, self>
+     */
+    public static function primary(): array
+    {
+        return [self::Cash, self::CreditCard, self::BankTransfer, self::Cheque];
     }
 }

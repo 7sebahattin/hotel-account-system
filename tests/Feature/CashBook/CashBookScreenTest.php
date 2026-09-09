@@ -6,6 +6,7 @@ namespace Tests\Feature\CashBook;
 
 use App\Models\User;
 use App\Modules\CashBook\Enums\CashMovementType;
+use App\Modules\CashBook\Models\CashMovementCategory;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -67,15 +68,18 @@ class CashBookScreenTest extends CashBookTestCase
     }
 
     #[Test]
-    public function hareket_ekle_ekrani_tum_turleri_sunar(): void
+    public function hareket_ekle_ekrani_tum_aktif_kategorileri_sunar(): void
     {
         $user = $this->personel();
         $this->openSession($user);
 
         $response = $this->actingAs($user)->get(route('cashbook.movements.create'))->assertOk();
 
-        foreach (CashMovementType::selectable() as $type) {
-            $response->assertSee($type->label());
+        // v2.1.1-B: form artık sabit CashMovementType listesini değil, admin
+        // tarafından yönetilen (seeder ile varsayılanları oluşturulmuş)
+        // kategori adlarını sunar.
+        foreach (CashMovementCategory::query()->where('is_active', true)->get() as $category) {
+            $response->assertSee($category->name);
         }
 
         // Mobil sayı klavyesi.

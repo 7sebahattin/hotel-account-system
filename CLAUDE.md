@@ -289,6 +289,7 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 | currency | char(3) | default TRY |
 | payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `cheque`, `other` |
 | cash_session_id | FK cash_sessions null | v2.1.1-A.1 — oluşturma anında EXPLICIT atanır, bir daha değişmez (bkz. §8/Payments, K-095) |
+| receipt_no | varchar(20) null, unique | v2.1.1-B — `Payment::id` üzerinden türetilir (`TM-{Y}-{id:06d}`), bir daha değişmez (bkz. §8/Payments, K-096) |
 | reference_no | varchar(50) null | dekont/slip no, index |
 | description | varchar(255) null | |
 | status | varchar(20) | `active` \| `cancelled` — enum `PaymentStatus` |
@@ -369,9 +370,10 @@ kasa tabloları FİZİKSEL parayı izler. Aralarında yazma bağı yoktur.
 > indexte NULL'ları tekrarlanabilir saydığı için bu "en fazla bir açık vardiya"
 > anlamına gelir ve eşzamanlı ikinci açılışı veritabanı reddeder.
 
-**`cash_movements`** — hareket: `cash_session_id`, `type`, `direction`, `amount`,
-`currency`, `entry_at`, `description`, `counterparty`, `reference_type/id`,
-`is_reversal`, `reverses_movement_id` (**unique**), `created_by`, `created_at`.
+**`cash_movements`** — hareket: `cash_session_id`, `type`, `category_id`,
+`category_label`, `direction`, `amount`, `currency`, `entry_at`, `description`,
+`counterparty`, `reference_type/id`, `is_reversal`, `reverses_movement_id`
+(**unique**), `created_by`, `created_at`.
 
 - Tutar **her zaman pozitiftir**; işaret `direction` (`in`|`out`) kolonundan gelir.
   Yön tipin doğal yönüdür, **ters kayıtta tersine döner** — ledger'daki
@@ -385,8 +387,25 @@ kasa tabloları FİZİKSEL parayı izler. Aralarında yazma bağı yoktur.
   bağımlılık DOĞMAZ. Bağlı bir hareket genel Kasa Hareketleri ekranından
   DOĞRUDAN ters kaydedilemez (`CashMovementPolicy::reverse()`); düzeltme
   yalnızca kaynak kaydın (`PaymentService::cancel()`) kendi akışından yapılır.
+- `category_id`/`category_label` (v2.1.1-B, nullable FK + varchar(100)): kullanıcı
+  formdan elle bir `CashMovementCategory` seçtiğinde doldurulur (§8/Kasa Defteri
+  "Hareket türleri (kategori)"). `category_label`, yazıldığı ANDAKİ kategori
+  adının bir ANLIK GÖRÜNTÜSÜdür — kategori sonradan yeniden adlandırılsa/
+  pasifleştirilse bile `CashMovement::label()` bu snapshot'ı gösterir, canlı bir
+  JOIN yapmaz. Servis tarafından üretilen hareketlerde (`opening`,
+  `company_collection`) ikisi de `NULL` kalır; `label()` bu durumda
+  `CashMovementType::label()`'a düşer.
 - Tutar `DECIMAL(15,2)`'dir (§5 genel kuralı) — `amount_minor` DEĞİL. Tamsayı
   kuruş aritmetiği PHP tarafında `Core\Support\Money` ile yapılır.
+
+**`cash_movement_categories`** (v2.1.1-B) — admin tanımlı hareket türü ana
+verisi: `id`, `name` (unique), `system_type` (varchar, `CashMovementType::
+selectable()`'ın 5 değeriyle CHECK kısıtlı — `opening`/`company_collection`
+ASLA atanamaz), `is_active`, `requires_recipient`, `sort_order`, `created_by`/
+`updated_by`, timestamps. **Silme ucu yoktur** — kullanılmış bir kategori
+yalnızca `is_active=false` yapılır (§5.8'in kasa hareketi değişmezlik ilkesiyle
+AYNI gerekçe). `system_type` yalnızca oluştururken seçilir, düzenleme ekranı
+bu alanı hiç kabul etmez — aynı ada sonradan farklı bir davranış bağlanamaz.
 
 **`cash_transfers`** — personelden personele devir: `from_session_id`,
 `to_session_id`, `from_user_id`, `to_user_id`, `status`
@@ -433,7 +452,7 @@ bir devir ya da kapanış, devrin zaten bildirdiği tutarı sessizce stale bıra
 `'stay' => Stay::class`, `'payment' => Payment::class`, `'company' => Company::class`,
 `'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`,
 `'cash_session' => CashSession::class`, `'cash_movement' => CashMovement::class`,
-`'cash_transfer' => CashTransfer::class`.
+`'cash_transfer' => CashTransfer::class`, `'cash_movement_category' => CashMovementCategory::class`.
 Sınıf adı değişse bile veri bozulmaz.
 
 ---
@@ -558,6 +577,7 @@ ledger.view_all        # tüm firmaların bakiyesi / toplam alacak
 cashbook.view          # kasa defteri ve açık vardiya
 cashbook.operate       # hareket girme, vardiya açma/kapatma, devir
 cashbook.view_all      # tüm vardiyalar, günlük defter, kasa farkları
+cashbook.manage_categories  # kasa hareket türlerini (kategori) yönet (v2.1.1-B)
 dashboard.financial    # finansal dashboard kartları
 export.excel
 audit.view
@@ -594,6 +614,7 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | cashbook.view | ✅ | ✅ | ✅ |
 | cashbook.operate | ✅ | ✅ | ✅ |
 | cashbook.view_all | ✅ | ✅ | ❌ |
+| cashbook.manage_categories | ✅ | ✅ | ❌ |
 | kasa — başkasının vardiyasına hareket | ❌ | ❌ | ❌ |
 | ledger.view | ✅ | ✅ | ❌ |
 | ledger.view_all | ✅ | ✅ | ❌ |
@@ -698,7 +719,7 @@ amaçlı DEĞİLDİR:
 | `cash` (Nakit) | ✅ | ✅ — `company_collection` hareketi |
 | `credit_card` (Kredi Kartı) | ✅ | ❌ |
 | `bank_transfer` (Havale/EFT) | ✅ | ❌ |
-| `cheque` (Çek) | ✅ | ❌ — mevcut davranış korunur, yeniden tasarlanmadı |
+| `cheque` (Çek / Senet) | ✅ | ❌ — mevcut davranış korunur, yeniden tasarlanmadı |
 | `other` / boş | ✅ | ❌ |
 
 - **Nakit (`cash`):** `PaymentService::create()` aynı transaction'da
@@ -753,6 +774,46 @@ amaçlı DEĞİLDİR:
   bazlı (vardiyadan bağımsız) raporlarda görünür kalır.
 - Yeni bir yetki AÇILMADI: kural mevcut `payments.create` + `cashbook.operate`
   (Personel'de zaten ikisi de var) üzerinden yürür.
+
+**Adlandırma (v2.1.1-B):** kullanıcıya gösterilen her yerde "Tahsilat ekle" /
+"Yeni tahsilat" metni **"Cari Tahsilat"** olarak birleştirildi (sayfa başlığı,
+liste/firma detayı/pano butonları, Hızlı İşlem). Bu yalnızca ARAYÜZ metnidir —
+`PaymentService`, `PaymentController`, route adları (`payments.create` vb.)
+DEĞİŞMEDİ; §13'teki isimlendirme kuralı ("kod İngilizce") burada da geçerlidir.
+
+**Tahsilat Makbuzu (v2.1.1-B, K-096):** her tahsilat, yazdırılabilir bir
+"Tahsilat Makbuzu" (`payments.receipt` route'u, `payments.view` yetkisiyle
+korunur — yeni bir yetki AÇILMADI) üretir. **Bu belge fatura veya e-Arşiv
+fatura DEĞİLDİR** — operasyonel bir tahsilat kaydıdır ve ekranın kendisinde
+bu açıkça yazılıdır. Z-raporu hâlâ YOKTUR (yukarıdaki madde).
+
+- **Makbuz numarası** (`receipt_no`, `TM-{Y}-{id:06d}`) `Payment::id` üzerinden
+  TÜRETİLİR — ayrı bir sıra tablosu YOKTUR, `MAX()+1` riski taşımaz (MySQL
+  AUTO_INCREMENT zaten eşzamanlılığa karşı güvenlidir). Bilinen sınırlama:
+  sayı yıl başına 1'e sıfırlanmaz. `create()` içinde `id` atandıktan HEMEN
+  SONRA, `saveQuietly()` ile yazılır (bu, `create()` akışının kendi
+  tamamlanmasıdır — dışarıdan bir düzenleme değildir).
+- `receipt_no`, `Payment::IMMUTABLE_FIELDS`e eklidir: **iptal DAHİL hiçbir
+  işlem sonradan değiştiremez** — `cash_session_id` ile AYNI üç katmanlı
+  koruma (model + servis + FormRequest), `$fillable`'da YOK.
+- Bu özellikten ÖNCE oluşturulmuş kayıtlarda `receipt_no = NULL`'dır —
+  geriye dönük makbuz ÜRETİLMEZ (dürüst sınırlama); makbuz ekranı bu durumda
+  404 döner, tahsilatın kendi detay ekranını etkilemez.
+- **"Yalnız" (yazıyla tutar) alanı YALNIZCA TRY için üretilir**
+  (`Payment::amountInWords()`, `Core\Support\TurkishNumberToWords`). Yabancı
+  para birimlerinde UYDURMA/yanlış bir çeviri üretmek yerine `null` döner;
+  ekran yalnızca sayısal tutar + ISO kodunu gösterir.
+- Firma yasal başlık bilgisi (`config('hotel.company.*')`) **GEÇİCİ bir
+  yerleşimdir** — gerçek bir Settings modülü açılana kadar. Sayfa
+  `layouts.print`'i genişletir (Vite/tema yüklemez, A4 sade CSS — Cari
+  Ekstre/Devir Raporu ile aynı desen).
+- İptal edilmiş bir tahsilatın makbuzu erişilebilir kalır; iptal durumu
+  makbuzda açıkça (rozet + gerekçe) görünür. Makbuz geçmişi ASLA silinmez.
+- İzlenebilirlik: nakit kanalda bağlı kasa hareketinin açıklamasına makbuz
+  numarası eklenir ve Kasa Hareketleri ekranından tahsilata bağlantı verilir
+  (yalnızca route ADI ile — CashBook Payments sınıflarını import ETMEZ, §4.3/3
+  ihlal edilmez); `payments::show` da bağlı vardiyaya (`Payment.cashSession`)
+  bağlantı verir.
 
 ### Ledger / Current Account
 
@@ -872,12 +933,18 @@ görünür.
 
 **Hızlı İşlem** (`partials/quick-action.blade.php`) rol/yetkiye duyarlı, global
 bir "+" menüsüdür ve YENİ bir işlem mantığı YAZMAZ — mevcut create route'larına
-yönlendirir (`cashbook.movements.create?type=...` zaten var olan bir query
-parametresidir). Personel ve Patron/Admin FARKLI listeler görür: personel için
-öncelik kasadır (Oda Geliri/Ek Gelir/Gider/Kasa Çıkışı/Devir — `payments.create`
-gibi diğer yetkileri olsa bile global menüde GÖSTERİLMEZ, bu bilinçli bir
-kapsam daraltmasıdır); Patron/Admin için öncelik kayıt oluşturmadır (Kasa
-Hareketi/Tahsilat/Konaklama/Firma/Devir).
+yönlendirir.
+
+> **v2.1.1-B (K-096):** Gün 11'in personel/Patron-Admin için AYRI iki liste
+> tasarımı KALDIRILDI. Liste artık TEK ve HERKES için AYNIDIR: Kasa Hareketi /
+> Cari Tahsilat / Yeni Konaklama / Yeni Firma / Kasa Devri — her satır kendi
+> yetkisini kontrol eder, rol farkı yalnızca hangi satırların göründüğüyle
+> ortaya çıkar. Gerekçe: kasa hareket TÜRÜ artık admin tanımlı, dinamik bir
+> kategoridir (§8/Kasa Defteri "Hareket türleri (kategori)") — aynı sistem
+> davranışına (`extra_income`) birden fazla aktif kategori eşlenebileceği için
+> `?type=room_income` gibi tek bir kategoriye ÖNCEDEN bağlanan bir kısayol
+> artık belirsizdir; bu yüzden genel "Kasa Hareketi" kısayolu kategori
+> ÖNCEDEN SEÇMEDEN hareket formuna yönlendirir.
 
 **"Sistem henüz boş" durumu** artık yalnızca Finans görünümündedir (cari defter
 boşken): kasa artık ayrı bir görünümde olduğu için "ikisi birden boşken" birleşik
@@ -926,6 +993,26 @@ kişi kasadan sorumludur.
 elle seçemez (aksi hâlde aynı tahsilatın kasa etkisi iki farklı yoldan
 üretilip tek doğruluk kaynağı ilkesi bozulurdu). Gerçek gelirdir: firma borcu
 fiilen azalmıştır.
+
+**Hareket türleri (kategori, v2.1.1-B, K-096):** Kasa Hareketi formu artık ham
+`CashMovementType` DEĞİL, admin tanımlı bir `CashMovementCategory` sunar
+(`cashbook.manage_categories` yetkisi, "Yönetim" grubunda "Kasa Hareket
+Türleri" ekranı). Kategori, `CashMovementType`in YERİNE geçmez — ÜZERİNE bir
+ETİKET katmanıdır:
+
+- Bir kategorinin `system_type`'ı (sabit muhasebe davranışı) yalnızca
+  `CashMovementType::selectable()`'ın 5 değerinden biri olabilir (§5.8) ve
+  yalnızca OLUŞTURURKEN seçilir — admin kendi aritmetiğini/yönünü İCAT EDEMEZ,
+  yalnızca var olan davranışa yeni bir isim/liste sırası/teslim-alan-zorunluluğu
+  tanımlar.
+- Kullanılmış bir kategori **asla hard-delete edilmez**, yalnızca pasifleştirilir
+  (`is_active=false`) — silme route'u yoktur. Pasif kategori YENİ hareket için
+  seçilemez ama GEÇMİŞ hareketlerde görünmeye devam eder.
+- Kategori adı düzenlenebilir olduğu için `CashMovement.category_label`
+  yazıldığı ANDAKİ adın bir ANLIK GÖRÜNTÜsünü taşır (§5.8) — sonradan yeniden
+  adlandırma geçmişi DEĞİŞTİRMEZ.
+- Varsayılan 5 kategori (Oda Geliri/Ek Gelir/Gider/Kasa Girişi/Kasadan Teslim)
+  idempotent bir seeder (`CashMovementCategorySeeder`) ile oluşturulur.
 
 > **EN KRİTİK KURAL:** ara kasa/patron teslimi **GİDER DEĞİLDİR**. Kasada
 > 14.000 TRY varken patrona 12.000 teslim edilirse fiziksel kasa 2.000'e düşer

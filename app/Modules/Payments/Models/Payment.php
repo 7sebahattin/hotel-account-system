@@ -10,10 +10,12 @@ use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Core\Support\TurkishNumberToWords;
 use App\Modules\Payments\Database\Factories\PaymentFactory;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -35,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property Currency $currency
  * @property PaymentMethod|null $payment_method
  * @property int|null $cash_session_id
+ * @property string|null $receipt_no
  * @property string|null $reference_no
  * @property string|null $description
  * @property PaymentStatus $status
@@ -69,10 +72,13 @@ class Payment extends Model
      * bir daha ASLA yeniden atanmaz — iptal/ters kayıt bile bunu değiştirmez
      * (kaynak işlem hangi vardiyada olduysa öyle kalır, CLAUDE.md §8/Payments).
      *
+     * `receipt_no` (v2.1.1-B): makbuz numarası bir kez üretilir, iptalde bile
+     * DEĞİŞMEZ — geçmiş makbuz her zaman izlenebilir kalmalıdır (§13).
+     *
      * @var array<int, string>
      */
     public const IMMUTABLE_FIELDS = [
-        'company_id', 'payment_date', 'amount', 'currency', 'payment_method', 'cash_session_id',
+        'company_id', 'payment_date', 'amount', 'currency', 'payment_method', 'cash_session_id', 'receipt_no',
     ];
 
     /** Düzeltilebilen tek alanlar. */
@@ -174,6 +180,44 @@ class Payment extends Model
         $method = $this->payment_method?->label();
 
         return 'Tahsilat: '.$this->payment_date->format('d.m.Y').($method === null ? '' : ' · '.$method);
+    }
+
+    /**
+     * Makbuz numarası — `id` üzerinden TÜRETİLİR, ayrı bir sıra tablosu
+     * gerektirmez (v2.1.1-B §13). `id` MySQL AUTO_INCREMENT'i sayesinde
+     * zaten eşzamanlılığa karşı güvenli ve benzersizdir; `MAX()+1` riski
+     * taşımaz. Yalnızca kayıt GERÇEKTEN oluştuktan sonra (id atandıktan
+     * sonra) çağrılabilir.
+     */
+    public static function receiptNumberFor(int $id, DateTimeInterface $issuedOn): string
+    {
+        return sprintf('TM-%s-%06d', $issuedOn->format('Y'), $id);
+    }
+
+    /**
+     * "Yalnız: …" alanı — yalnızca TRY için üretilir (v2.1.1-B §15).
+     *
+     * Yabancı para birimleri için YANLIŞ/UYDURMA bir çeviri üretmek yerine
+     * NULL döner; ekran bu durumda yalnızca sayısal tutar + ISO kodunu
+     * gösterir ("Correctness over decorative completeness").
+     */
+    public function amountInWords(): ?string
+    {
+        if ($this->currency !== Currency::TRY) {
+            return null;
+        }
+
+        $minorUnits = $this->amountMoney()->minorUnits;
+        $lira = intdiv($minorUnits, 100);
+        $kurus = $minorUnits % 100;
+
+        $words = TurkishNumberToWords::convert($lira).' türk lirası';
+
+        if ($kurus > 0) {
+            $words .= ', '.TurkishNumberToWords::convert($kurus).' kuruş';
+        }
+
+        return TurkishNumberToWords::titleCase($words);
     }
 
     protected static function newFactory(): PaymentFactory

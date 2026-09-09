@@ -1473,3 +1473,128 @@ ilişkisi, `IMMUTABLE_FIELDS`, cast), `PaymentService` (`create()`,
 `resolveOwnedActiveSession()`, `postCashCollection()` imzası,
 `shiftCollectionSummary()`/`collectionTotalsForSession()` yeniden yazıldı),
 `ShiftCollectionSummary` DTO docblock'u.
+
+## K-096 · v2.1.1-B: Yönetilebilir kasa kategorileri, birleşik Hızlı İşlem, Cari Tahsilat makbuzu
+
+**Bağlam:** K-094/K-095 (`470009f`, `6419f09`) ile onaylanan ödeme kanalı
+mimarisi DEĞİŞTİRİLMEDEN, dört alanda genişleme istendi: (1) admin'in kasa
+hareket TÜRLERİNİ (etiket düzeyinde) yönetebilmesi, (2) Gün 11'in rol bazlı
+iki ayrı Hızlı İşlem listesinin sadeleştirilmesi, (3) "Tahsilat ekle"
+adlandırmasının "Cari Tahsilat" olarak birleştirilmesi, (4) yazdırılabilir bir
+Tahsilat Makbuzu.
+
+**Karar 1 — Kategori, `CashMovementType`in YERİNE geçmez; ÜZERİNE bir etiket
+katmanıdır:** `cash_movement_categories.system_type` sütunu, veritabanı
+CHECK'i ile `CashMovementType::selectable()`'ın 5 değeriyle (room_income,
+extra_income, expense, cash_out, cash_in) SINIRLANIR — `opening` ve
+`company_collection` (sistem üretimli) hiçbir zaman bir kategoriye atanamaz.
+Admin yeni bir MUHASEBE DAVRANIŞI icat edemez, yalnızca var olan 5 sabit
+davranıştan birine YENİ BİR İSİM/liste sırası/teslim-alan-zorunluluğu
+tanımlayabilir (kullanıcı talimatı §2: "Admin must NOT be able to invent
+arbitrary accounting behaviour"). `system_type` yalnızca OLUŞTURURKEN
+seçilir; `UpdateCashMovementCategoryRequest` bu alanı hiç TANIMLAMAZ —
+aynı ada sonradan farklı bir davranış (önce gelir, sonra gider) bağlanıp
+geçmiş raporları sessizce yanıltmasın diye.
+
+**Karar 2 — Kategori asla hard-delete edilmez; `category_label` bir ANLIK
+GÖRÜNTÜdür:** `CashMovementCategoryController`'da `destroy()` YOKTUR, hiçbir
+route DELETE fiili taşımaz — pasifleştirme (`is_active=false`) TEK yoldur
+(§5.8'deki kasa hareketi/sayım değişmezlik ilkesiyle aynı gerekçe). Ama
+kategori adı DEĞİŞTİRİLEBİLİR olduğu için, `cash_movements.category_label`
+her yazımda kategorinin O ANKİ adının bir KOPYASINI taşır — `CashMovement::
+label()` bu snapshot'ı kullanır, `category_id` üzerinden canlı bir JOIN
+YAPMAZ. Kategori sonradan "Mini Bar"dan "Market"e yeniden adlandırılsa bile
+geçmiş hareket hâlâ "Mini Bar" yazar; bu, `docs/kararlar.md`'nin kendi
+ilkesiyle (geçmiş kayıt sessizce değişmez) birebir örtüşür ve testle
+kanıtlanmıştır (`CashMovementCategoryTest::
+kategori_yeniden_adlandirilinca_gecmis_hareketin_etiketi_degismez`).
+
+**Karar 3 — Hızlı İşlem TEK, birleşik, yetki-filtreli bir listeye indirgendi:**
+Gün 11'in personel-özel (`?type=room_income` vb. 5 kasa kısayolu) ve
+yönetici-özel (kayıt oluşturma, 5 kısayol) İKİ AYRI dalı KALDIRILDI. Gerekçe:
+kasa hareket TÜRÜ artık admin tanımlı, dinamik bir kategoridir — aynı sistem
+davranışına (`extra_income`) birden fazla aktif kategori eşlenebilir ("Mini
+Bar" ve "Market" ikisi de `extra_income`), bu yüzden tek bir kategoriye
+ÖNCEDEN bağlanan bir kısayol (`?type=extra_income`) artık BELİRSİZDİR. Yeni
+liste (`Kasa Hareketi` / `Cari Tahsilat` / `Yeni Konaklama` / `Yeni Firma` /
+`Kasa Devri`) HERKES için AYNIDIR; rol farkı yalnızca `$user->can(...)`
+filtresinden geçen satırlarla ortaya çıkar — yeni bir işlem mantığı
+YAZILMADI, her satır zaten var olan create route'una yönlendirir.
+
+**Karar 4 — Makbuz numarası, `Payment::id` üzerinden TÜRETİLİR; ayrı bir sıra
+tablosu AÇILMADI:** `TM-{Y}-{id:06d}` biçimi, MySQL'in kendi AUTO_INCREMENT'i
+kadar eşzamanlılığa karşı güvenlidir ve `MAX()+1` yarış koşulu riski TAŞIMAZ.
+Bilinen ve KABUL EDİLEN sınırlama: sayısal kısım yıl başına 1'e SIFIRLANMAZ
+(id tabanlıdır) — bu, "en küçük sağlam çözüm" tercihinin (kullanıcı talimatı
+§13) bilinçli bedelidir, ayrı bir sıra sayacı + kilitleme mantığına karşı
+tercih edilmiştir. Numara, `Payment::create()` İÇİNDE, `id` atandıktan HEMEN
+SONRA `saveQuietly()` ile yazılır — bu, modelin `updating` olay korumasını
+(IMMUTABLE_FIELDS) BİLEREK atlar, çünkü bu dışarıdan bir "düzenleme" değil,
+`create()` akışının kendi TAMAMLANMASIDIR. `receipt_no`, `IMMUTABLE_FIELDS`e
+eklendi — iptal DAHİL hiçbir işlem sonradan değiştiremez (K-095'teki
+`cash_session_id` ile AYNI iki katmanlı koruma deseni: model + servis +
+FormRequest, `$fillable`'da YOK).
+
+**Karar 5 — Tahsilat Makbuzu bir FATURA/e-Arşiv DEĞİLDİR; bu, ekranın
+KENDİSİNDE açıkça yazılıdır:** `layouts.print`'i genişletir (Vite/tema
+yüklemez, A4 sade CSS — Cari Ekstre/Devir Raporu ile AYNI desen), firma yasal
+başlığı `config('hotel.company.*')`'dan gelir — bu, gerçek bir Settings
+modülü açılana kadar GEÇİCİ bir yerleşimdir (kod içinde "GEÇİCİ YERLEŞİM"
+diye işaretlidir, kullanıcı talimatı §14'ün "en küçük merkezi çözüm, dev
+Settings modülü açma" izniyle). "Yalnız" alanı (yazıyla tutar) YALNIZCA TRY
+için üretilir (`Payment::amountInWords()`) — yabancı para birimleri için
+UYDURMA/yanlış bir çeviri üretmek yerine `null` döner, ekran bu durumda
+yalnızca sayısal tutar + ISO kodunu gösterir ("correctness over decorative
+completeness", kullanıcı talimatı §15). `TurkishNumberToWords::titleCase()`
+ayrı yazıldı: `mb_convert_case(MB_CASE_TITLE)` Türkçe küçük "i"yi ASCII "I"ya
+çevirir ("iki"→"Iki"), doğrusu noktalı "İki"dir — bu, kod incelemesinde
+kendiliğinden yakalanan bir hataydı, testle korunur.
+
+**Karar 6 — İzlenebilirlik (`Payment`↔`CashMovement`) raw DB id ile DEĞİL,
+insan-okunur metinle kurulur; CashBook Payments'ı TANIMAZ:** `CashBookService
+::postCashCollection()`'ın yazdığı `CashMovement.description`'a makbuz
+numarası EKLENİR (`Tahsilat: 09.09.2026 · Nakit · TM-2026-000123`) —
+`CashBookService`'in kendisi bu string'in ANLAMINI hâlâ bilmez, `PaymentService`
+onu HAZIRLAYIP GEÇİRİR (§4.3/3'teki tek yönlü bağımlılığın AYNISI). Kasa
+Hareketleri ekranındaki satır, `reference_type === 'payment'` olduğunda bu
+açıklamayı `payments.show` route ADINA (yalnızca string, hiçbir Payments
+sınıfı import edilmeden) bağlar — CLAUDE.md §4.3'ün "modül başka modülün
+Model'ini kullanamaz" kuralı ihlal edilmez, yalnızca Blade katmanında bir
+route-adı bağlantısı kurulur. Ters yönde, `payments::show` zaten var olan
+`Payment.cashSession` ilişkisiyle (K-095) bağlı vardiyaya link verir —
+Payments'ın CashBook'a bağımlılığı zaten K-094'ten beri TEK YÖNLÜDÜR, bu yeni
+bir bağımlılık AÇMAZ.
+
+**Karar 7 — `CashMovementCategory` da morph map'e EKLENDİ:** `Core\Concerns\
+Auditable` trait'i (denetim kaydı için) `Relation::enforceMorphMap()`'in
+kesin listesine bağımlıdır (§5.7) — model listeye eklenmeden seeder/servis
+ilk kategori yazımında `MorphMapException` fırlatır. `'cash_movement_category'
+=> CashMovementCategory::class` eklendi; bu hem seeder'ın hem canlı admin
+ekranının kategoriye audit log üretmesi için gereklidir.
+
+**Migration'lar (3, hepsi forward-only, `migrate:fresh` KULLANILMADI):**
+`cash_movement_categories` (yeni tablo, CHECK ile system_type kısıtlı),
+`cash_movements.category_id`/`category_label` (nullable, restrictOnDelete),
+`payments.receipt_no` (nullable unique varchar(20)) — mevcut satırlar
+`receipt_no = NULL` ile başlar, geriye dönük makbuz ÜRETİLMEZ (dürüst
+sınırlama, K-094/K-095'teki aynı ilke); `payments::show` ve `receipt` route'u
+bu durumu 404 ile karşılar, tahsilatın kendi detay ekranını BOZMAZ.
+
+**Yeni yetki:** `cashbook.manage_categories` — Admin (otomatik, tüm yetkiler)
+ve Patron'a (açıkça) verildi; Personel'e VERİLMEDİ. `cashbook.view_all`
+yeniden kullanılmadı: "tüm vardiyaları görmek" ile "kategori ana verisini
+yönetmek" farklı yetki anlamlarıdır.
+
+**Etkilenen dosyalar (özet):** 3 migration, `CashMovementCategory` modeli +
+factory + policy + controller + 2 FormRequest + 3 view, `CashMovementType`
+DEĞİŞMEDİ (yalnızca kullanım şekli değişti), `CashMovement` (`category_id`/
+`category_label` cast + `label()`), `CashBookService` (`recordMovement()`/
+`insertMovement()`/`reverseMovement()` imzalarına `categoryId`/`categoryLabel`
+eklendi — ters kayıt orijinal kategorinin etiketini KORUR), `Payment` modeli
+(`receipt_no`, `amountInWords()`, `receiptNumberFor()`), `PaymentService`
+(makbuz üretimi, `postCashCollection()` açıklaması), `PaymentMethod::primary()`
+(Cari Tahsilat formunda `Other` gösterilmez, raporlama hâlâ `cases()` kullanır),
+`TurkishNumberToWords` (yeni, Core), `config/hotel.php` (`company.*`, geçici),
+`AppServiceProvider` (morph map), `partials/quick-action.blade.php` (yeniden
+yazıldı), sidebar (Kasa Hareket Türleri girdisi), `movements/_row.blade.php`
+ve `payments::show` (çift yönlü izlenebilirlik bağlantıları).

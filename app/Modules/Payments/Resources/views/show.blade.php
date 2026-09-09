@@ -12,6 +12,10 @@
         </x-slot:meta>
 
         <x-slot:actions>
+            @if ($payment->receipt_no !== null)
+                <x-ui.button variant="secondary" :href="route('payments.receipt', $payment)">Makbuzu Yazdır</x-ui.button>
+            @endif
+
             @can('update', $payment)
                 <x-ui.button :href="route('payments.edit', $payment)">Bilgileri düzenle</x-ui.button>
             @endcan
@@ -49,6 +53,32 @@
                     <dt class="text-xs uppercase tracking-wide text-mut">Referans no</dt>
                     <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $payment->reference_no ?: '—' }}</dd>
                 </div>
+                <div>
+                    <dt class="text-xs uppercase tracking-wide text-mut">Makbuz no</dt>
+                    <dd class="mt-0.5 text-sm tabular-nums text-tx">
+                        @if ($payment->receipt_no !== null)
+                            <a href="{{ route('payments.receipt', $payment) }}"
+                               class="text-acc-tx underline underline-offset-2 hover:text-tx">{{ $payment->receipt_no }}</a>
+                        @else
+                            — <span class="text-xs text-mut">(bu özellikten önce oluşturuldu)</span>
+                        @endif
+                    </dd>
+                </div>
+                @if ($payment->cashSession)
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-mut">Kasa vardiyası</dt>
+                        <dd class="mt-0.5 text-sm text-tx">
+                            @can('view', $payment->cashSession)
+                                <a href="{{ route('cashbook.sessions.show', $payment->cashSession) }}"
+                                   class="text-acc-tx underline underline-offset-2 hover:text-tx">
+                                    {{ $payment->cashSession->opened_at->format('d.m.Y H:i') }} · {{ $payment->cashSession->openedBy?->name ?? '—' }}
+                                </a>
+                            @else
+                                {{ $payment->cashSession->opened_at->format('d.m.Y H:i') }}
+                            @endcan
+                        </dd>
+                    </div>
+                @endif
                 <div class="sm:col-span-2">
                     <dt class="text-xs uppercase tracking-wide text-mut">Açıklama</dt>
                     <dd class="mt-0.5 text-sm whitespace-pre-line text-tx">{{ $payment->description ?: '—' }}</dd>

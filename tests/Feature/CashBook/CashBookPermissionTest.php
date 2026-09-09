@@ -10,6 +10,7 @@ use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\CashBook\Enums\CashMovementType;
 use App\Modules\CashBook\Models\CashCount;
 use App\Modules\CashBook\Models\CashMovement;
+use App\Modules\CashBook\Models\CashMovementCategory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -77,7 +78,7 @@ class CashBookPermissionTest extends CashBookTestCase
 
         // HTTP üzerinden de engellenir.
         $this->actingAs($other)->post(route('cashbook.movements.store'), [
-            'type' => CashMovementType::RoomIncome->value,
+            'category_id' => $this->categoryIdFor(CashMovementType::RoomIncome),
             'amount' => '500,00',
             'currency' => 'TRY',
         ])->assertForbidden();
@@ -205,7 +206,7 @@ class CashBookPermissionTest extends CashBookTestCase
 
         // Açık vardiya kalmadığı için hareket ekranı kasaya geri yönlendirir.
         $this->actingAs($owner)->post(route('cashbook.movements.store'), [
-            'type' => CashMovementType::RoomIncome->value,
+            'category_id' => $this->categoryIdFor(CashMovementType::RoomIncome),
             'amount' => '100,00',
             'currency' => 'TRY',
         ])->assertRedirect(route('cashbook.index'));
@@ -229,7 +230,7 @@ class CashBookPermissionTest extends CashBookTestCase
         $this->assertSame('1000.00', $this->expected($session));
 
         $this->actingAs($user)->post(route('cashbook.movements.store'), [
-            'type' => CashMovementType::RoomIncome->value,
+            'category_id' => $this->categoryIdFor(CashMovementType::RoomIncome),
             'amount' => '2.500,50',
             'currency' => 'TRY',
             'description' => '204 numaralı oda',
@@ -239,29 +240,31 @@ class CashBookPermissionTest extends CashBookTestCase
     }
 
     #[Test]
-    public function bilinmeyen_hareket_turu_ve_para_birimi_reddedilir(): void
+    public function bilinmeyen_kategori_ve_para_birimi_reddedilir(): void
     {
         $user = $this->personel();
         $this->openSession($user);
 
+        // Var olmayan kategori kimliği.
         $this->actingAs($user)->post(route('cashbook.movements.store'), [
-            'type' => 'bahsis',
+            'category_id' => 999999,
             'amount' => '100,00',
             'currency' => 'TRY',
-        ])->assertSessionHasErrors('type');
+        ])->assertSessionHasErrors('category_id');
 
         $this->actingAs($user)->post(route('cashbook.movements.store'), [
-            'type' => CashMovementType::RoomIncome->value,
+            'category_id' => $this->categoryIdFor(CashMovementType::RoomIncome),
             'amount' => '100,00',
             'currency' => 'CHF',
         ])->assertSessionHasErrors('currency');
 
-        // Açılış tipi kullanıcıdan alınamaz.
+        // Pasif kategori seçilemez (v2.1.1-B §5).
+        $inactive = CashMovementCategory::factory()->inactive()->create();
         $this->actingAs($user)->post(route('cashbook.movements.store'), [
-            'type' => CashMovementType::Opening->value,
+            'category_id' => $inactive->id,
             'amount' => '100,00',
             'currency' => 'TRY',
-        ])->assertSessionHasErrors('type');
+        ])->assertSessionHasErrors('category_id');
 
         $this->assertSame(0, CashMovement::query()->count());
     }

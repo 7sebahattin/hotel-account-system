@@ -12,6 +12,7 @@ use App\Modules\CashBook\Exceptions\CashBookException;
 use App\Modules\CashBook\Filters\CashMovementFilter;
 use App\Modules\CashBook\Http\Requests\StoreCashMovementRequest;
 use App\Modules\CashBook\Models\CashMovement;
+use App\Modules\CashBook\Models\CashMovementCategory;
 use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
@@ -83,9 +84,13 @@ class CashMovementController extends Controller
 
         return view('cashbook::movements.create', [
             'session' => $session,
-            'types' => CashMovementType::selectable(),
+            'categories' => CashMovementCategory::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(),
             'currencies' => Currency::active(),
-            'selectedType' => $request->query('type'),
+            'selectedCategoryId' => $request->query('category_id'),
         ]);
     }
 
@@ -100,15 +105,25 @@ class CashMovementController extends Controller
 
         $this->authorize('create', [CashMovement::class, $session]);
 
+        // FormRequest `exists|where(is_active,true)` ile doğrulamıştır; bu
+        // noktada kategori kesin AKTİF ve VAR olmalıdır.
+        $category = $request->category();
+
+        if ($category === null) {
+            return back()->withInput()->with('error', 'Geçersiz ya da pasif hareket türü.');
+        }
+
         try {
             $this->cash->recordMovement(
                 session: $session,
-                type: $request->movementType(),
+                type: $category->system_type,
                 currency: $request->currency(),
                 amount: $request->money(),
                 actor: $request->user(),
                 description: $request->validated()['description'] ?? null,
                 counterparty: $request->validated()['counterparty'] ?? null,
+                categoryId: $category->getKey(),
+                categoryLabel: $category->name,
             );
         } catch (CashBookException $e) {
             return back()->withInput()->with('error', $e->getMessage());

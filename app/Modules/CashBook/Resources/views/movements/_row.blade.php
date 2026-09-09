@@ -39,7 +39,21 @@
 
         @if ($movement->description)
             <span aria-hidden="true">·</span>
-            <span class="truncate">{{ $movement->description }}</span>
+            {{--
+                Kaynağa bağlı hareket (v2.1.1-B §17): CashBook, Payments'ı
+                TANIMAZ (CLAUDE.md §4.3/3) — `reference_type === 'payment'`
+                iken bağlantı yalnızca route ADI ile kurulur, hiçbir Payments
+                sınıfı import edilmez/sorgulanmaz. Görünen metin ham DB id
+                değil, açıklamadır (makbuz no zaten içinde geçer).
+            --}}
+            @if ($movement->reference_type === 'payment')
+                <a href="{{ route('payments.show', $movement->reference_id) }}"
+                   class="truncate text-acc-tx underline underline-offset-2 hover:text-tx">
+                    → {{ $movement->description }}
+                </a>
+            @else
+                <span class="truncate">{{ $movement->description }}</span>
+            @endif
         @endif
 
         @if (($canReverse ?? false) && ! $movement->is_reversal)

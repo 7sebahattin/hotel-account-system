@@ -241,7 +241,7 @@
                 @can('create', \App\Modules\Payments\Models\Payment::class)
                     @unless ($company->trashed())
                         <x-ui.button :href="route('payments.create', ['company_id' => $company->id])">
-                            Tahsilat ekle
+                            Cari Tahsilat
                         </x-ui.button>
                     @endunless
                 @endcan

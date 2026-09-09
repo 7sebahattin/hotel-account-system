@@ -93,6 +93,15 @@ class PaymentService
 
             $payment->save();
 
+            // Makbuz numarası `id`ye bağımlıdır (v2.1.1-B §13), yalnızca
+            // INSERT'ten SONRA üretilebilir. `saveQuietly()`: bu, dışarıdan
+            // bir "düzenleme" DEĞİL, create() akışının kendi TAMAMLANMASIDIR
+            // — `updating` olay koruması (IMMUTABLE_FIELDS) burada bilerek
+            // atlanır; aksi hâlde receipt_no'nun kendi ilk atanışı bile
+            // "değişmez alan değiştirildi" istisnasına çarpardı.
+            $payment->receipt_no = Payment::receiptNumberFor($payment->getKey(), $payment->payment_date);
+            $payment->saveQuietly();
+
             $entry = $this->postCredit($payment, $user);
 
             $cashMovement = $isCash && $session !== null
@@ -281,16 +290,27 @@ class PaymentService
      *
      * `$session` çağıran tarafından ZATEN çözülmüş ve sahiplik doğrulanmıştır
      * (`create()`) — burada tekrar sorgulanmaz/doğrulanmaz.
+     *
+     * Açıklamaya makbuz numarası eklenir (§17 izlenebilirlik): Kasa Defteri
+     * ekranları `CashMovement.reference_id`'yi (ham DB id) hiç göstermez,
+     * yalnızca bu insan-okunur metni — `CashBookService` yine de bu metnin
+     * ANLAMINI bilmez, opak bir açıklama string'i olarak saklar.
      */
     private function postCashCollection(Payment $payment, CashSession $session, User $user): CashMovement
     {
+        $description = $payment->ledgerDescription();
+
+        if ($payment->receipt_no !== null) {
+            $description .= ' · '.$payment->receipt_no;
+        }
+
         return $this->cashBook->recordMovement(
             session: $session,
             type: CashMovementType::CompanyCollection,
             currency: $payment->currency,
             amount: $payment->amountMoney(),
             actor: $user,
-            description: $payment->ledgerDescription(),
+            description: $description,
             counterparty: null,
             referenceType: Payment::LEDGER_SOURCE_TYPE,
             referenceId: $payment->getKey(),
@@ -449,6 +469,7 @@ class PaymentService
             'currency' => $payment->currency->value,
             'payment_method' => $payment->payment_method?->value,
             'cash_session_id' => $payment->cash_session_id,
+            'receipt_no' => $payment->receipt_no,
             'reference_no' => $payment->reference_no,
             'description' => $payment->description,
             'status' => $payment->status->value,

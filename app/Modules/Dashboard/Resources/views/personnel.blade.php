@@ -188,7 +188,7 @@
             @endcan
 
             @can('payments.create')
-                <x-ui.button variant="secondary" :href="route('payments.create')">Tahsilat ekle</x-ui.button>
+                <x-ui.button variant="secondary" :href="route('payments.create')">Cari Tahsilat</x-ui.button>
             @endcan
         </div>
 
