@@ -28,19 +28,39 @@ aynı sırayı izleyecektir.
 ```
 UPLOAD (FTP/CI)
    ↓
+CACHE TEMİZLE (config/route/view/event) — MIGRATE'TEN ÖNCE (K-102)
+   ↓
 MIGRATE            php artisan migrate --force
    ↓
 ROLE/PERMISSION SEED   php artisan db:seed --class=RolePermissionSeeder --force
    ↓
-CACHE (clear, sonra build)
+CACHE KUR (config/route/view/event)
    ↓
 SMOKE TEST (§4)
 ```
 
-**Yetki seed'i MIGRATE'TEN SONRA, cache'ten ÖNCE çalışır — bu bağlayıcıdır.**
-Gerekçe (gerçek üretim olayı): `cashbook.operate` için "There is no
-permission named cashbook.operate for guard web" hatası, koddaki
-`Permission` enum'una yeni bir case eklenip DEPLOY edildiği ama
+**Cache temizleme MIGRATE'TEN ÖNCE çalışır — bu bağlayıcıdır (K-102).**
+Gerekçe (gerçek üretim olayı): yeni bir modül (Room Registry) deploy
+edildiğinde, o modülün Service Provider'ı `bootstrap/providers.php`'ye
+eklenmiş olsa bile, sunucuda ÖNCEKİ deploy'dan kalan bayat bir
+`bootstrap/cache/config.php` hâlâ diskte duruyorsa Laravel `migrate`
+komutu provider listesini `bootstrap/providers.php`'den DEĞİL, bu bayat
+cache'ten okur — yeni modülün Service Provider'ı hiç ÇALIŞMAZ, migration
+dizini hiç KAYDEDİLMEZ, o modülün migration dosyaları `migrate`e
+GÖRÜNMEZ OLUR (hata bile vermez — sessizce atlanır). Bu, `create_rooms_table`
+migration'ının hiç çalışmadığı ("Table doesn't exist", `migrations`
+tablosunda sıfır satır) ama AYNI deploy'daki `add_room_id_to_stays_table`
+migration'ının çalıştığı (çünkü Stays modülünün provider'ı ZATEN eskiden
+cache'teydi) gerçek üretim olayının BİREBİR kök nedenidir — bkz.
+`docs/kararlar.md` K-102. `bootstrap/cache/` deploy tarafından HİÇ
+dokunulmaz (FTP transferinden ve build artifact'ından hariç tutulur,
+`docs/deploy-github-actions.md` §3) — bu yüzden temizlik yalnızca ELLE
+çalıştırılan bu adımla olur.
+
+**Yetki seed'i MIGRATE'TEN SONRA, üretim cache'i KURULMADAN ÖNCE çalışır —
+bu da bağlayıcıdır.** Gerekçe (gerçek üretim olayı): `cashbook.operate`
+için "There is no permission named cashbook.operate for guard web" hatası,
+koddaki `Permission` enum'una yeni bir case eklenip DEPLOY edildiği ama
 `RolePermissionSeeder`'ın production'da YENİDEN ÇALIŞTIRILMADIĞI için
 oluştu. Kod ile veritabanı arasındaki bu senkronizasyon **insan hafızasına
 bırakılamaz** — bu yüzden aşağıdaki komut HER deploy'da, migration'dan
@@ -66,17 +86,19 @@ Sırasıyla:
 # 0) (isteğe bağlı, uzun sürecek bir migration varsa) bakım moduna al
 php artisan down --secret="<gizli-jeton>" --render="errors::503"
 
-# 1) MIGRATE — forward-only, migrate:fresh KULLANILMAZ
-php artisan migrate --force
-
-# 2) ROLE/PERMISSION SEED — HER DEPLOY'DA, atlanamaz (bkz. §1)
-php artisan db:seed --class=RolePermissionSeeder --force
-
-# 3) Eski cache'i temizle (önceki deploy'dan kalmış olabilir)
+# 1) ESKİ CACHE'İ TEMİZLE — MIGRATE'TEN ÖNCE, atlanamaz (bkz. §1, K-102).
+#    Bayat bootstrap/cache/config.php, bu deploy'da YENİ eklenen bir modülün
+#    Service Provider'ını migrate'e GÖRÜNMEZ yapabilir (sessizce, hatasız).
 php artisan config:clear
 php artisan route:clear
 php artisan view:clear
 php artisan event:clear
+
+# 2) MIGRATE — forward-only, migrate:fresh KULLANILMAZ
+php artisan migrate --force
+
+# 3) ROLE/PERMISSION SEED — HER DEPLOY'DA, atlanamaz (bkz. §1)
+php artisan db:seed --class=RolePermissionSeeder --force
 
 # 4) Production cache'ini kur
 php artisan config:cache
@@ -106,7 +128,13 @@ takımının kendi ortamını bozmaması için TEKRAR temizlendi (§6'daki not).
 
 ## 3. Cache komutları — neden bu sıra
 
-- `config:clear` ÖNCE gelir: önceki deploy'dan kalan bayat bir
+- `config:clear`, MIGRATE'TEN ÖNCE gelir (K-102): önceki deploy'dan kalan
+  bayat bir `bootstrap/cache/config.php`, provider listesini de taşır
+  (`config('app.providers')` — `bootstrap/providers.php`'nin okunmuş hâli).
+  Bu deploy'da YENİ eklenen bir modülün Service Provider'ı cache'te YOKSA,
+  o modülün `boot()`'u hiç çalışmaz ve migration dizini `migrate`e hiç
+  KAYDEDİLMEZ — dosya diskte durur ama migrator onu GÖRMEZ, hata da vermez.
+  Aynı sebeple `config:clear`, önceki deploy'dan kalan bayat bir
   `bootstrap/cache/config.php`, yeni `.env` değerlerini (ör. yeni bir
   `HOTEL_COMPANY_*` alanı) SESSİZCE görmezden bırakabilirdi — Laravel cache
   dosyası varsa `.env`'i bir daha OKUMAZ.

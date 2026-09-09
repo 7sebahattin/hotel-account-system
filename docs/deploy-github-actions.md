@@ -84,15 +84,26 @@ HTTP ucu **oluşturulmayacaktır.** Akış:
 
 1. GitHub Actions deploy sonunda `storage/app/deploy-pending` işaret dosyasını bırakır.
 2. cPanel cron dosyayı kontrol eder.
-3. Gerekiyorsa `php artisan migrate --force` çalıştırır.
-4. **Ardından `php artisan db:seed --class=RolePermissionSeeder --force`
+3. **Önce eski cache'i temizler** (`config:clear route:clear view:clear
+   event:clear`) — MIGRATE'TEN ÖNCE, atlanamaz (K-102). Gerekçe: bu
+   deploy'da yeni eklenen bir modülün Service Provider'ı
+   `bootstrap/providers.php`'de olsa bile, sunucuda kalan bayat bir
+   `bootstrap/cache/config.php` hâlâ ESKİ provider listesini taşıyorsa
+   `migrate` o modülün Service Provider'ını hiç ÇALIŞTIRMAZ — migration
+   dizini kaydedilmez, dosyaları migrate'e GÖRÜNMEZ (hatasız, sessizce
+   atlanır). Bu, gerçek bir üretim olayının BİREBİR kök nedenidir (Room
+   Registry modülü — bkz. `docs/kararlar.md` K-102).
+4. Gerekiyorsa `php artisan migrate --force` çalıştırır.
+5. **Ardından `php artisan db:seed --class=RolePermissionSeeder --force`
    çalıştırır — atlanamaz.** Gerekçe: koddaki yeni bir `Permission` case'i
    deploy edilip bu adım koşulmazsa production "There is no permission
    named X for guard web" hatası verir (gerçek üretim olayı — tam sıra ve
    gerekçe: `docs/release-checklist-v2.1.1.md` §1).
-5. Sonucu günlüğe yazar.
-6. **Başarılıysa** işaret dosyası silinir.
-7. **Başarısızsa** işaret dosyası korunur ve hata günlüğe yazılır (bir sonraki
+6. Ardından üretim cache'ini kurar (`config:cache route:cache view:cache
+   event:cache`).
+7. Sonucu günlüğe yazar.
+8. **Başarılıysa** işaret dosyası silinir.
+9. **Başarısızsa** işaret dosyası korunur ve hata günlüğe yazılır (bir sonraki
    cron tekrar dener; sorun görünür kalır).
 
 Bu bölüm yalnızca mimari karardır — `finalize.php` ve deploy workflow'u

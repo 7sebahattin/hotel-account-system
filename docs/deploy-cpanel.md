@@ -62,19 +62,24 @@ nedenle depodan kaldırılmıştır.
    QUEUE_CONNECTION=sync
    ```
 4. `php artisan key:generate --force`
-5. `php artisan migrate --force`
-6. **`php artisan db:seed --class=RolePermissionSeeder --force`** — HER
+5. **Eski cache'i temizle — MIGRATE'TEN ÖNCE, atlanmaz (K-102):**
+   `php artisan config:clear route:clear view:clear event:clear`
+   Gerekçe: önceki deploy'dan kalan bayat bir `bootstrap/cache/config.php`,
+   bu deploy'da YENİ eklenen bir modülün Service Provider'ını taşımaz —
+   o modülün migration dizini `migrate`e hiç kaydedilmez ve dosyaları
+   sessizce, hatasız atlanır (gerçek üretim olayı — Room Registry modülü,
+   bkz. `docs/kararlar.md` K-102). Ayrıca bayat cache yeni `.env`
+   değerlerini de görmezden bırakabilir.
+6. `php artisan migrate --force`
+7. **`php artisan db:seed --class=RolePermissionSeeder --force`** — HER
    deploy'da, migrate'ten hemen sonra, ATLANMAZ. Gerekçe: kodda yeni bir
    `Permission` case'i eklenip deploy edildiğinde, bu adım koşulmazsa
    production'da "There is no permission named X for guard web" hatası
    üretir (gerçek üretim olayı — bkz. `docs/release-checklist-v2.1.1.md`
    §1). Seeder idempotenttir, kullanıcı rol atamalarını bozmaz.
-7. `php artisan storage:link`
-8. Önbellekler — ÖNCE temizle, SONRA kur (bayat cache yeni `.env`
-   değerlerini görmezden bırakabilir):
-   `php artisan config:clear route:clear view:clear event:clear`
-   `php artisan config:cache route:cache view:cache event:cache`
-   (her deploy sonrası tekrarlanır)
+8. `php artisan storage:link`
+9. Production cache'ini kur: `php artisan config:cache route:cache
+   view:cache event:cache` (her deploy sonrası tekrarlanır)
 
 **Tam sıra ve finansal duman testi için: `docs/release-checklist-v2.1.1.md`.**
 

@@ -288,9 +288,12 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
                         ↓
               cPanel cron (dakikada bir)
                         ↓
-       işaret var mı? → php artisan migrate --force
+       işaret var mı? → config:clear / route:clear / view:clear / event:clear
+                          (MIGRATE'TEN ÖNCE — K-102: bayat cache yeni bir
+                          modülün Service Provider'ını taşımazsa migrate
+                          o modülün migration'larını hiç GÖRMEZ)
+                        → php artisan migrate --force
                         → php artisan db:seed --class=RolePermissionSeeder --force
-                        → config:clear / route:clear / view:clear / event:clear
                         → config:cache / route:cache / view:cache / event:cache
                         ↓
         başarılı → günlüğe yaz + işaret dosyasını SİL
@@ -520,13 +523,15 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
     `mode: deploy` + `confirm_target: lemon.derspros.com.tr` ile çalıştırılır.
 11. Deploy sonrası sunucuda (cron/marker mekanizması henüz yok — §6), TAM
     SIRAYLA — **`docs/release-checklist-v2.1.1.md`**'nin bağlayıcı sırasıdır:
-    `php artisan key:generate --force`, `migrate --force`,
+    `php artisan key:generate --force`, sonra **cache ÖNCE temizlenir**
+    (`config:clear route:clear view:clear event:clear` — MIGRATE'TEN ÖNCE,
+    K-102: bayat cache bu deploy'da yeni eklenen bir modülün Service
+    Provider'ını taşımıyorsa `migrate` o modülün migration'larını hiç
+    GÖRMEZ, sessizce atlar), sonra `migrate --force`, sonra
     **`db:seed --class=RolePermissionSeeder --force`** (HER deploy'da,
     migrate'ten hemen sonra — atlanırsa production "no permission named X"
-    hatası verir, gerçek üretim olayı), `storage:link`, sonra önbellek
-    ÖNCE temizlenir SONRA kurulur:
-    `config:clear route:clear view:clear event:clear`,
-    `config:cache route:cache view:cache event:cache`.
+    hatası verir, gerçek üretim olayı), `storage:link`, sonra üretim
+    cache'i KURULUR: `config:cache route:cache view:cache event:cache`.
     **`migrate --force` burada TRIGGER yetkisinin gerçek sınavıdır (§8).**
     Hata verirse durun ve Aşama 4'e **geçmeyin**.
     Ardından `docs/release-checklist-v2.1.1.md` §4'teki finansal duman

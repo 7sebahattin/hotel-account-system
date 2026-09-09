@@ -1873,3 +1873,102 @@ kaldırır HEM de kısmi/tekrarlanan denemeye karşı güvenli hâle getirir.
 iki migration dosyası değişti; Room modülünün model/servis/controller/view
 katmanlarına dokunulmadı. Production migration'ı bu turda ÇALIŞTIRILMADI —
 kullanıcı ayrı bir adımda kendisi tetikleyecektir.
+
+---
+
+## K-102 · GERÇEK kök neden bulundu: K-101'in motor varsayımı YANLIŞTI — asıl sebep bayat provider cache'i
+
+**K-101'in düzeltmesi (idempotent migration + `rooms` için açık `InnoDB`)
+GEÇERLİ ve GEREKLİ kalır** — ama o kaydın "en olası neden" olarak öne
+sürdüğü motor uyuşmazlığı hipotezi **kanıtlanamadı ve YANLIŞ çıktı.** Yeni
+production kanıtı bunu netleştirdi:
+
+```sql
+SHOW CREATE TABLE rooms;                          -- #1146 Table doesn't exist
+SELECT migration, batch FROM migrations
+  WHERE migration LIKE '%room%';                  -- SIFIR SATIR
+```
+
+`rooms` tablosu **hiç oluşturulmamış** ve `create_rooms_table` migration'ı
+`migrations` tablosunda **hiç görünmüyor** — yani bu migration çalıştırılıp
+başarısız olmadı, migrator ona **hiç rastlamadı**. Buna karşın AYNI
+deploy'daki `add_room_id_to_stays_table` çalıştı (kısmen — `stays.room_id`
+kolonu eklendi, FK'de patladı).
+
+**Kök neden — yerelde BİREBİR aynı hata mesajıyla yeniden üretildi:**
+
+1. `Illuminate\Foundation\Application::registerConfiguredProviders()`,
+   provider listesini `bootstrap/providers.php`'den DEĞİL,
+   `config('app.providers')`'dan okur. Bu config değeri, `php artisan
+   config:cache` çalıştırılmışsa `bootstrap/cache/config.php`'den gelir —
+   ve bu dosya `bootstrap/cache/` altında olduğu için deploy tarafından
+   **HİÇ dokunulmaz** (`docs/deploy-github-actions.md` §3'te FTP transfer
+   dışlama listesinde, sunucuda kalıcıdır).
+2. Production'da, Room Registry'den ÖNCEKİ bir deploy'da `config:cache`
+   çalıştırılmıştı. O cache, `RoomsServiceProvider::class`'ı İÇERMEZ
+   (henüz `bootstrap/providers.php`'ye eklenmemişti).
+3. Room Registry deploy edildi: yeni kod (`RoomsServiceProvider.php`,
+   `bootstrap/providers.php`'nin yeni hâli, migration dosyaları) sunucuya
+   yüklendi — ama `bootstrap/cache/config.php` deploy tarafından
+   SİLİNMEDİ/GÜNCELLENMEDİ (1. maddedeki gerekçeyle).
+4. `php artisan migrate --force` çalıştırıldığında, Laravel HÂLÂ bayat
+   cache'i okudu → `RoomsServiceProvider` hiç `register()`/`boot()`
+   edilmedi → `loadMigrationsFrom()` hiç çağrılmadı → migrator'a Rooms
+   modülünün migration dizini hiç KAYDEDİLMEDİ → `create_rooms_table`
+   migrator'a **görünmez** oldu (hata bile vermeden, sessizce).
+5. `StaysServiceProvider` ZATEN eski cache'teydi (Stays modülü aylardır
+   deploy ediliyor) — bu yüzden AYNI deploy'daki YENİ migration dosyası
+   (`add_room_id_to_stays_table`, Stays'in ZATEN kayıtlı dizinine eklenen
+   yeni bir dosya) normal şekilde keşfedildi ve çalıştı — `stays.room_id`
+   kolonunu ekledi, sonra `rooms` tablosuna FK eklemeye çalıştı, `rooms`
+   HİÇ VAR OLMADIĞI için **errno 150 "Foreign key constraint is
+   incorrectly formed"** ile patladı — K-101'in ilk raporundaki hata
+   mesajının **birebir aynısı.**
+
+**Doğrulama (yerelde, gerçek MariaDB ile):** `bootstrap/providers.php`'den
+`RoomsServiceProvider` satırı geçici olarak kaldırılıp `config:cache`
+çalıştırıldı, satır geri eklendi (yeni kod + bayat cache durumu simüle
+edildi), sonra `php artisan migrate` çalıştırıldı:
+```
+SQLSTATE[HY000]: General error: 1005 Can't create table `hotel_account`.`stays`
+(errno: 150 "Foreign key constraint is incorrectly formed") ...
+alter table `stays` add constraint `stays_room_id_foreign` ...
+```
+**Production hatasıyla harfiyen aynı.** `rooms` tablosu bu adımda yoktu;
+`stays.room_id` kolonu vardı. Ardından `php artisan config:clear` çalıştırıldı
+ve `php artisan migrate` tekrar koşturuldu: `create_rooms_table` VE
+`add_room_id_to_stays_table` ikisi de doğru sırada, hatasız tamamlandı —
+`rooms` oluştu, `stays_room_id_foreign` eklendi. K-101'in idempotent
+migration'ı bu ikinci koşuda `stays.room_id`'yi tekrar eklemeye ÇALIŞMADI
+(zaten vardı), yalnızca eksik FK'yi ekledi — kurtarma davranışı da
+doğrulandı.
+
+**Bunun bir Laravel/registration KOD hatası OLMADIĞININ kanıtı:** aynı
+`ModuleServiceProvider` taban sınıfı, aynı `path()` hesaplaması, TÜM diğer
+modüllerde (Payments, CashBook, Companies, …) production'da zaten sorunsuz
+çalışıyor — `RoomsServiceProvider` de birebir aynı deseni izliyor ve
+yerelde defalarca (`migrate:fresh` dahil) hatasız çalıştı. Sorun kod
+DEĞİL, **deploy sırasında çalıştırılan `migrate --force`'un HANGİ provider
+listesini gördüğü** — ki bu da `bootstrap/cache/config.php`'nin GÜNCEL
+mi yoksa BAYAT mı olduğuna bağlı.
+
+**Düzeltme — süreç/dokümantasyon, kod DEĞİL:** `config:clear` (dört
+komutun hepsi) artık her deploy sırasında **MIGRATE'TEN ÖNCE** çalışır,
+SONRA değil. Bu, `RolePermissionSeeder`'ın migrate'ten SONRA çalışması
+gerekliliğiyle (K-099) ÇELİŞMEZ — ikisi de aynı anda doğrudur: sıra artık
+`cache TEMİZLE → migrate → seed → cache KUR`. Değişen dosyalar:
+`docs/release-checklist-v2.1.1.md` (§1/§2/§3), `docs/deploy-cpanel.md`,
+`docs/deploy-lemon.md`, `docs/deploy-github-actions.md` §6, `CLAUDE.md`
+§15. Uygulama kodunda **hiçbir değişiklik yoktur** — `RoomsServiceProvider`,
+`ModuleServiceProvider`, `bootstrap/providers.php` zaten doğruydu ve
+değiştirilmedi.
+
+**Otomatik test yerine neden manuel doğrulama:** bu senaryo
+`bootstrap/providers.php`'yi diskte değiştirmeyi ve gerçek bir `config:cache`
+çalıştırmayı gerektiriyor — CI'da otomatik bir teste dönüştürmek deploy'a
+kritik dosyaları mutasyona uğratacağı için uygun değil. Bunun yerine iki
+GÜVENLİ otomatik test eklendi (`RoomMigrationDiscoveryTest`): (1) normal
+koşullarda migrator'un `rooms`'u `stays`'ten ÖNCE keşfettiğini ve FK'yi
+doğru kurduğunu doğrulayan bir regresyon testi, (2) production'daki kısmi
+durumu (kolon var, FK yok, migration kaydı silinmiş) simüle edip
+`Artisan::call('migrate')`'in güvenle kurtardığını doğrulayan bir test.
