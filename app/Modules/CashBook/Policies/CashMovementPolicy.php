@@ -69,6 +69,13 @@ class CashMovementPolicy
             return false;
         }
 
+        // Bir kaynak kayda (ör. nakit tahsilat) bağlı hareket bu genel ekrandan
+        // ters kaydedilemez (v2.1.1-A) — düzeltme kaynak kaydın kendi iptal
+        // akışından yapılır (CashBookService::reverseMovement() son savunmadır).
+        if ($movement->reference_type !== null) {
+            return false;
+        }
+
         return $user->can(Permission::CashBookOperate->value)
             && $session->opened_by === $user->getKey();
     }

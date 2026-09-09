@@ -51,7 +51,13 @@ class PaymentPermissionTest extends TestCase
         ], $creator);
     }
 
-    /** @param array<string, mixed> $overrides */
+    /**
+     * Bu dosyanın konusu YETKİdir, ödeme kanalı değil — bu yüzden varsayılan
+     * kanal 'bank_transfer'dır (kasa/vardiya koşulu gerektirmez). Nakit
+     * kanalın kendi kuralları `PaymentChannelArchitectureTest`'tedir.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
     private function payload(array $overrides = []): array
     {
         return array_merge([
@@ -59,7 +65,7 @@ class PaymentPermissionTest extends TestCase
             'payment_date' => '2026-09-08',
             'amount' => '5000,00',
             'currency' => 'TRY',
-            'payment_method' => 'cash',
+            'payment_method' => 'bank_transfer',
         ], $overrides);
     }
 

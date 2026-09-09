@@ -25,7 +25,7 @@
                 'currencies' => \App\Modules\Core\Enums\Currency::active(),
                 'expected' => $summary->expected(),
                 'legend' => 'Sayılan tutar',
-                'hint' => 'Alanlar beklenen tutarla doldurulmuştur; farklıysa gerçekte saydığınız tutarı yazın.',
+                'hint' => 'Kasadaki parayı fiilen sayıp gördüğünüz tutarı yazın. Alanlar boştur — sistem sizin için doldurmaz.',
             ])
 
             <x-ui.input label="Kapanış notu" name="closing_note" maxlength="255" :value="old('closing_note')" />

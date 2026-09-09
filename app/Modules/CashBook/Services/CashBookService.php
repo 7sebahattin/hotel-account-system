@@ -115,6 +115,7 @@ class CashBookService
                 expense: $nets[CashMovementType::Expense->value] ?? Money::zero(),
                 cashOut: $nets[CashMovementType::CashOut->value] ?? Money::zero(),
                 cashIn: $nets[CashMovementType::CashIn->value] ?? Money::zero(),
+                companyCollection: $nets[CashMovementType::CompanyCollection->value] ?? Money::zero(),
             );
         }
 
@@ -388,6 +389,11 @@ class CashBookService
     /**
      * Kasa hareketi yazar.
      *
+     * `referenceType`/`referenceId` (v2.1.1-A): hareketin başka bir modülün
+     * kaydına (ör. nakit kanallı bir `Payment`) bağlı olduğunu işaretler.
+     * CashBookService bu değerlerin ANLAMINI bilmez — yalnızca saklar; bu
+     * yüzden Payments modülüne bağımlılık DOĞMAZ (CLAUDE.md §4.3).
+     *
      * @throws CashSessionIsClosed
      * @throws InvalidCashMovement
      */
@@ -400,13 +406,16 @@ class CashBookService
         ?string $description = null,
         ?string $counterparty = null,
         DateTimeInterface|string|null $entryAt = null,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
     ): CashMovement {
         if (! $amount->isPositive()) {
             throw InvalidCashMovement::amountNotPositive();
         }
 
         return DB::transaction(function () use (
-            $session, $type, $currency, $amount, $actor, $description, $counterparty, $entryAt
+            $session, $type, $currency, $amount, $actor, $description, $counterparty, $entryAt,
+            $referenceType, $referenceId,
         ): CashMovement {
             // Kontrol ve yazma ATOMİK olmalıdır: satır kilitlenmeden önce
             // yapılan bir kontrol, tam bu anda başlayan bir devirle (startHandover)
@@ -424,6 +433,8 @@ class CashBookService
                 description: $description,
                 counterparty: $counterparty,
                 entryAt: $entryAt,
+                referenceType: $referenceType,
+                referenceId: $referenceId,
             );
 
             $this->auditLogger->log(
@@ -443,10 +454,32 @@ class CashBookService
      * Ters hareket aynı tipi ve tutarı taşır, yalnızca yönü döner; böylece hem
      * beklenen kasa hem gelir-gider raporu kendiliğinden düzelir.
      *
+     * `intoSession` (v2.1.1-A): verilmezse ters kayıt orijinal hareketin KENDİ
+     * vardiyasına yazılır (mevcut davranış, değişmedi — vardiya hâlâ AÇIK
+     * olmalıdır). Verilirse ters kayıt BELİRTİLEN (açık) vardiyaya yazılır;
+     * bu, orijinal vardiya artık kapanmış olsa bile bir kaynak kaydın (ör.
+     * iptal edilen nakit tahsilat) fiziksel kasa etkisini GÜNCEL vardiyada
+     * düzeltebilmek içindir — parayı geçmişe gitmeden bugün düzeltir, tıpkı
+     * gerçek bir kasanın çalıştığı gibi.
+     *
+     * `allowLinkedSource` (v2.1.1-A): `reference_type` taşıyan bir hareket
+     * (ör. bir `Payment`e bağlı `company_collection`) YALNIZCA bunu `true`
+     * geçen çağıran tarafından ters kaydedilebilir. Genel "Kasa Hareketleri"
+     * ekranındaki manuel ters kayıt asla `true` geçmez: aksi hâlde personel
+     * kasa tarafını düzeltip tahsilatı/cariyi düzeltmeden bırakabilir — aynı
+     * mali etki iki farklı yoldan (yarım) sonlandırılmış olurdu. Düzeltme
+     * yalnızca kaynak kaydın kendi servisinden (ör. `PaymentService::cancel()`)
+     * yapılabilir.
+     *
      * @throws CannotReverseMovement
      */
-    public function reverseMovement(CashMovement $movement, User $actor, ?string $reason = null): CashMovement
-    {
+    public function reverseMovement(
+        CashMovement $movement,
+        User $actor,
+        ?string $reason = null,
+        ?CashSession $intoSession = null,
+        bool $allowLinkedSource = false,
+    ): CashMovement {
         if ($movement->is_reversal) {
             throw CannotReverseMovement::isReversal($movement->getKey());
         }
@@ -458,7 +491,11 @@ class CashBookService
             throw CannotReverseMovement::openingBalance($movement->getKey());
         }
 
-        $session = $movement->session;
+        if ($movement->reference_type !== null && ! $allowLinkedSource) {
+            throw CannotReverseMovement::linkedToExternalSource($movement->getKey());
+        }
+
+        $session = $intoSession ?? $movement->session;
 
         if ($session === null) {
             throw CannotReverseMovement::sessionClosed($movement->getKey());
@@ -494,6 +531,8 @@ class CashBookService
                     description: $reason ?? '[İPTAL] '.($movement->description ?? $movement->type->label()),
                     counterparty: $movement->counterparty,
                     entryAt: null,
+                    referenceType: $movement->reference_type,
+                    referenceId: $movement->reference_id,
                     isReversal: true,
                     reversesMovementId: $movement->getKey(),
                 );
@@ -516,6 +555,26 @@ class CashBookService
     public function isReversed(CashMovement $movement): bool
     {
         return CashMovement::query()->where('reverses_movement_id', $movement->getKey())->exists();
+    }
+
+    /**
+     * Bir kaynak kaydın (ör. nakit kanallı `Payment`) HÂLÂ geçerli olan
+     * kasa hareketi — `LedgerService::activeEntryForSource()` ile aynı
+     * kalıp. "Geçerli" = kendisi ters kayıt olmayan VE ters kaydı alınmamış.
+     */
+    public function activeMovementForSource(string $referenceType, int $referenceId): ?CashMovement
+    {
+        return CashMovement::query()
+            ->where('reference_type', $referenceType)
+            ->where('reference_id', $referenceId)
+            ->where('is_reversal', false)
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('cash_movements as reversals')
+                    ->whereColumn('reversals.reverses_movement_id', 'cash_movements.id');
+            })
+            ->orderByDesc('id')
+            ->first();
     }
 
     /**
@@ -805,6 +864,8 @@ class CashBookService
         ?string $description,
         ?string $counterparty,
         DateTimeInterface|string|null $entryAt,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
         bool $isReversal = false,
         ?int $reversesMovementId = null,
     ): CashMovement {
@@ -817,6 +878,8 @@ class CashBookService
             'entry_at' => $entryAt !== null ? Carbon::parse($entryAt) : Carbon::now(),
             'description' => $description !== null ? mb_substr($description, 0, 255) : null,
             'counterparty' => $counterparty !== null ? mb_substr($counterparty, 0, 150) : null,
+            'reference_type' => $referenceType,
+            'reference_id' => $referenceId,
             'is_reversal' => $isReversal,
             'reverses_movement_id' => $reversesMovementId,
             'created_by' => $actor->getKey(),

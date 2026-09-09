@@ -28,4 +28,18 @@ class CannotReverseMovement extends CashBookException
     {
         return new self("#{$movementId} numaralı hareketin vardiyası kapanmıştır; ters kayıt yazılamaz.");
     }
+
+    /**
+     * `reference_type` taşıyan hareketler (ör. nakit kanallı bir tahsilata
+     * bağlı `company_collection`) genel Kasa Hareketleri ekranından ters
+     * kaydedilemez — düzeltme yalnızca kaynak kaydın kendi iptal akışından
+     * yapılır, aksi hâlde kasa düzelir ama tahsilat/cari düzelmeden kalır.
+     */
+    public static function linkedToExternalSource(int $movementId): self
+    {
+        return new self(
+            "#{$movementId} numaralı hareket bir kaynak kayda (ör. tahsilat) bağlıdır; "
+            .'buradan ters kaydedilemez. Düzeltme için ilgili kaydı iptal edin.'
+        );
+    }
 }

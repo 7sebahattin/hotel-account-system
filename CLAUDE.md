@@ -377,8 +377,13 @@ kasa tabloları FİZİKSEL parayı izler. Aralarında yazma bağı yoktur.
   debit/credit ayrımının kasa karşılığıdır.
 - **Açılış bakiyesi ayrı tabloda değil, `opening` tipli bir harekettir**: beklenen
   kasa tek formülle hesaplanır ve para için iki kaynak olmaz.
-- `reference_type/reference_id` ileride PMS/Payments bağlanabilsin diye açıktır;
-  V1'de uygulama tarafından DOLDURULMAZ (§3.3'teki kaynak izleme deseni).
+- `reference_type/reference_id` (v2.1.1-A'dan itibaren DOLUYOR): nakit kanallı
+  bir `Payment`e bağlı `company_collection` hareketinde `'payment'` / tahsilat
+  kimliği taşır (§3.3'teki kaynak izleme deseni, artık gerçekten kullanımda).
+  `CashBookService` bu değerlerin ANLAMINI bilmez, yalnızca saklar — Payments'a
+  bağımlılık DOĞMAZ. Bağlı bir hareket genel Kasa Hareketleri ekranından
+  DOĞRUDAN ters kaydedilemez (`CashMovementPolicy::reverse()`); düzeltme
+  yalnızca kaynak kaydın (`PaymentService::cancel()`) kendi akışından yapılır.
 - Tutar `DECIMAL(15,2)`'dir (§5 genel kuralı) — `amount_minor` DEĞİL. Tamsayı
   kuruş aritmetiği PHP tarafında `Core\Support\Money` ile yapılır.
 
@@ -684,6 +689,55 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
   iptal edilmişse hiç yoktur.
 - Denetim kaydı `Auditable` trait'i ile değil, `PaymentService` tarafından açıkça yazılır.
 
+**Kanal davranışı (`payment_method`, v2.1.1-A):** `PaymentMethod` artık salt bilgi
+amaçlı DEĞİLDİR:
+
+| Kanal | Cariyi etkiler | Fiziksel kasayı etkiler |
+|---|:--:|:--:|
+| `cash` (Nakit) | ✅ | ✅ — `company_collection` hareketi |
+| `credit_card` (Kredi Kartı) | ✅ | ❌ |
+| `bank_transfer` (Havale/EFT) | ✅ | ❌ |
+| `cheque` (Çek) | ✅ | ❌ — mevcut davranış korunur, yeniden tasarlanmadı |
+| `other` / boş | ✅ | ❌ |
+
+- **Nakit (`cash`):** `PaymentService::create()` aynı transaction'da
+  `CashBookService::recordMovement()` ile `CashMovementType::CompanyCollection`
+  ("Cari Tahsilat") tipinde bir hareket yazar — `reference_type/reference_id`
+  ile tahsilata bağlı, tutar/para birimi tahsilatla birebir aynı. Bu hareket
+  **yalnızca açık vardiyayı yöneten kullanıcı** tarafından yazılabilir
+  (CLAUDE.md §8/Kasa Defteri "Hesap verebilirlik" ile AYNI kural — admin/patron
+  dahil kimse başkasının vardiyasına hareket yazamaz); açık vardiya yoksa veya
+  aktör sahibi değilse **tüm işlem** (Payment + Ledger dahil) geri alınır —
+  kısmi/yarım tahsilat oluşmaz.
+- **Kart/Banka/Çek/Diğer:** yalnızca cariyi etkiler; fiziksel kasaya HİÇ
+  dokunmaz — kasa sayımını, beklenen kasayı ve personel devrini etkilemez.
+- **İptal:** nakit kanalda, cari ters kaydının yanında bağlı kasa hareketi de
+  ters kaydedilir — ama **orijinal hareketin kendi vardiyasına değil, GÜNCEL
+  açık vardiyaya** (`CashBookService::reverseMovement(..., intoSession:
+  $aktifVardiya)`): 7/24 işletmede vardiya o ana kadar çoktan devredilmiş/
+  kapanmış olabilir; para geçmişe gitmeden BUGÜN düzeltilir, tıpkı gerçek bir
+  kasada olduğu gibi. Kasa tarafı düzeltilemiyorsa (açık vardiya yok) **tüm
+  iptal reddedilir** — cari ile kasa yarım kalmış biçimde ayrışmaz. Kart/
+  banka/çek iptalinde kasaya hiç dokunulmaz.
+  Bağlı bir kasa hareketi **genel Kasa Hareketleri ekranından doğrudan ters
+  kaydedilemez** (`CashMovementPolicy::reverse()` + `CashBookService::
+  reverseMovement()`'ın `allowLinkedSource` koruması) — aksi hâlde kasa
+  düzelir ama tahsilat/cari düzelmeden yarım kalabilirdi. Düzeltme yalnızca
+  `PaymentService::cancel()` üzerinden yapılır.
+- **Z-raporu YOKTUR ve v2.1.1'de planlanmıyor.** Kanal ayrımı yalnızca
+  cari/kasa doğruluğu içindir, POS mutabakatı değildir.
+- **Vardiya kanal özeti:** `PaymentService::shiftCollectionSummary(CashSession
+  $session)` bir vardiyanın nakit/kart/banka tahsilatlarını para birimi
+  bazında AYRI döner (§6/L5 — asla birleştirilmez). Kart/banka tutarları
+  `cash_session_id` TAŞIMAZ (kasaya hiç yazılmadıkları için); vardiya sahibinin
+  (`created_by`) o vardiyanın zaman penceresinde yazdığı kayıtlarla
+  yaklaşıklanır. Personel devri bu geçmiş kayıtları SİLMEZ/SIFIRLAMAZ — yeni
+  vardiyanın kanal toplamları boşla başlar, eskiler kalıcı, tarihsel kayıt
+  olarak durur (`PaymentService::totalsByMethodAndCurrencyBetween()` dönem
+  bazlı raporlama için de kullanılabilir).
+- Yeni bir yetki AÇILMADI: kural mevcut `payments.create` + `cashbook.operate`
+  (Personel'de zaten ikisi de var) üzerinden yürür.
+
 ### Ledger / Current Account
 
 Ekstre hesabının tamamı `Ledger\Services\LedgerStatementService`'tedir; controller'da
@@ -829,6 +883,13 @@ Fiziksel kasanın vardiya/devir defteri. **Cari hesaptan tamamen ayrıdır**:
 edilmesi ayrı olaylardır: 5.000 TRY'lik konaklama nakit tahsil edilmediyse
 kasada +0'dır.
 
+Bağımlılık TEK YÖNLÜdür (v2.1.1-A): `Payments\Services\PaymentService`,
+nakit kanallı tahsilatlar için `CashBookService`'i çağırır (§4.3/1'in izin
+verdiği "başka modülün Service'ini çağırma" deseni — `Stays`/`Payments`'ın
+zaten `LedgerService`'e yaptığı gibi). `CashBookService` bunun TERSİNİ asla
+yapmaz; Payments'ın var olduğunu bilmez, `reference_type`'ın ne anlama
+geldiğini bilmez, yalnızca opak bir string olarak saklar.
+
 **Vardiya:** aynı anda yalnızca BİR açık vardiya olur (§5.8). Vardiyayı açan
 kişi kasadan sorumludur.
 
@@ -842,6 +903,13 @@ kişi kasadan sorumludur.
 | `expense` (gider) | − | gider |
 | `cash_out` (ara kasa/patron/banka teslimi) | − | **hayır** |
 | `cash_in` (kasaya dışarıdan para) | + | **hayır** |
+| `company_collection` (nakit kanallı cari tahsilat, v2.1.1-A) | + | gelir |
+
+`company_collection` **yalnızca `PaymentService` tarafından üretilir** —
+`CashMovementType::selectable()`'da YOKTUR, personel Kasa Hareketi formundan
+elle seçemez (aksi hâlde aynı tahsilatın kasa etkisi iki farklı yoldan
+üretilip tek doğruluk kaynağı ilkesi bozulurdu). Gerçek gelirdir: firma borcu
+fiilen azalmıştır.
 
 > **EN KRİTİK KURAL:** ara kasa/patron teslimi **GİDER DEĞİLDİR**. Kasada
 > 14.000 TRY varken patrona 12.000 teslim edilirse fiziksel kasa 2.000'e düşer
@@ -850,7 +918,7 @@ kişi kasadan sorumludur.
 
 **Beklenen kasa** para birimi bazında hesaplanır ve para birimleri ASLA
 birleştirilmez (§6/L5):
-`açılış + oda geliri + ek gelir + kasa girişi − gider − kasa çıkışı`.
+`açılış + oda geliri + ek gelir + kasa girişi + cari tahsilat − gider − kasa çıkışı`.
 Hesap SQL'de değil serviste, tamsayı kuruş üzerinden yapılır.
 
 **Değişmezlik:** kasa hareketi güncellenemez ve silinemez — ne hard delete ne
@@ -858,6 +926,9 @@ soft delete, ne de route. Düzeltme **ters harekettir**: aynı tip, aynı tutar,
 ters yön, `is_reversal = true`. Böylece hem beklenen kasa hem gelir-gider
 raporu kendiliğinden düzelir. **Açılış bakiyesi ters kaydedilemez** (devredilen
 tutarla bağı kopardı); hatalı açılış kapanış sayımındaki FARK olarak görünür.
+Bir kaynak kayda bağlı hareket (`reference_type` dolu) genel Kasa Hareketleri
+ekranından ters kaydedilemez — düzeltme kaynak kaydın kendi akışından yapılır
+(yukarı bakınız, §8/Payments "Kanal davranışı").
 
 **Devir İKİ TARAFLIDIR.** Teslim eden devri başlatır (`pending`); teslim alan
 KENDİ HESABIYLA kabul edene kadar devir tamamlanmaz ve kasa teslim edenin
@@ -871,6 +942,13 @@ yasaktır (DB CHECK).
 beklenen tutar SUNUCUDA yeniden hesaplanır (formdan alınmaz). Fark para birimi
 bazında ayrı tutulur, birbirine çevrilmez. Beklenen var ama hiç sayılmadıysa
 satır yine yazılır — eksik para sessizce kaybolmaz.
+
+> **P0 GÜVENLİK KURALI (v2.1.1-A):** kapanış sayımı ve devir formlarındaki
+> tutar alanı **ASLA sistemin beklenen tutarıyla ÖN-DOLDURULMAZ** —
+> `_amount-fields.blade.php` boş gelir, beklenen tutar yalnızca REFERANS
+> olarak ipucu metninde ("Beklenen: …") görünür. Aksi hâlde personel gerçekte
+> saymadan formu olduğu gibi gönderebilir ve fiziksel sayım kontrolü sessizce
+> etkisiz kalırdı — bu, canlı kullanımda tespit edilen bir denetim bulgusuydu.
 
 **Hesap verebilirlik:** bir vardiyaya hareket girmek, ters kayıt yazmak ve
 devretmek YALNIZCA vardiya sahibine açıktır — admin/patron dahil kimse

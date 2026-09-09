@@ -218,6 +218,7 @@ class DashboardService
             expense: $a->expense->add($b->expense),
             cashOut: $a->cashOut->add($b->cashOut),
             cashIn: $a->cashIn->add($b->cashIn),
+            companyCollection: $a->companyCollection->add($b->companyCollection),
         );
     }
 

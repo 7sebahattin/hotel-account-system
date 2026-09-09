@@ -29,6 +29,7 @@ final readonly class CashSessionTotals
         public Money $expense,
         public Money $cashOut,
         public Money $cashIn,
+        public Money $companyCollection,
     ) {}
 
     /** Beklenen fiziksel kasa = tüm hareketlerin işaretli toplamı. */
@@ -39,13 +40,19 @@ final readonly class CashSessionTotals
             ->add($this->extraIncome)
             ->add($this->expense)
             ->add($this->cashOut)
-            ->add($this->cashIn);
+            ->add($this->cashIn)
+            ->add($this->companyCollection);
     }
 
-    /** Gelir toplamı — kasa girişi ve açılış bakiyesi GELİR DEĞİLDİR. */
+    /**
+     * Gelir toplamı — kasa girişi ve açılış bakiyesi GELİR DEĞİLDİR.
+     *
+     * Nakit kanallı cari tahsilat (`companyCollection`) GERÇEK gelirdir: firma
+     * borcu fiilen azalmıştır (v2.1.1-A).
+     */
     public function income(): Money
     {
-        return $this->roomIncome->add($this->extraIncome);
+        return $this->roomIncome->add($this->extraIncome)->add($this->companyCollection);
     }
 
     /**
@@ -63,6 +70,7 @@ final readonly class CashSessionTotals
             CashMovementType::Expense => $this->expense,
             CashMovementType::CashOut => $this->cashOut,
             CashMovementType::CashIn => $this->cashIn,
+            CashMovementType::CompanyCollection => $this->companyCollection,
         };
     }
 

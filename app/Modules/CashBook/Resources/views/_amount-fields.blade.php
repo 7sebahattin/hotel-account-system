@@ -4,10 +4,18 @@
     Her para birimi AYRI bir alandır ve ayrı kalır: hiçbir yerde tek toplam
     gösterilmez, hiçbir çevrim yapılmaz (CLAUDE.md §6/L5).
 
+    P0 GÜVENLİK KURALI (v2.1.1-A §7): alan ASLA sistemin hesapladığı beklenen
+    tutarla ÖN-DOLDURULMAZ. Personel gerçekte saymadan formu olduğu gibi
+    gönderebilir hâle gelirse fiziksel sayım kontrolü sessizce etkisiz kalır.
+    Beklenen tutar yalnızca REFERANS olarak ipucu metninde gösterilir; giriş
+    alanının gerçek değeri değildir. `old()` yalnızca doğrulama hatası sonrası
+    kullanıcının KENDİ yazdığı değeri geri getirmek içindir.
+
     Parametreler:
       $currencies  — gösterilecek para birimleri (Currency[])
-      $expected    — array<string, Money>|null: varsa "Beklenen: …" ipucu ve
-                     alanın ön-doldurulmuş değeri olur (sayım/devir formları).
+      $expected    — array<string, Money>|null: varsa yalnızca "Beklenen: …"
+                     ipucunda gösterilir (sayım/devir formları); alanı ASLA
+                     doldurmaz.
       $legend      — alan grubunun başlığı
 --}}
 @php
@@ -26,7 +34,6 @@
             @php
                 $code = $currency->value;
                 $expectedMoney = $expected[$code] ?? null;
-                $default = $expectedMoney?->toDecimal();
             @endphp
 
             <x-ui.input
@@ -37,7 +44,7 @@
                 inputmode="decimal"
                 placeholder="0,00"
                 class="tabular-nums"
-                :value="old('amounts.'.$code, $default)"
+                :value="old('amounts.'.$code)"
                 :hint="$expectedMoney ? 'Beklenen: '.$expectedMoney->format($currency) : null" />
         @endforeach
     </div>

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\CashBook\Exceptions\CashBookException;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
+use App\Modules\Payments\Exceptions\CashSessionNotOwnedByActor;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Filters\PaymentFilter;
@@ -60,7 +62,11 @@ class PaymentController extends Controller
 
     public function store(StorePaymentRequest $request): RedirectResponse
     {
-        $payment = $this->payments->create($request->validated(), $request->user());
+        try {
+            $payment = $this->payments->create($request->validated(), $request->user());
+        } catch (CashBookException|CashSessionNotOwnedByActor $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('payments.show', $payment)
             ->with('success', 'Tahsilat kaydedildi ve firma carisine işlendi.');
@@ -103,7 +109,7 @@ class PaymentController extends Controller
                 (string) $request->validated()['cancellation_reason'],
                 $request->user(),
             );
-        } catch (PaymentAlreadyCancelled $e) {
+        } catch (PaymentAlreadyCancelled|CashBookException $e) {
             return back()->with('error', $e->getMessage());
         }
 

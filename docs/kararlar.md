@@ -1294,3 +1294,112 @@ alt dize çakışmasına karşı testler tutar yerine ayırt edici açıklama me
 geçirildi; (3) N+1 testlerinde ısınma isteği eksikti, bu da "sorgu sayısı
 AZALDI" gibi ters bir sahte sonuç üretiyordu (Gün 11'den bilinen desen) —
 her ölçümden önce bir ısınma isteği eklendi.
+
+## K-094 · v2.1.1-A: Ödeme kanalı mimarisi — nakit kasaya bağlanır, kart/banka bağlanmaz
+
+**Bağlam:** Canlı kullanım audit'i (LEMON v2.1.1) `PaymentMethod`'un o ana
+kadar salt bilgi amaçlı olduğunu, kasa ile hiç ilişkilendirilmediğini tespit
+etti. Aynı audit'te P0 bir güvenlik açığı bulundu: kapanış sayımı/devir
+formlarındaki tutar alanı sistemin BEKLENEN tutarıyla önceden dolduruluyordu
+— personel gerçekte saymadan formu olduğu gibi gönderebilirdi.
+
+**Karar 1 — Kanal ayrımı, yeni modül DEĞİL:** `Payments\Services\PaymentService`
+artık `CashBookService`'i TEK YÖNLÜ çağırıyor (Stays/Payments'ın zaten
+`LedgerService`'e yaptığı desenin aynısı, CLAUDE.md §4.3/1). `CashBookService`
+Payments'ın var olduğunu hâlâ bilmiyor — `cash_movements.reference_type/
+reference_id` (§3.3'ten beri açık, hiç doldurulmamış kolonlar) artık ilk kez
+kullanılıyor ve CashBookService bu değerlerin anlamını bilmeden yalnızca
+saklıyor. Yeni bir Model/Servis katmanı, yeni bir "ödeme" soyutlaması AÇILMADI
+— mevcut `Payment` modeli kanonik tahsilat kaydı olarak KORUNDU.
+
+**Karar 2 — Yeni `CashMovementType::CompanyCollection` ('company_collection'),
+`selectable()`'da YOK:** Nakit tahsilatın kasa karşılığı, mevcut `room_income`/
+`extra_income` (manuel, tahsilattan bağımsız girişler) ile KARIŞTIRILMADI —
+ayrı bir tip açıldı ki iki farklı kavram (kasadan elle girilen gelir vs.
+tahsilattan otomatik gelen nakit) birbirine karışmasın ve raporlanabilir
+kalsın. `selectable()`'da YOK: personel Kasa Hareketi formundan elle
+seçemez — aksi hâlde aynı tahsilatın kasa etkisi iki farklı yoldan (elle +
+otomatik) üretilebilir, tek doğruluk kaynağı ilkesi bozulurdu.
+`affectsIncomeStatement() = true`: gerçek gelirdir, firma borcu fiilen
+azalmıştır — `cash_out`/`cash_in`'in "para taşır, gelir/gider üretmez"
+ilkesiyle KARIŞTIRILMAMALIDIR.
+
+**Karar 3 — Yalnızca vardiya sahibi nakit tahsilat girebilir/iptal edebilir:**
+CLAUDE.md §8/Kasa Defteri "Hesap verebilirlik" kuralının ("admin/patron dahil
+kimse başkasının vardiyasına hareket yazamaz") DOĞAL bir uzantısı olarak
+uygulandı — yeni bir istisna İCAT EDİLMEDİ. Nakit tahsilat kaydı bir kasa
+hareketi ÜRETTİĞİ için aynı kural geçerli: `PaymentService::create()` açık
+vardiyayı `activeSession()`'dan okur, sahibi aktörle eşleşmiyorsa
+`CashSessionNotOwnedByActor` fırlatır, açık vardiya hiç yoksa mevcut
+`NoOpenCashSession` (CashBook modülünden yeniden kullanıldı, kopyalanmadı)
+fırlatır — HER İKİ durumda da tüm işlem (Payment + Ledger dahil) geri alınır.
+
+**Karar 4 — İptalde kasa düzeltmesi orijinal vardiyaya değil GÜNCEL açık
+vardiyaya yazılır:** `CashBookService::reverseMovement()`'a geriye dönük
+uyumlu iki yeni parametre eklendi: `?CashSession $intoSession = null`
+(verilmezse eski davranış — orijinal hareketin KENDİ vardiyasına, hâlâ açık
+olmalı) ve `bool $allowLinkedSource = false`. 7/24 işletmede bir tahsilat,
+onu alan vardiya çoktan kapanmış/devredilmiş olduktan SONRA iptal edilebilir;
+CLAUDE.md'nin "ters kayıt orijinalin tarihini taşır" ilkesi CARİ tarafı için
+hâlâ geçerli (Ledger değişmedi) ama KASA tarafı için para geçmişe gidip
+kapanmış bir vardiyayı değiştiremez — bunun yerine güncel vardiyaya bir
+düzeltme yazılır ("bugünün kasası beklenenden X az, çünkü geçmiş bir tahsilat
+iptal edildi"), tıpkı gerçek bir kasanın çalıştığı gibi. Kasa tarafı
+düzeltilemiyorsa (o an açık vardiya yok) TÜM iptal reddedilir — cari ile kasa
+yarım kalmış biçimde ayrışmaz (`DB::transaction()` zaten bunu garanti eder,
+yeni olan yalnızca "hangi vardiyaya yazılacağı" kararı).
+
+**Karar 5 — Bağlı hareket genel Kasa Hareketleri ekranından ters
+kaydedilemez:** `allowLinkedSource` varsayılan `false`'tur — genel ekran
+(`CashMovementController::reverse()`) hiçbir zaman `true` geçmez.
+`CashMovementPolicy::reverse()` da aynı kısıtı UI seviyesinde uygular
+(`reference_type !== null` ise buton hiç görünmez). İkisi de gerekli: Policy
+HTTP'yi korur, Service son savunmadır (CLAUDE.md §7.1). Bu korumanın
+gerekçesi somut: korunmasaydı personel kasa tarafını düzeltip tahsilatı/
+cariyi düzeltmeden bırakabilirdi — aynı mali etki iki farklı yoldan yarım
+sonlandırılmış olurdu.
+
+**Karar 6 (P0 düzeltme) — Sayım/devir tutar alanı ASLA ön-doldurulmaz:**
+`_amount-fields.blade.php`'deki `$default = $expectedMoney?->toDecimal()`
+kaldırıldı; alan yalnızca `old()`'dan (doğrulama hatası sonrası kullanıcının
+KENDİ yazdığı değer) doldurulur. Beklenen tutar hâlâ ipucu METNİNDE görünür
+("Beklenen: …") — bilgi kaybolmaz, yalnızca giriş alanının GERÇEK değeri
+olmaktan çıkarılır. `sessions/open.blade.php` zaten bu deseni doğru
+uyguluyordu (hiç `expected` geçmiyordu); düzeltme yalnızca `close`/`transfers.
+create` ekranlarını bu ZATEN VAR OLAN doğru desenle hizaladı.
+
+**Karar 7 — Vardiya kanal özeti yeni bir sorgu YAZAR ama SABİT sayıdadır:**
+"Bir vardiyada kim ne kadar kart/banka tahsilatı aldı" sorusu için `payments`
+tablosuna `cash_session_id` kolonu EKLENMEDİ (kart/banka hiç kasaya
+yazılmadığı için oturumla fiziksel bir bağı yok) — bunun yerine vardiya
+sahibinin (`created_by`) o vardiyanın zaman penceresinde (`opened_at`–
+`closed_at`/şu an) yazdığı kayıtlarla yaklaşıklandı; bu, CashBook'un
+"yalnızca vardiya sahibi hareket yazar" kuralıyla tutarlıdır. Migration
+gerekmedi.
+
+**Karar 8 — Geriye dönük uyum:** hiçbir mevcut `payments` satırı taşınmadı/
+değiştirilmedi. `payment_method` zaten `nullable` olduğu için "eski/
+sınıflandırılamayan kayıt" durumu zaten `NULL` ile temsil ediliyordu — yeni
+bir "legacy" değeri İCAT EDİLMEDİ. `payment_method = 'cash'` taşıyan ama bu
+özellikten ÖNCE oluşturulmuş (bağlı kasa hareketi hiç olmayan) bir kayıt,
+iptal edildiğinde `CashBookService::activeMovementForSource()` null döner ve
+kasa tarafı sessizce atlanır — açık vardiya ZORUNLULUĞU dahi aranmaz (yoksa
+var olmayan bir şeyi düzeltmeye çalışırdı). `cash_movements_type_valid` ve
+`cash_movements_direction_matches_type` CHECK'leri ileri-yönlü migration'la
+(DROP + yeniden CREATE, `add_cheque_to_payment_methods` ile AYNI kalıp)
+genişletildi; mevcut satırlar hiç etkilenmedi.
+
+**Karar 9 — Yeni yetki AÇILMADI:** Kural mevcut `payments.create` +
+`cashbook.operate` üzerinden yürür (Personel'de zaten ikisi de var,
+CLAUDE.md §7.3). `RolePermissionSeeder`'a dokunulmadı — canlı ortamda
+yaşanan `cashbook.operate` eksikliği olayının AYNISININ tekrarlanmaması için
+bilinçli bir tercih: yeni yetki = yeni seed riski.
+
+**Etkilenen dosyalar (özet):** `CashMovementType`, migration (yeni CHECK),
+`CashSessionTotals` (+`companyCollection`), `CashBookService` (`recordMovement`/
+`reverseMovement`/`insertMovement` imzaları + `activeMovementForSource()`),
+`CashMovementPolicy`, `DashboardService::combineTotals()`, `PaymentMethod`
+(docblock), `PaymentService` (kanal mantığı + `shiftCollectionSummary()` +
+`totalsByMethodAndCurrencyBetween()`), yeni `CashSessionNotOwnedByActor`
+istisnası, yeni `ShiftCollectionSummary` DTO'su, `PaymentController`,
+`_amount-fields.blade.php` (P0).
