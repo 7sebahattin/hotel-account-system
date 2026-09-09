@@ -50,7 +50,17 @@
             <ul>
                 @foreach ($items as $item)
                     <li>
+                        {{--
+                            v2.1.1-B.1 §2/§3: "Kasa Hareketi" tam sayfa
+                            gezinmesi YERİNE bir modal/sheet açar —
+                            `data-cash-movement-trigger` app.js'teki
+                            `initCashMovementDialog()` tarafından yakalanır.
+                            `href` GERÇEK bir yedektir: JS kapalıysa veya
+                            fetch başarısız olursa tarayıcı normal şekilde
+                            standalone sayfaya gider (kullanıcı talimatı §1).
+                        --}}
                         <a href="{{ route($item['route'], $item['params']) }}"
+                           @if ($item['route'] === 'cashbook.movements.create') data-cash-movement-trigger @endif
                            class="flex min-h-11 items-center gap-2.5 px-3 text-sm text-tx hover:bg-well">
                             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
                                  class="size-4 shrink-0 text-mut" aria-hidden="true">

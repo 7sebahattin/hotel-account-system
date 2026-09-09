@@ -162,6 +162,146 @@ function initQuickActions() {
 document.addEventListener('DOMContentLoaded', initQuickActions);
 
 /**
+ * "Teslim alan" alanı yalnızca `requires_recipient` kategorisinde görünür.
+ *
+ * TEK, adlandırılmış bir fonksiyondur — hem normal sayfa yüklemesinde
+ * (`document` kökü) hem de Kasa Hareketi modalı içerik enjekte ettikten
+ * SONRA (o parçanın kökü) elle çağrılır. `<dialog>` içeriği `innerHTML` ile
+ * yazıldığından, o parça içindeki bir `<script>` etiketi ASLA ÇALIŞMAZ —
+ * bu yüzden mantık burada, app.js'te tek kopya olarak durur (v2.1.1-B.1 §4:
+ * kategori/system-type kuralları JS'te tekrarlanmaz/kopyalanmaz).
+ */
+function initRecipientToggle(root) {
+    const select = root.querySelector('select[name="category_id"]');
+    const field = root.querySelector('[data-recipient-field]');
+    if (!select || !field) return;
+
+    const sync = () => {
+        const option = select.options[select.selectedIndex];
+        const requires = option?.dataset.requiresRecipient === '1';
+        field.hidden = !requires;
+    };
+
+    select.addEventListener('change', sync);
+    sync();
+}
+
+document.addEventListener('DOMContentLoaded', () => initRecipientToggle(document));
+
+/**
+ * Kasa Hareketi modal/sheet'i (v2.1.1-B.1).
+ *
+ * Hızlı İşlem'deki "Kasa Hareketi" ARTIK tam sayfa gezinmesi DEĞİL, hafif
+ * bir modal/sheet açar. Kabuk (`<dialog>`) her sayfada BOŞ durur; içerik
+ * yalnızca kullanıcı GERÇEKTEN tıkladığında `fetch()` ile yüklenir — bu
+ * yüzden global bir kasa/kategori sorgusu her sayfa yüklemesinde ÇALIŞMAZ.
+ *
+ * Form GERÇEK bir <form> olarak POST edilir (SPA/AJAX mimarisi YOKTUR):
+ * başarılı gönderim tam sayfa yönlendirmesiyle Kasa Defteri'ne döner (modal
+ * kendiliğinden ekrandan gider); doğrulama hatası standalone "Hareket ekle"
+ * sayfasına yönlendirilir (bkz. `StoreCashMovementRequest::failedValidation()`
+ * / `CashMovementController::backToCreate()`) — Referer'a göre BELİRSİZ bir
+ * sayfaya değil, HER ZAMAN formu render eden aynı sayfaya.
+ *
+ * Vardiya yoksa veya yetki yoksa: `fetch()` yönlendirmeyi kendiliğinden
+ * takip eder (`response.redirected`) ya da 403 döner (`!response.ok`) —
+ * her iki durumda da modal açılmaz, tarayıcı GERÇEK bir sayfaya gider. Böyle
+ * bir "yarım modal" asla görünmez.
+ */
+function initCashMovementDialog() {
+    const dialog = document.querySelector('#kasa-hareketi-dialog');
+    const content = dialog?.querySelector('[data-cash-dialog-content]');
+    const triggers = Array.from(document.querySelectorAll('[data-cash-movement-trigger]'));
+    if (!dialog || !content || triggers.length === 0) return;
+
+    let focusOnClose = null;
+
+    const goTo = (url) => { window.location.href = url; };
+
+    /**
+     * Hızlı İşlem panelini kapatır — ama tetikleyicinin KENDİ menü öğesine
+     * değil, o panelin görünür kalan TOGGLE düğmesine odak döndürülecektir.
+     *
+     * Panel `hidden` olunca içindeki tetikleyici `<a>` artık render edilmez
+     * (`display:none`) ve tarayıcı odağı ORADAN ZORLA alır (görünmeyen bir
+     * elemana odak KALAMAZ) — bu yüzden dialog kapandığında o `<a>`'ya
+     * `.focus()` çağırmak sessizce başarısız olurdu (hâlâ gizli bir atanın
+     * içindedir). Odak bunun yerine panel her zaman görünür kalan toggle
+     * düğmesine döner — önceki mobil çekmece odak hatasının (K-086/K-088)
+     * AYNI sınıfı burada TEKRAR AÇILMAZ.
+     */
+    const closeQuickActionPanels = (trigger) => {
+        const ownToggle = trigger.closest('[data-quick-action]')?.querySelector('[data-quick-action-toggle]') ?? null;
+
+        document.querySelectorAll('[data-quick-action-panel]').forEach((panel) => { panel.hidden = true; });
+        document.querySelectorAll('[data-quick-action-toggle]').forEach((toggle) => {
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+
+        return ownToggle;
+    };
+
+    const open = async (trigger) => {
+        focusOnClose = closeQuickActionPanels(trigger);
+
+        content.innerHTML = '<p class="p-6 text-sm text-mut">Yükleniyor…</p>';
+        dialog.showModal();
+
+        let response;
+        try {
+            response = await fetch(trigger.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        } catch {
+            dialog.close();
+            goTo(trigger.href);
+            return;
+        }
+
+        // Vardiya yok (kasaya yönlendirme) veya yetki yok (403/diğer) —
+        // ikisinde de modal DEĞİL, gerçek bir sayfa gösterilir.
+        if (response.redirected || !response.ok) {
+            dialog.close();
+            goTo(response.url || trigger.href);
+            return;
+        }
+
+        content.innerHTML = await response.text();
+        initRecipientToggle(content);
+        content.querySelector('select, input, textarea')?.focus();
+    };
+
+    triggers.forEach((trigger) => {
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            open(event.currentTarget);
+        });
+    });
+
+    // Arka plana (::backdrop) tıklama = kapatma; içerik dışına tıklamayı
+    // `event.target === dialog` ile ayırt ederiz (dialog'un KENDİSİ yalnızca
+    // backdrop alanında hedef olabilir, içindeki `<div>` her zaman kendi
+    // hedefini taşır).
+    dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) dialog.close();
+        if (event.target instanceof Element && event.target.closest('[data-cash-dialog-close]')) {
+            dialog.close();
+        }
+    });
+
+    // Kapanış hem ESC/backdrop hem programatik `close()` için TEK yerden
+    // geçer: içerik boşaltılır (kapalı dialogun içinde odaklanabilir hiçbir
+    // şey KALMAZ) ve odak, Hızlı İşlem'i açan TOGGLE düğmesine döner —
+    // tetikleyici menü öğesinin kendisi DEĞİL, çünkü o öğe artık gizli bir
+    // panelin içindedir ve gizli bir elemana odaklanmak sessizce başarısız
+    // olur (yukarıdaki `closeQuickActionPanels()` notuna bakınız).
+    dialog.addEventListener('close', () => {
+        content.innerHTML = '';
+        focusOnClose?.focus();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initCashMovementDialog);
+
+/**
  * Çift gönderim koruması.
  *
  * Aynı formun iki kez gönderilmesi, bu uygulamada iki konaklama ya da iki

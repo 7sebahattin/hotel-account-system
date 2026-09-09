@@ -946,6 +946,19 @@ yönlendirir.
 > artık belirsizdir; bu yüzden genel "Kasa Hareketi" kısayolu kategori
 > ÖNCEDEN SEÇMEDEN hareket formuna yönlendirir.
 
+> **v2.1.1-B.1 (K-098):** "Kasa Hareketi" artık tam sayfa gezinmesi YERİNE
+> native `<dialog>` ile masaüstünde modal, mobilde alt sayfa (bottom sheet)
+> açar (`data-cash-movement-trigger`, `partials/cash-movement-dialog.blade.
+> php`, `app.js` `initCashMovementDialog()`). İçerik yalnızca tıklandığında
+> `fetch()` ile yüklenir — kabuk her sayfada BOŞTUR, kategori/vardiya verisi
+> hiçbir sayfa yüklemesinde eagerly sorgulanmaz (Lemon Bar'ın performans
+> ilkesiyle AYNI karar). Form GERÇEK bir `<form>` POST'udur; doğrulama/servis
+> hatası Referer'a değil HER ZAMAN standalone "Hareket ekle" sayfasına
+> yönlendirilir — dialog artık HERHANGİ bir sayfanın üzerinde açılabildiği
+> için `back()` kullanıcıyı formu göstermeyen bir sayfaya götürebilirdi.
+> Standalone `cashbook.movements.create` route'u FALLBACK olarak durur (JS
+> kapalıysa, doğrudan link, ya da fetch başarısızsa).
+
 **"Sistem henüz boş" durumu** artık yalnızca Finans görünümündedir (cari defter
 boşken): kasa artık ayrı bir görünümde olduğu için "ikisi birden boşken" birleşik
 kontrolü YOKTUR — Operasyon zaten her durumda (açık/kapalı) kendi "Şu an" kartını

@@ -1598,3 +1598,77 @@ eklendi — ters kayıt orijinal kategorinin etiketini KORUR), `Payment` modeli
 `AppServiceProvider` (morph map), `partials/quick-action.blade.php` (yeniden
 yazıldı), sidebar (Kasa Hareket Türleri girdisi), `movements/_row.blade.php`
 ve `payments::show` (çift yönlü izlenebilirlik bağlantıları).
+
+## K-098 · v2.1.1-B.1: "Kasa Hareketi" tam sayfa DEĞİL, native `<dialog>` modal/sheet açar
+
+**Bağlam:** K-096'nın (`7018b76`) birleşik Hızlı İşlem listesi kabul edildi,
+ama "Kasa Hareketi" hâlâ standart bir sayfaya YÖNLENDİRİYORDU — onaylanan
+kapsam bunun yerine masaüstünde modal, mobilde alt sayfa (bottom sheet)
+istiyordu. Denetim bunu doğruladı ve TAMAMLADI.
+
+**Karar 1 — Native `<dialog>`, Alpine/SPA DEĞİL:** `showModal()` odağı
+otomatik hapseder ve ÜST KATMANDA (top layer) render eder — bu yüzden alt
+gezinme çubuğu/kenar çubuğu çekmecesiyle z-index yarışına HİÇ girmez, ayrıca
+bir z-index değeri VERİLMEZ. Masaüstünde ortalanmış modal, `md` altında alt
+kenara sabitlenmiş bottom sheet — TEK `.cash-dialog` sınıfı, medya sorgusuyla
+ayrışır.
+
+**Karar 2 — Kabuk HER sayfada boştur; içerik yalnızca tıklandığında
+`fetch()` ile yüklenir:** `<dialog id="kasa-hareketi-dialog">` `layouts.app`'te
+BİR KEZ, boş olarak vardır (`partials/cash-movement-dialog.blade.php`,
+`cashbook.operate` yetkisiyle koşullu). Kategori/vardiya verisi HİÇBİR sayfa
+yüklemesinde eagerly sorgulanmaz — Lemon Bar'ın "global kasa sorgusu her
+sayfada çalışmaz" performans ilkesiyle (K-092) AYNI karardır, yalnızca
+tetikleyici (kullanıcının GERÇEKTEN tıklaması) farklıdır.
+
+**Karar 3 — Aynı controller aksiyonu, `$request->ajax()`'a göre farklı
+view:** `CashMovementController::create()` DEĞİŞMEDİ (vardiya/yetki
+kontrolleri AYNI) — yalnızca `ajax()` iken layout'suz bir fragment
+(`_dialog-fragment.blade.php`) döner. İki farklı route/form YOKTUR (kullanıcı
+talimatı §4); ikisi de AYNI `_form.blade.php` partial'ını kullanır (create.
+blade.php'den ÇIKARILDI).
+
+**Karar 4 — Form GERÇEK bir `<form>` olarak POST edilir; SPA/AJAX mimarisi
+AÇILMADI:** başarılı gönderim tam sayfa yönlendirmesiyle Kasa Defteri'ne
+döner (dialog kendiliğinden ekrandan gider — kullanıcı talimatı §6). Bu, K-096
+ile AYNI mimariyi korur.
+
+**Karar 5 — Doğrulama/servis hatası artık `back()`/Referer'a GÜVENMEZ, HER
+ZAMAN standalone "Hareket ekle" sayfasına döner:** Dialog artık HERHANGİ bir
+sayfanın (Pano, Tahsilatlar, Firmalar…) üzerinde açılabildiği için, Referer o
+sayfa olur ve o sayfa formu/hatayı hiç göstermeyeceği için varsayılan
+`back()` kullanıcıyı "hata sessizce kayboldu" hissine düşürürdü. Hem
+`StoreCashMovementRequest::failedValidation()` hem controller'ın iki
+`back()->withInput()` çağrısı `redirect()->route('cashbook.movements.
+create')`'e değiştirildi — kullanıcı talimatı §5'in "standart POST +
+yönlendirilmiş bağımsız hata ekranı" tercihidir.
+
+**Karar 6 — Odak yönetiminde YENİ bir sınıf hata AÇILMADI:** Dialog açılırken
+Hızlı İşlem paneli kapanır (`hidden`); panel kapanınca İÇİNDEKİ tetikleyici
+`<a>` görünmez bir atanın içinde kalır ve ona `.focus()` çağırmak SESSİZCE
+başarısız olur (görünmeyen bir elemana odaklanılamaz). Bu yüzden kapanışta
+odak, o Hızlı İşlem kökünün KENDİ toggle düğmesine döner (`closeQuickAction
+Panels()`'ın döndürdüğü referans), tetikleyici menü öğesine DEĞİL — aksi
+hâlde K-086/K-088'deki mobil çekmece odak hatasının AYNI SINIFI sessizce geri
+gelirdi. Gerçek Chromium'da (Playwright) doğrulandı.
+
+**Karar 7 — Masaüstü ortalaması `margin: auto`'nun AÇIKÇA yazılmasını
+gerektirir:** Tarayıcının `<dialog>` UA stili `showModal()`'da normalde
+`margin: auto` ile ortalar, ama Tailwind'in preflight sıfırlaması
+(`*, ::before, ::after { margin: 0 }`, author katmanı) UA stilinden HER ZAMAN
+önceliklidir (kaynak önceliği, katman sırası değil). `margin` belirtmeden
+bırakmak dialogu masaüstünde sol üst köşeye yapıştırır — GERÇEK tarayıcıda
+QA sırasında yakalanan, ekran görüntüsüyle kanıtlanmış bir hataydı; `.cash-
+dialog`'a açık `margin: auto` eklenerek düzeltildi.
+
+**Migration:** YOK — bu paket saf UI/controller/JS değişikliğidir, şema
+etkilenmedi.
+
+**Etkilenen dosyalar:** `CashMovementController` (`create()` ajax dalı,
+`backToCreate()`), `StoreCashMovementRequest` (`failedValidation()`), yeni
+`movements/_form.blade.php` + `_dialog-fragment.blade.php`, `create.blade.php`
+(partial'a indirgendi), yeni `partials/cash-movement-dialog.blade.php`,
+`layouts/app.blade.php` (bir `@include`), `partials/quick-action.blade.php`
+(`data-cash-movement-trigger`), `app.js` (`initRecipientToggle()` adlandırılmış
+fonksiyona taşındı, `initCashMovementDialog()` yeni), `app.css` (`.cash-dialog`
+bileşeni).

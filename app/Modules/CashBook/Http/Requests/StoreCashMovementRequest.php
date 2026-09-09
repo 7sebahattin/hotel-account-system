@@ -7,7 +7,9 @@ namespace App\Modules\CashBook\Http\Requests;
 use App\Modules\CashBook\Models\CashMovementCategory;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 /**
@@ -106,5 +108,22 @@ class StoreCashMovementRequest extends FormRequest
         if (is_string($amount)) {
             $this->merge(['amount' => Money::normalizeInput($amount)]);
         }
+    }
+
+    /**
+     * Doğrulama HATASI her zaman standalone "Hareket ekle" sayfasına döner —
+     * varsayılan `back()`/Referer'a GÜVENİLMEZ (v2.1.1-B.1 §5). Form artık
+     * Hızlı İşlem'in modal/sheet'inden HERHANGİ bir sayfanın üzerinde
+     * gönderilebilir; Referer o sayfa olursa (Pano, Tahsilatlar…) varsayılan
+     * `back()` kullanıcıyı formu hiç göstermeyen bir sayfaya götürür ve hata
+     * görünmeden kaybolur. Hedef burada HER ZAMAN aynı, öngörülebilir sayfadır.
+     */
+    protected function failedValidation(ValidatorContract $validator): void
+    {
+        throw new HttpResponseException(
+            redirect()->route('cashbook.movements.create')
+                ->withInput($this->except('_token'))
+                ->withErrors($validator)
+        );
     }
 }

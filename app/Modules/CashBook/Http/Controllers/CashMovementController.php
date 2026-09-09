@@ -71,6 +71,18 @@ class CashMovementController extends Controller
         ]);
     }
 
+    /**
+     * `$request->ajax()` iken (Hızlı İşlem'in modal/sheet'i, v2.1.1-B.1) yalnızca
+     * içerik parçası döner — layout, sidebar, Lemon Bar hiç render edilmez.
+     * Normal gezinmede (JS kapalı, doğrudan link) TAM sayfa döner. İkisi de
+     * AYNI veriyi ve AYNI `_form` partial'ını kullanır — iki farklı form YOKTUR
+     * (kullanıcı talimatı §4).
+     *
+     * Vardiya yoksa (redirect) veya yetki yoksa (403) burada ÖZEL bir dal
+     * AÇILMAZ: `fetch()` yönlendirmeleri kendiliğinden takip eder, 403 JSON
+     * döner — istemci JS ikisinde de güvenli biçimde TAM SAYFA gezinmesine
+     * düşer (bkz. app.js `openCashMovementDialog`).
+     */
     public function create(Request $request): View|RedirectResponse
     {
         $session = $this->cash->activeSession();
@@ -82,7 +94,7 @@ class CashMovementController extends Controller
 
         $this->authorize('create', [CashMovement::class, $session]);
 
-        return view('cashbook::movements.create', [
+        $data = [
             'session' => $session,
             'categories' => CashMovementCategory::query()
                 ->where('is_active', true)
@@ -91,7 +103,11 @@ class CashMovementController extends Controller
                 ->get(),
             'currencies' => Currency::active(),
             'selectedCategoryId' => $request->query('category_id'),
-        ]);
+        ];
+
+        return $request->ajax()
+            ? view('cashbook::movements._dialog-fragment', $data)
+            : view('cashbook::movements.create', $data);
     }
 
     public function store(StoreCashMovementRequest $request): RedirectResponse
@@ -110,7 +126,7 @@ class CashMovementController extends Controller
         $category = $request->category();
 
         if ($category === null) {
-            return back()->withInput()->with('error', 'Geçersiz ya da pasif hareket türü.');
+            return $this->backToCreate($request)->with('error', 'Geçersiz ya da pasif hareket türü.');
         }
 
         try {
@@ -126,12 +142,27 @@ class CashMovementController extends Controller
                 categoryLabel: $category->name,
             );
         } catch (CashBookException $e) {
-            return back()->withInput()->with('error', $e->getMessage());
+            return $this->backToCreate($request)->with('error', $e->getMessage());
         }
 
         // Kaydettikten sonra kullanıcı kasa ekranına döner (kullanıcı talimatı §12).
         return redirect()->route('cashbook.index')
             ->with('success', 'Kasa hareketi kaydedildi.');
+    }
+
+    /**
+     * Başarısız gönderim HER ZAMAN standalone "Hareket ekle" sayfasına döner
+     * — `back()`/Referer'a GÜVENİLMEZ (v2.1.1-B.1 §5). Form artık Hızlı
+     * İşlem'in modal/sheet'inden de gönderilebilir; modal HANGİ sayfanın
+     * üzerinde açılmışsa (Pano, Tahsilatlar, Firmalar…) Referer o sayfa olur
+     * ve o sayfa bu formu/hataları hiç göstermez — kullanıcı hatasını görmeden
+     * kaybolmuş sanır. Standart POST + yönlendirilmiş bağımsız hata ekranı
+     * (kullanıcı talimatı §5) burada EN GÜVENLİ desendir: hedef her zaman
+     * aynı, öngörülebilir ve formu gerçekten render eden sayfadır.
+     */
+    private function backToCreate(Request $request): RedirectResponse
+    {
+        return redirect()->route('cashbook.movements.create')->withInput($request->except('_token'));
     }
 
     /** Düzeltme: hareketin tam tersini yazar. Orijinal kayıt silinmez. */

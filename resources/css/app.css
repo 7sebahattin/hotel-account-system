@@ -157,4 +157,61 @@
     .nav-surface :focus-visible {
         outline-color: var(--color-acc);
     }
+
+    /*
+        Kasa Hareketi modal/sheet'i (v2.1.1-B.1 §2/§3).
+
+        Native <dialog>, `showModal()` ile açıldığında tarayıcının ÜST
+        KATMANINDA (top layer) render edilir — bu yüzden z-index yarışına
+        girmesi gerekmez; alt gezinme çubuğunun (`z-20`) ya da kenar çubuğu
+        çekmecesinin (`z-40`) HER ZAMAN üzerinde kalır, ayrıca bir z-index
+        değeri VERİLMEZ.
+
+        Masaüstü: ortalanmış, sınırlı genişlikte bir modal. Mobil (`md`
+        altı): alt kenara sabitlenmiş, yalnızca üst köşeleri yuvarlak bir
+        sayfa (bottom sheet) — masaüstü boyutundaki bir modal telefon
+        ekranına SIKIŞTIRILMAZ (kullanıcı talimatı §3).
+    */
+    .cash-dialog {
+        /*
+            `margin: auto` BURADA AÇIKÇA yazılmalıdır. Tarayıcının kendi
+            `<dialog>` UA stili normalde `showModal()` açıldığında
+            `margin: auto` ile ortalar — AMA Tailwind'in preflight sıfırlaması
+            (`@layer base`) `*, ::before, ::after { margin: 0 }` uygular ve
+            AUTHOR katmanı UA stilinden her zaman önceliklidir (katman sırası
+            değil, KAYNAK önceliği: author > user-agent). Sonuç: `margin`i
+            burada belirtmeden bırakmak dialogu masaüstünde sol üst köşeye
+            yapıştırır — bu, ilk QA turunda GERÇEK tarayıcıda yakalanan bir
+            hataydı. Mobil kural (aşağıda) `margin: 0`'ı KASITLI olarak alt
+            kenara sabitlemek için ayrıca tanımlar.
+        */
+        margin: auto;
+        padding: 0;
+        border: none;
+        border-radius: 0.75rem;
+        width: min(28rem, calc(100vw - 2rem));
+        max-height: min(34rem, calc(100vh - 4rem));
+        background: var(--color-card);
+        color: var(--color-tx);
+        overflow-y: auto;
+    }
+
+    .cash-dialog::backdrop {
+        background: var(--color-nav);
+        opacity: 0.6;
+    }
+
+    @media (max-width: 767px) {
+        .cash-dialog {
+            position: fixed;
+            inset: auto 0 0 0;
+            margin: 0;
+            width: 100%;
+            max-width: none;
+            max-height: min(88vh, calc(100vh - 2rem));
+            border-radius: 1rem 1rem 0 0;
+            /* iPhone alt çentiği — bottom-nav ile AYNI desen. */
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    }
 }
