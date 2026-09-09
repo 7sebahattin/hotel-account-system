@@ -43,6 +43,10 @@ use Illuminate\Support\Facades\DB;
  * Kart/banka/çek kanalları kasaya HİÇ dokunmaz. Bu, Payments'ın CashBook'a
  * TEK YÖNLÜ bağımlılığıdır (CLAUDE.md §4.3/1); `CashBookService` Payments'a
  * hiçbir zaman geri bağımlı olmaz.
+ *
+ * v2.1.1-A.1: `Payment::cash_session_id` hangi vardiyada oluşturulduğunu
+ * AÇIKÇA, DEĞİŞMEZ olarak taşır — zaman penceresi çıkarımı YOKTUR. Aktör
+ * o an açık bir vardiyayı yönetmiyorsa NULL kalır (tahmin edilmez).
  */
 class PaymentService
 {
@@ -55,10 +59,15 @@ class PaymentService
     /**
      * Tahsilat oluşturur ve firmanın carisine alacak hareketi düşer.
      *
-     * Nakit kanalda (`payment_method = cash`) AYRICA fiziksel kasaya bir
-     * `company_collection` hareketi yazılır — yalnızca açık vardiyayı
-     * yöneten kullanıcı tarafından (CLAUDE.md §8/Kasa Defteri "Hesap
-     * verebilirlik"). Kart/banka/çek/diğer kanallar kasaya dokunmaz.
+     * `cash_session_id` (v2.1.1-A.1) oluşturma anında AÇIKÇA belirlenir ve
+     * bir daha ASLA değişmez: aktör o an açık BİR vardiyayı yönetiyorsa
+     * (`opened_by === aktör`) o vardiyaya atanır, aksi hâlde NULL kalır.
+     * Zaman penceresi/tahmin YOKTUR (§8/Payments).
+     *
+     * Nakit kanalda (`payment_method = cash`) bu vardiya ZORUNLUDUR — aynı
+     * anda fiziksel kasaya bir `company_collection` hareketi de yazılır.
+     * Kart/banka/çek/diğer kanallar vardiyasız da girilebilir (mevcut yetki
+     * izin veriyorsa) ve kasaya asla dokunmaz.
      *
      * @param  array<string, mixed>  $data
      *
@@ -75,12 +84,19 @@ class PaymentService
             $payment->status = PaymentStatus::Active;
             $payment->created_by = $user->getKey();
             $payment->updated_by = $user->getKey();
+
+            $isCash = $payment->payment_method === PaymentMethod::Cash;
+            $session = $isCash
+                ? $this->requireOwnedOpenSession($user)
+                : $this->resolveOwnedActiveSession($user);
+            $payment->cash_session_id = $session?->getKey();
+
             $payment->save();
 
             $entry = $this->postCredit($payment, $user);
 
-            $cashMovement = $payment->payment_method === PaymentMethod::Cash
-                ? $this->postCashCollection($payment, $user)
+            $cashMovement = $isCash && $session !== null
+                ? $this->postCashCollection($payment, $session, $user)
                 : null;
 
             $this->auditLogger->log(
@@ -263,18 +279,11 @@ class PaymentService
     /**
      * Nakit kanallı tahsilatın fiziksel kasa karşılığını yazar.
      *
-     * Yalnızca açık vardiyayı yöneten kullanıcı tarafından yapılabilir —
-     * admin/patron dahil kimse başkasının vardiyasına hareket yazamaz
-     * (CLAUDE.md §8/Kasa Defteri). Kasa yazılamazsa TÜM işlem (Payment +
-     * Ledger dahil) geri alınır — çağıran zaten bir DB::transaction() içindedir.
-     *
-     * @throws NoOpenCashSession
-     * @throws CashSessionNotOwnedByActor
+     * `$session` çağıran tarafından ZATEN çözülmüş ve sahiplik doğrulanmıştır
+     * (`create()`) — burada tekrar sorgulanmaz/doğrulanmaz.
      */
-    private function postCashCollection(Payment $payment, User $user): CashMovement
+    private function postCashCollection(Payment $payment, CashSession $session, User $user): CashMovement
     {
-        $session = $this->requireOwnedOpenSession($user);
-
         return $this->cashBook->recordMovement(
             session: $session,
             type: CashMovementType::CompanyCollection,
@@ -336,6 +345,19 @@ class PaymentService
         }
 
         return $session;
+    }
+
+    /**
+     * Kullanıcının kendi açık vardiyası — yoksa veya başkasınınsa NULL
+     * (istisna FIRLATMAZ). Nakit dışı kanallar için "atfedebilirsek atfet,
+     * atfedemiyorsak zorlamayalım" davranışı budur (v2.1.1-A.1 §7): Admin/
+     * Patron açık vardiya olmadan da kart/banka tahsilatı girebilmelidir.
+     */
+    private function resolveOwnedActiveSession(User $user): ?CashSession
+    {
+        $session = $this->cashBook->activeSession();
+
+        return $session !== null && $session->opened_by === $user->getKey() ? $session : null;
     }
 
     /**
@@ -426,6 +448,7 @@ class PaymentService
             'amount' => Money::fromDecimal($payment->amount)->toDecimal(),
             'currency' => $payment->currency->value,
             'payment_method' => $payment->payment_method?->value,
+            'cash_session_id' => $payment->cash_session_id,
             'reference_no' => $payment->reference_no,
             'description' => $payment->description,
             'status' => $payment->status->value,
@@ -516,16 +539,20 @@ class PaymentService
     }
 
     /**
-     * Bir vardiyanın tahsilat KANALI bazında özeti (v2.1.1-A §11).
+     * Bir vardiyanın tahsilat KANALI bazında özeti (v2.1.1-A §11,
+     * v2.1.1-A.1 §10 ile EXPLICIT referansa geçirildi).
      *
-     * Kart/banka tahsilatları kasaya hiç yazılmadığı için `cash_session_id`
-     * taşımaz; bu yüzden "bu vardiyada kim ne kadar kart/banka tahsilatı
-     * aldı" sorusu vardiya sahibinin (`created_by`) o vardiyanın zaman
-     * penceresinde (`opened_at`–`closed_at`/şu an) yazdığı kayıtlarla
-     * yaklaşıklanır — CashBook'un "yalnızca vardiya sahibi hareket yazar"
-     * kuralıyla tutarlıdır (CLAUDE.md §8/Kasa Defteri).
+     * "Bu vardiyada kim ne kadar kart/banka tahsilatı aldı" sorusu artık
+     * ZAMAN PENCERESİ ÇIKARIMI DEĞİL — `payments.cash_session_id`'nin
+     * oluşturma anında yazılan, bir daha değişmeyen DEĞERİNE göre sorgulanır.
+     * Aynı kullanıcı vardiya sınırına yakın işlem yapsa bile yanlış vardiyaya
+     * atfedilemez: kolon o an hangi vardiya açıksa (ve aktör sahibiyse) onu
+     * taşır, sorgu zamanında yeniden hesaplanmaz.
      *
-     * Yeni bir sorgu YAZMAZ demiyoruz (bu YENİ bir rapor yeteneğidir) ama
+     * Eski (zaman penceresi tabanlı) sorgu TAMAMEN kaldırıldı — yalnızca bu
+     * mimariden SONRA oluşturulan kayıtlar için doğru sonuç verirdi ve yanlış
+     * bir kesinlik hissi yaratırdı.
+     *
      * SABİT sayıda sorgudur: `totalsFor()` (1 grup sorgu) + kart + banka
      * (2 grup sorgu) = 3, vardiya kayıt sayısıyla büyümez.
      */
@@ -551,21 +578,19 @@ class PaymentService
     }
 
     /**
-     * Bir vardiya penceresinde TEK bir kanaldan yazılan tahsilat tutarları.
+     * Bir vardiyaya EXPLICIT olarak atanmış (`cash_session_id`), TEK bir
+     * kanaldan yazılan tahsilat tutarları. Zaman/kullanıcı çıkarımı YOKTUR.
      *
      * @return array<string, Money>
      */
     private function collectionTotalsForSession(CashSession $session, PaymentMethod $method): array
     {
-        $windowEnd = $session->closed_at ?? Carbon::now();
-
         $rows = DB::table('payments')
             ->selectRaw('currency')
             ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
             ->where('status', PaymentStatus::Active->value)
             ->where('payment_method', $method->value)
-            ->where('created_by', $session->opened_by)
-            ->whereBetween('created_at', [$session->opened_at, $windowEnd])
+            ->where('cash_session_id', $session->getKey())
             ->groupBy('currency')
             ->orderBy('currency')
             ->get();

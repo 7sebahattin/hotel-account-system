@@ -288,6 +288,7 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 | amount | decimal(15,2) | > 0 |
 | currency | char(3) | default TRY |
 | payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `cheque`, `other` |
+| cash_session_id | FK cash_sessions null | v2.1.1-A.1 — oluşturma anında EXPLICIT atanır, bir daha değişmez (bkz. §8/Payments, K-095) |
 | reference_no | varchar(50) null | dekont/slip no, index |
 | description | varchar(255) null | |
 | status | varchar(20) | `active` \| `cancelled` — enum `PaymentStatus` |
@@ -301,7 +302,7 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 Yanlış tahsilat `status` üzerinden iptal edilir; iptal ters cari kaydı üretir.
 
 Index: `(company_id, payment_date)`, `(payment_date)`, `(status)`, `(currency)`,
-`(payment_method)`, `(created_by)`, `(reference_no)`.
+`(payment_method)`, `(created_by)`, `(reference_no)`, `(cash_session_id, payment_method)`.
 
 **Veritabanı düzeyinde değişmezler:**
 - `CHECK (amount > 0)`
@@ -726,15 +727,30 @@ amaçlı DEĞİLDİR:
   `PaymentService::cancel()` üzerinden yapılır.
 - **Z-raporu YOKTUR ve v2.1.1'de planlanmıyor.** Kanal ayrımı yalnızca
   cari/kasa doğruluğu içindir, POS mutabakatı değildir.
+- **Vardiya atfı EXPLICIT'tir, zaman penceresi çıkarımı DEĞİLDİR
+  (v2.1.1-A.1, K-095):** `payments.cash_session_id` (nullable FK,
+  `cash_sessions`e) oluşturma anında AÇIKÇA yazılır ve **bir daha ASLA
+  değişmez** (`Payment::IMMUTABLE_FIELDS`'ta, model + servis + FormRequest
+  üç katmanlı korumayla). Kural TEK ve BASİTTİR: aktör o an açık BİR
+  vardiyayı yönetiyorsa (`activeSession()->opened_by === aktör`) o vardiyaya
+  atanır, aksi hâlde (açık vardiya yok VEYA başkasının vardiyası açık) **NULL
+  kalır — tahmin edilmez.** Nakit kanalda bu vardiya ZORUNLUDUR (yukarıdaki
+  madde); kart/banka/çek/diğer'de İSTEĞE BAĞLIDIR — Admin/Patron açık vardiya
+  olmadan da kart/banka tahsilatı girebilir, kasa açmaya ZORLANMAZ.
+  `Payment.cash_session_id` (kaynak işlemin atfı) ile `CashMovement.
+  cash_session_id` (nakit iptalinde düzeltmenin yazıldığı GÜNCEL vardiya, bkz.
+  yukarı) **İKİ AYRI referanstır** — biri hiç değişmez, diğeri iptalde bilerek
+  güncel vardiyaya kayar; birbirine karıştırılmamalıdır.
 - **Vardiya kanal özeti:** `PaymentService::shiftCollectionSummary(CashSession
   $session)` bir vardiyanın nakit/kart/banka tahsilatlarını para birimi
-  bazında AYRI döner (§6/L5 — asla birleştirilmez). Kart/banka tutarları
-  `cash_session_id` TAŞIMAZ (kasaya hiç yazılmadıkları için); vardiya sahibinin
-  (`created_by`) o vardiyanın zaman penceresinde yazdığı kayıtlarla
-  yaklaşıklanır. Personel devri bu geçmiş kayıtları SİLMEZ/SIFIRLAMAZ — yeni
-  vardiyanın kanal toplamları boşla başlar, eskiler kalıcı, tarihsel kayıt
-  olarak durur (`PaymentService::totalsByMethodAndCurrencyBetween()` dönem
-  bazlı raporlama için de kullanılabilir).
+  bazında AYRI döner (§6/L5 — asla birleştirilmez); kart/banka tutarları artık
+  `WHERE cash_session_id = ?` ile EXPLICIT sorgulanır, zaman penceresi/
+  kullanıcı çıkarımı YOKTUR. Personel devri geçmiş kart/banka kayıtlarını
+  SİLMEZ/SIFIRLAMAZ — yeni vardiyanın kanal toplamları boşla başlar, eskiler
+  kalıcı, tarihsel kayıt olarak eski vardiyada durur. `cash_session_id = NULL`
+  taşıyan (eski/atfedilmemiş) kayıtlar hiçbir vardiya özetine sızmaz ama
+  `PaymentService::totalsByMethodAndCurrencyBetween()` gibi tarih aralığı
+  bazlı (vardiyadan bağımsız) raporlarda görünür kalır.
 - Yeni bir yetki AÇILMADI: kural mevcut `payments.create` + `cashbook.operate`
   (Personel'de zaten ikisi de var) üzerinden yürür.
 

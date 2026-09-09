@@ -19,6 +19,10 @@ use App\Modules\Core\Support\Money;
  * `cashCollections` bunun İÇİNDEN yalnızca nakit kanallı tahsilat (`company_
  * collection`) satırıdır; kart/banka ile aynı düzeyde karşılaştırılabilsin
  * diye ayrıca çıkarılmıştır.
+ *
+ * `creditCardCollections`/`bankTransferCollections` (v2.1.1-A.1): artık
+ * `payments.cash_session_id`'nin EXPLICIT değerine göre sorgulanır, zaman
+ * penceresi tahminiyle DEĞİL — bkz. `PaymentService::collectionTotalsForSession()`.
  */
 final readonly class ShiftCollectionSummary
 {

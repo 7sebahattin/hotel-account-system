@@ -1403,3 +1403,73 @@ bilinçli bir tercih: yeni yetki = yeni seed riski.
 `totalsByMethodAndCurrencyBetween()`), yeni `CashSessionNotOwnedByActor`
 istisnası, yeni `ShiftCollectionSummary` DTO'su, `PaymentController`,
 `_amount-fields.blade.php` (P0).
+
+## K-095 · v2.1.1-A.1: Vardiya atfı EXPLICIT FK'dir, zaman penceresi çıkarımı DEĞİL
+
+**Bağlam:** K-094'ün (`470009f`) `shiftCollectionSummary()`'si kart/banka
+tahsilatlarını vardiya sahibinin (`created_by`) o vardiyanın zaman
+penceresinde (`opened_at`–`closed_at`) yazdığı kayıtlarla YAKLAŞIKLIYORDU.
+Bu, finansal/operasyonel raporlama için yeterince belirleyici değildi: aynı
+kullanıcı vardiya sınırına yakın bir anda işlem yaparsa yanlış vardiyaya
+atfedilebilirdi.
+
+**Karar 1 — `payments.cash_session_id`: nullable FK, `cash_sessions`e:**
+Kart/banka/çek hiçbir zaman bir `CashMovement` ÜRETMEZ (K-094'ten değişmedi
+— kasa yalnızca nakit içindir), ama "hangi vardiyada alındığı" bilgisi hâlâ
+operasyonel olarak değerlidir. Referans bu yüzden `cash_movements` üzerinde
+DEĞİL, doğrudan `payments` üzerindedir. Nakit kanalda da AYNI kolon
+kullanılır — kasaya yazılan hareketin kendi `cash_session_id`'siyle birebir
+aynı vardiyayı gösterir (iki farklı fiziksel/mali kayıt, TEK ortak atıf).
+
+**Karar 2 — Atıf kuralı TEK ve BASİTTİR:** aktör oluşturma anında açık BİR
+vardiyayı YÖNETİYORSA (`activeSession()->opened_by === aktör`) o vardiyaya
+atanır; aksi hâlde (açık vardiya yok VEYA başkasının vardiyası açık) NULL
+kalır. Nakit kanalda bu vardiya ZORUNLUDUR (K-094'ten değişmedi —
+`requireOwnedOpenSession()` istisna fırlatır); diğer kanallarda İSTEĞE
+BAĞLIDIR (`resolveOwnedActiveSession()` sessizce NULL döner, hiçbir kasa
+açma zorlaması YAPILMAZ — Admin/Patron açık vardiya olmadan da kart/banka
+tahsilatı girebilmelidir, kullanıcı talimatı §7).
+
+**Karar 3 — Çek (`cheque`) ve "diğer" için AYRI bir kural İCAT EDİLMEDİ:**
+kullanıcı talimatı §6 açıkça "karar ver/dokümante et" diyordu. Tutarlılık
+ve gereksiz özel-durum yasağı (CLAUDE.md §18) gereği, TÜM nakit-dışı kanallar
+(kart/banka/çek/diğer/boş) AYNI tek kuralı paylaşır: atfedilebilirse atfet,
+edilemiyorsa zorlamayan NULL. Çeke yeni bir kasa etkisi eklenmedi.
+
+**Karar 4 — `cash_session_id` `IMMUTABLE_FIELDS`'a eklendi, `$fillable`'a
+EKLENMEDİ:** iki farklı koruma katmanı, iki farklı amaç. `$fillable` dışında
+tutulmak, mass-assignment (kullanıcı girdisinden `fill()`) yolunu TAMAMEN
+kapatır — `payment_method`/`amount` gibi zaten `$fillable`'da olan alanlardan
+FARKLI olarak, bu alan HİÇBİR ZAMAN kullanıcı girdisinden gelmez, yalnızca
+servis içinde doğrudan özellik atamasıyla (`$payment->cash_session_id = ...`)
+yazılır. `IMMUTABLE_FIELDS`'a eklenmesi ise modelin `updating` olay
+korumasını (son savunma, CLAUDE.md §7.1) devreye sokar: servis atlanıp
+doğrudan `$payment->cash_session_id = X; $payment->save();` çağrılsa bile
+(zaten var olan bir kayıtta) reddedilir. İptal (`cancel()`) bu alana HİÇ
+dokunmaz — kaynak işlem hangi vardiyada olduysa öyle kalır (kullanıcı
+talimatı §12); kasa tarafının GÜNCEL vardiyaya yazılan düzeltmesi (K-094) bu
+kararla ÇELİŞMEZ, çünkü o `CashMovement.cash_session_id`'dir, `Payment.
+cash_session_id` değil — iki AYRI referans, iki AYRI anlam.
+
+**Karar 5 — `shiftCollectionSummary()` zaman penceresi sorgusu TAMAMEN
+kaldırıldı, yerine `WHERE cash_session_id = ?` konuldu:** eski sorgu SADECE
+bu mimariden SONRA oluşturulan kayıtlar için doğru sonuç verirdi ve yanlış
+bir kesinlik hissi yaratırdı — kaldırılması "silme" değil, yanlış bir
+kesinliği ortadan kaldırmaktır. Eski (NULL `cash_session_id` taşıyan) kayıtlar
+hiçbir vardiya özetine sızmaz (testle kanıtlandı); bu kayıtlar hâlâ
+`totalsByMethodAndCurrencyBetween()` gibi TARİH ARALIĞI bazlı (vardiyadan
+bağımsız) raporlarda görünür durumdadır — "legacy/unassigned" için ayrı bir
+UI/rapor ekranı bu turda AÇILMADI (kullanıcı talimatı §17'nin "yeni UI
+genişlemesi yok" ilkesiyle tutarlı); gereken yalnızca "tahmin etmemek"ti,
+yeni bir görünürlük ekranı değil.
+
+**Migration:** forward-only, `payments`e nullable `cash_session_id` FK
+(`restrictOnDelete()`) + `(cash_session_id, payment_method)` bileşik index
+(vardiya kanal özeti sorgu deseniyle birebir). `migrate:fresh` kullanılmadı;
+mevcut satırlar hiç etkilenmedi, hepsi NULL ile başlar.
+
+**Etkilenen dosyalar:** yeni migration, `Payment` modeli (`cashSession()`
+ilişkisi, `IMMUTABLE_FIELDS`, cast), `PaymentService` (`create()`,
+`resolveOwnedActiveSession()`, `postCashCollection()` imzası,
+`shiftCollectionSummary()`/`collectionTotalsForSession()` yeniden yazıldı),
+`ShiftCollectionSummary` DTO docblock'u.

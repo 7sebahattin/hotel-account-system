@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Models;
 
 use App\Models\User;
+use App\Modules\CashBook\Models\CashSession;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Core\Enums\Currency;
@@ -33,6 +34,7 @@ use Illuminate\Support\Carbon;
  * @property string $amount
  * @property Currency $currency
  * @property PaymentMethod|null $payment_method
+ * @property int|null $cash_session_id
  * @property string|null $reference_no
  * @property string|null $description
  * @property PaymentStatus $status
@@ -47,6 +49,7 @@ use Illuminate\Support\Carbon;
  * @property-read User|null $creator
  * @property-read User|null $updater
  * @property-read User|null $canceller
+ * @property-read CashSession|null $cashSession
  */
 class Payment extends Model
 {
@@ -62,9 +65,15 @@ class Payment extends Model
      * Bu liste modelin `updating` olayında zorlanır; servis ve FormRequest
      * katmanları da aynı listeyi kullanır (üç katmanlı savunma).
      *
+     * `cash_session_id` (v2.1.1-A.1): oluşturma anında AÇIKÇA belirlenir ve
+     * bir daha ASLA yeniden atanmaz — iptal/ters kayıt bile bunu değiştirmez
+     * (kaynak işlem hangi vardiyada olduysa öyle kalır, CLAUDE.md §8/Payments).
+     *
      * @var array<int, string>
      */
-    public const IMMUTABLE_FIELDS = ['company_id', 'payment_date', 'amount', 'currency', 'payment_method'];
+    public const IMMUTABLE_FIELDS = [
+        'company_id', 'payment_date', 'amount', 'currency', 'payment_method', 'cash_session_id',
+    ];
 
     /** Düzeltilebilen tek alanlar. */
     public const EDITABLE_FIELDS = ['reference_no', 'description'];
@@ -91,6 +100,7 @@ class Payment extends Model
             'created_by' => 'integer',
             'updated_by' => 'integer',
             'cancelled_by' => 'integer',
+            'cash_session_id' => 'integer',
             'payment_date' => 'date',
             'amount' => 'decimal:2',
             'currency' => Currency::class,
@@ -124,6 +134,18 @@ class Payment extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Tahsilatın OLUŞTURULDUĞU vardiya (varsa) — v2.1.1-A.1.
+     *
+     * Eloquent ilişki tanımı, §4.3/1'in izin verdiği TEK istisnadır (iş
+     * mantığı değil). NULL: oluşturma anında aktör açık bir vardiyayı
+     * yönetmiyordu — zaman damgasından ASLA tahmin edilmez (§8/Payments).
+     */
+    public function cashSession(): BelongsTo
+    {
+        return $this->belongsTo(CashSession::class);
     }
 
     public function canceller(): BelongsTo
