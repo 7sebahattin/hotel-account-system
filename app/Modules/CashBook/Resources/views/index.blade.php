@@ -16,6 +16,9 @@
 
     <x-ui.page-header title="Kasa Defteri" :subtitle="$subtitle">
         <x-slot:actions>
+            <x-ui.button variant="ghost" :href="route('cashbook.movements.index')">Tüm hareketler</x-ui.button>
+            <x-ui.button variant="ghost" :href="route('cashbook.transfers.index')">Devir geçmişi</x-ui.button>
+
             @if ($canViewAll)
                 <x-ui.button variant="ghost" :href="route('cashbook.day')">Günlük defter</x-ui.button>
             @endif

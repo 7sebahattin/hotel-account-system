@@ -18,6 +18,8 @@
             'label' => 'Kasa',
             'items' => [
                 ['route' => 'cashbook.index', 'label' => 'Kasa Defteri', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
+                ['route' => 'cashbook.movements.index', 'label' => 'Kasa Hareketleri', 'can' => Permission::CashBookView->value, 'icon' => 'cash'],
+                ['route' => 'cashbook.transfers.index', 'label' => 'Devir Geçmişi', 'can' => Permission::CashBookView->value, 'icon' => 'swap'],
                 ['route' => 'cashbook.day', 'label' => 'Günlük Defter', 'can' => Permission::CashBookViewAll->value, 'icon' => 'log'],
             ],
         ],

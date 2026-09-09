@@ -67,7 +67,7 @@ class CompanyListingTest extends TestCase
     }
 
     #[Test]
-    public function arama_vergi_no_telefon_yetkili_ve_sehirde_de_calisir(): void
+    public function arama_vergi_no_telefon_e_posta_yetkili_ve_sehirde_de_calisir(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);
 
@@ -75,12 +75,14 @@ class CompanyListingTest extends TestCase
         $this->searchableCompany('B Firma', ['phone' => '0212 111 22 33']);
         $this->searchableCompany('C Firma', ['contact_person' => 'Mehmet Öz']);
         $this->searchableCompany('D Firma', ['city' => 'Trabzon']);
+        $this->searchableCompany('E Firma', ['email' => 'muhasebe@efirma.com']);
 
         foreach ([
             '9876543210' => 'A Firma',
             '111 22 33' => 'B Firma',
             'Mehmet Öz' => 'C Firma',
             'Trabzon' => 'D Firma',
+            'muhasebe@efirma.com' => 'E Firma',
         ] as $term => $expected) {
             $response = $this->actingAs($admin)->get(route('companies.index', ['q' => $term]));
 

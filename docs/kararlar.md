@@ -1220,3 +1220,77 @@ düzeyine taşındı — bileşenin kendi temel sınıfıyla asla aynı elemanda
 Ayrıca: bekleyen bir devri olan (henüz vardiyası olmayan) kullanıcı için boş
 bir "Vardiyam" başlığı altında hiçbir şey görünmediği fark edildi; o dal artık
 bölümün TAMAMINI atlıyor.
+
+## K-093 · Arama/Filtre Gün 12: yetki kapsaması filtreden önce, bakiye sıralaması PHP-taraflı
+
+**Bağlam:** Gün 10.1'de kurulmuş olan `Core\Filters\QueryFilter` altyapısı
+(Firmalar/Konaklamalar/Tahsilatlar zaten tam donanımlıydı) Kasa Defteri'ne HİÇ
+uygulanmamıştı — kasa tarafında yalnızca tek-vardiya (`cashbook.index`) ve
+tek-gün (`cashbook.day`) ekranları vardı, geçmişe dönük tarih/personel/tür
+araması yapılamıyordu. Bu tur bunu kapattı: `cash/movements` ve
+`cash/transfers` iki yeni, çapraz-vardiya, filtrelenen liste ekranı oldu.
+
+**Yetki kapsaması sırası bağlayıcıdır: ÖNCE scope, SONRA filtre.**
+`CashMovementController::index()`/`CashTransferController::index()`, temel
+Eloquent sorgusunu `cashbook.view_all` yoksa `created_by`/`from_user_id OR
+to_user_id = kullanıcı` ile SINIRLAR — bu adım `CashMovementFilter`/
+`CashTransferFilter` hiç çalışmadan ÖNCE olur. Filtre nesnesi kendi
+`user_id`/`from_user_id`/`to_user_id` parametrelerini bu ZATEN daraltılmış
+sorgunun ÜZERİNE ekler. Sonuç: personel `user_id` query param'ını başka bir
+personelin kimliğine değiştirse bile erişim GENİŞLEMEZ — iki koşul AND'lenmiş
+olduğu için en kötü ihtimalle sonuç boş döner, asla başkasının verisi sızmaz.
+Bu, "filtering authorization'dan SONRA scope üzerine uygulanmalı" ilkesinin
+somut uygulamasıdır ve testle kanıtlandı
+(`personel_user_id_parametresiyle_baskasinin_hareketlerini_goremez`).
+
+**"Gelirler" hızlı filtresi iki türü birden kapsar — bunun için `type`
+parametresi hem tekil hem dizi değer kabul edecek şekilde genelleştirildi**
+(`type=expense` ve `type[]=room_income&type[]=extra_income` ikisi de
+çalışır). Bu YENİ bir sorgu mantığı değildir, aynı beyaz listenin
+`whereIn` ile birden çok değerle uygulanmasıdır — kullanıcı talimatının
+"özel yeni sorgu mantığı yazma" kısıtına uygundur.
+
+**Cari ekstre firma listesinde bakiye filtresi/sıralaması PHP tarafındadır,
+SQL'de DEĞİL.** `balance` bir `companies` kolonu değildir (§6/L4 —
+önbelleklenmiş bakiye kolonu V1'de kesinlikle yoktur) ve iki firmanın
+bakiyesini karşılaştırmak `ledger_entries` üzerinde ayrı bir GROUP BY
+gerektirir; bunu SQL'de sayfalamayla birlikte yapmak karmaşık bir alt sorgu
+ister. Bunun yerine: yalnızca para birimi/bakiye filtresi ya da bakiye
+sıralaması İSTENDİĞİNDE, filtreye uyan TÜM firmaların bakiyesi TEK toplu
+sorguda hesaplanır (mevcut `balancesForCompanies()`, değişmedi), süzülür/
+sıralanır, yalnızca GÖRÜNTÜLENECEK sayfa için firma modeli çekilir. V1 veri
+hacminde (firma sayısı düşük-orta, CLAUDE.md §1) bu pragmatiktir. İSTENMEDİYSE
+(çoğu ziyaret) eski hızlı SQL-sayfalama yolu DEĞİŞMEDEN çalışır — yeni kod
+yolunun maliyeti yalnızca gerçekten kullanıldığında ortaya çıkar.
+
+**Bakiyeye göre sıralama para birimi seçilmeden ÇALIŞTIRILMAZ, sessizce isim
+sırasına düşer.** Para birimleri asla birleştirilmez (§6/L5) — "en yüksek
+bakiye" seçilebilecek tek bir sayı olmadığı için bu istek anlamsızdır; hata
+göstermek yerine öngörülebilir bir varsayılana (isim sırası) düşmek tercih
+edildi.
+
+**Filtreli ekstrenin yürüyen bakiyesi ZATEN doğruydu — denetlendi, değiştirilmedi.**
+`LedgerStatementService::forCompany()` tür/arama filtrelerini yürüyen bakiye
+HESAPLANDIKTAN SONRA uyguluyordu (Gün 10.1'den beri); `tur_filtresi_bakiyeyi_bozmaz`
+testi bunu zaten kanıtlıyordu. Kullanıcı talimatının bu konudaki "audit et,
+gerekirse düzelt" isteği bir denetimle karşılandı, kod değişikliği gerekmedi.
+
+**Aktif filtre göstergesi (`hasActiveFilters()`/`activeFilterCount()`) TEK
+yerde, `QueryFilter` temel sınıfında tanımlıdır** — sayfalama/sıralama dışında
+herhangi bir query param'ın varlığına bakar, modül başına ayrı bir liste
+gerekmez. Aynı prensiple mobil filtre "drawer"ı AÇILMADI: tüm ekranlar zaten
+aynı `grid sm:grid-cols-2 lg:grid-cols-4` deseniyle çalışıyordu; kullanıcı
+talimatının kabul ettiği "mevcut sade panel" seçeneği tutarlılık için tercih
+edildi (yeni bir soyutlama katmanı CLAUDE.md §18'e aykırı olurdu).
+
+**Gerçek tarayıcı QA'de bulunan test-metodolojisi hataları (uygulama hatası
+DEĞİL):** (1) kasa hareketi güncellenemediği için (append-only DB tetikleyicisi)
+bir testin `forceFill()->saveQuietly()` ile tarih "geriye alma" denemesi
+gerçek bir SQL hatasıyla reddedildi — düzeltme: `recordMovement()`'ın zaten
+var olan `entryAt` parametresi kullanıldı; (2) devir tutarı transferde
+1000+777=1777 gibi bir toplam ürettiğinde "1.777,00 ₺" alt dizesi "777,00 ₺"yi
+İÇERİYORDU, bu yüzden `assertDontSee('777,00 ₺')` yanlış geçti/kaldı — sayısal
+alt dize çakışmasına karşı testler tutar yerine ayırt edici açıklama metnine
+geçirildi; (3) N+1 testlerinde ısınma isteği eksikti, bu da "sorgu sayısı
+AZALDI" gibi ters bir sahte sonuç üretiyordu (Gün 11'den bilinen desen) —
+her ölçümden önce bir ısınma isteği eklendi.

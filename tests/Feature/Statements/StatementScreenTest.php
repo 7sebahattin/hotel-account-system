@@ -435,4 +435,131 @@ class StatementScreenTest extends TestCase
 
         $this->assertSame($withTwo, $measure(), 'Hareket sayısı artınca sorgu sayısı artmamalı');
     }
+
+    // ------------------------------------------------- Gün 12: bakiye filtresi/sıralaması
+
+    private function debit(Company $company, string $amount, Currency $currency): void
+    {
+        app(LedgerService::class)->debit(
+            companyId: $company->id,
+            amount: Money::fromDecimal($amount),
+            currency: $currency,
+            entryDate: '2026-09-01',
+            description: 'Konaklama',
+            sourceType: 'stay',
+            sourceId: 1,
+            actor: $this->admin,
+        );
+    }
+
+    #[Test]
+    public function para_birimi_filtresi_yalnizca_o_para_biriminde_bakiyesi_olanlari_getirir(): void
+    {
+        $tryCompany = Company::factory()->create(['name' => 'TRY Firma']);
+        $eurCompany = Company::factory()->create(['name' => 'EUR Firma']);
+
+        $this->debit($tryCompany, '500.00', Currency::TRY);
+        $this->debit($eurCompany, '200.00', Currency::EUR);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('statements.index', ['currency' => 'EUR', 'has_balance' => '1']));
+
+        $response->assertOk()->assertSee('EUR Firma');
+        $response->assertDontSee('TRY Firma');
+    }
+
+    #[Test]
+    public function yalnizca_bakiyesi_olanlar_filtresi_sifir_bakiyeli_firmayi_disarida_birakir(): void
+    {
+        $borclu = Company::factory()->create(['name' => 'Borçlu Firma']);
+        $kapali = Company::factory()->create(['name' => 'Kapalı Firma']);
+
+        $this->debit($borclu, '500.00', Currency::TRY);
+        // Kapalı firma: borç + eşit tahsilat, net sıfır.
+        $this->debit($kapali, '300.00', Currency::TRY);
+        app(LedgerService::class)->credit(
+            companyId: $kapali->id, amount: Money::fromDecimal('300.00'), currency: Currency::TRY,
+            entryDate: '2026-09-02', description: 'Tahsilat', sourceType: 'payment', sourceId: 1, actor: $this->admin,
+        );
+
+        $response = $this->actingAs($this->admin)->get(route('statements.index', ['has_balance' => '1']));
+
+        $response->assertOk()->assertSee('Borçlu Firma');
+        $response->assertDontSee('Kapalı Firma');
+    }
+
+    #[Test]
+    public function bakiye_sirasi_en_yuksekten_en_dusuge_dogru_calisir(): void
+    {
+        $az = Company::factory()->create(['name' => 'Az Borçlu']);
+        $cok = Company::factory()->create(['name' => 'Çok Borçlu']);
+
+        $this->debit($az, '100.00', Currency::TRY);
+        $this->debit($cok, '9000.00', Currency::TRY);
+
+        $html = (string) $this->actingAs($this->admin)
+            ->get(route('statements.index', ['currency' => 'TRY', 'balance_sort' => 'highest']))
+            ->getContent();
+
+        $this->assertTrue(strpos($html, 'Çok Borçlu') < strpos($html, 'Az Borçlu'));
+    }
+
+    /**
+     * Kullanıcı talimatı Gün 12 §6: para birimi seçilmeden bakiye sıralaması
+     * ANLAMSIZDIR (para birimleri asla birleştirilmez) — sessizce isim
+     * sırasına düşer, hata vermez.
+     */
+    #[Test]
+    public function para_birimi_secilmeden_bakiye_sirasi_isme_doner(): void
+    {
+        $b = Company::factory()->create(['name' => 'B Firma']);
+        $a = Company::factory()->create(['name' => 'A Firma']);
+
+        $this->debit($b, '100.00', Currency::TRY);
+        $this->debit($a, '9000.00', Currency::TRY);
+
+        $html = (string) $this->actingAs($this->admin)
+            ->get(route('statements.index', ['balance_sort' => 'highest']))
+            ->getContent();
+
+        $this->assertTrue(strpos($html, 'A Firma') < strpos($html, 'B Firma'));
+    }
+
+    #[Test]
+    public function usd_rub_gel_para_birimleri_de_filtrelenebilir(): void
+    {
+        $usd = Company::factory()->create(['name' => 'USD Firma']);
+        $rub = Company::factory()->create(['name' => 'RUB Firma']);
+        $gel = Company::factory()->create(['name' => 'GEL Firma']);
+
+        $this->debit($usd, '100.00', Currency::USD);
+        $this->debit($rub, '5000.00', Currency::RUB);
+        $this->debit($gel, '300.00', Currency::GEL);
+
+        foreach (['USD' => 'USD Firma', 'RUB' => 'RUB Firma', 'GEL' => 'GEL Firma'] as $code => $expected) {
+            $response = $this->actingAs($this->admin)
+                ->get(route('statements.index', ['currency' => $code, 'has_balance' => '1']));
+
+            $response->assertOk()->assertSee($expected);
+        }
+    }
+
+    #[Test]
+    public function bakiye_modunde_de_sayfalama_dogru_calisir(): void
+    {
+        foreach (range(1, 3) as $i) {
+            $company = Company::factory()->create(['name' => "Firma {$i}"]);
+            $this->debit($company, '100.00', Currency::TRY);
+        }
+
+        $response = $this->actingAs($this->admin)->get(route(
+            'statements.index',
+            ['currency' => 'TRY', 'has_balance' => '1', 'per_page' => 25],
+        ));
+
+        $response->assertOk();
+        $response->assertSee('Firma 1');
+        $response->assertSee('Firma 2');
+        $response->assertSee('Firma 3');
+    }
 }

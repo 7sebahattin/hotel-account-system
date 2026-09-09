@@ -7,16 +7,21 @@ namespace App\Modules\CashBook\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
+use App\Modules\CashBook\Enums\CashTransferStatus;
 use App\Modules\CashBook\Exceptions\CashBookException;
+use App\Modules\CashBook\Filters\CashTransferFilter;
 use App\Modules\CashBook\Http\Requests\StoreCashTransferRequest;
 use App\Modules\CashBook\Models\CashTransfer;
 use App\Modules\CashBook\Services\CashBookService;
+use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Filters\QueryFilter;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * Kasa devri — İKİ TARAFLI onay.
+ * Kasa devri — İKİ TARAFLI onay + devir geçmişi (Gün 12 §10).
  *
  * Teslim eden devri başlatır; teslim alan kendi hesabıyla kabul edene kadar
  * devir tamamlanmaz ve kasa teslim edenin vardiyasında görünmeye devam eder.
@@ -24,6 +29,44 @@ use Illuminate\Http\Request;
 class CashTransferController extends Controller
 {
     public function __construct(private readonly CashBookService $cash) {}
+
+    /**
+     * Devir geçmişi. Yetki kapsaması filtrelemeden ÖNCE uygulanır (§17):
+     * `cashbook.view_all` yoksa yalnızca kendi gönderdiği/aldığı devirler
+     * temel sorguya girer, filtre bunun ÜZERİNE uygulanır.
+     */
+    public function index(Request $request, CashTransferFilter $filter): View
+    {
+        $this->authorize('viewAny', CashTransfer::class);
+
+        $user = $request->user();
+        $canViewAll = $user->can(Permission::CashBookViewAll->value);
+
+        $query = CashTransfer::query()->with(['fromUser', 'toUser', 'amounts']);
+
+        if (! $canViewAll) {
+            $userId = $user->getKey();
+            $query->where(function (Builder $inner) use ($userId): void {
+                $inner->where('from_user_id', $userId)->orWhere('to_user_id', $userId);
+            });
+        }
+
+        $transfers = $filter->apply($query)
+            ->paginate($filter->perPage())
+            ->withQueryString();
+
+        return view('cashbook::transfers.index', [
+            'transfers' => $transfers,
+            'filter' => $filter,
+            'canViewAll' => $canViewAll,
+            'statuses' => CashTransferStatus::cases(),
+            'currencies' => Currency::cases(),
+            'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
+            'users' => $canViewAll
+                ? User::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
+                : collect(),
+        ]);
+    }
 
     public function create(): View|RedirectResponse
     {

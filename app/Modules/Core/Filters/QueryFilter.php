@@ -93,19 +93,39 @@ abstract class QueryFilter
         $query->where(function (Builder $inner) use ($pattern): void {
             foreach ($this->searchable() as $column) {
                 // Kolon adları beyaz listeden gelir; değer bağlanarak geçirilir.
-                $inner->orWhereRaw(
-                    sprintf(
-                        "REPLACE(REPLACE(`%s`, 'ı', 'i'), 'İ', 'i') COLLATE utf8mb4_unicode_ci LIKE ?",
-                        $column,
-                    ),
-                    [$pattern],
-                );
+                $inner->orWhereRaw($this->turkishFoldColumnExpression($column).' LIKE ?', [$pattern]);
             }
         });
     }
 
-    /** Noktasız ı ve noktalı İ harflerini i'ye indirger. */
-    private function foldTurkishI(string $value): string
+    /**
+     * Bir kolonu Türkçe iki-i katlamasıyla karşılaştırmaya hazır SQL parçası.
+     *
+     * `protected`: ilişkili bir tablonun kolonunda (`whereHas` içinde) aynı
+     * karşılaştırmayı kurmak isteyen alt sınıflar için (ör. konaklama
+     * aramasında firma adı) — SQL metni tek yerde tanımlı kalır.
+     */
+    protected function turkishFoldColumnExpression(string $column): string
+    {
+        return sprintf("REPLACE(REPLACE(`%s`, 'ı', 'i'), 'İ', 'i') COLLATE utf8mb4_unicode_ci", $column);
+    }
+
+    /** Aranan terimi `%...%` desenine çevirir — alt sınıflar için ortak yardımcı. */
+    protected function searchPattern(): string
+    {
+        $term = trim((string) $this->request->query('q', ''));
+
+        return '%'.addcslashes($this->foldTurkishI($term), '%_\\').'%';
+    }
+
+    /**
+     * Noktasız ı ve noktalı İ harflerini i'ye indirger.
+     *
+     * `protected`: bir alt sınıf (ör. `StayFilter`) arama alanına ilişkili bir
+     * tablonun kolonunu (firma adı gibi) eklemek isterse aynı katlama
+     * mantığını KOPYALAMADAN tekrar kullanabilir.
+     */
+    protected function foldTurkishI(string $value): string
     {
         return str_replace(['ı', 'İ'], ['i', 'i'], $value);
     }
@@ -138,5 +158,35 @@ abstract class QueryFilter
     public function currentDirection(): string
     {
         return strtolower((string) $this->request->query('direction', 'asc')) === 'desc' ? 'desc' : 'asc';
+    }
+
+    /**
+     * Sayfalama/sıralama DIŞINDA en az bir filtre parametresi seçili mi?
+     *
+     * Boş sonuç ekranında "hiç kayıt yok" ile "bu filtrelerle eşleşen kayıt
+     * yok" ayrımını yapmak için kullanılır (kullanıcı talimatı Gün 12 §16).
+     * Genel bir kural olduğu için tek yerde tanımlıdır; her modül filtresi
+     * kendi parametre adlarını bilmek zorunda kalmaz.
+     */
+    public function hasActiveFilters(): bool
+    {
+        return $this->activeFilterCount() > 0;
+    }
+
+    /** Aktif filtre sayısı — "Filtrele (2)" gibi göstergeler için. */
+    public function activeFilterCount(): int
+    {
+        $ignored = ['page', 'sort', 'direction', 'per_page'];
+        $count = 0;
+
+        foreach ($this->request->query() as $key => $value) {
+            if (in_array($key, $ignored, true) || $value === null || $value === '') {
+                continue;
+            }
+
+            $count++;
+        }
+
+        return $count;
     }
 }

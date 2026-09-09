@@ -23,7 +23,7 @@
 
         <div class="sm:col-span-2">
             <x-ui.input label="Ara" name="q" type="search" :value="request('q')"
-                        placeholder="Ünvan, vergi no, telefon, yetkili, şehir" />
+                        placeholder="Ünvan, vergi no, telefon, e-posta, yetkili, şehir" />
         </div>
 
         <x-ui.select label="Şehir" name="city">
@@ -40,7 +40,12 @@
         </x-ui.select>
 
         <div class="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-4">
-            <x-ui.button type="submit">Filtrele</x-ui.button>
+            <x-ui.button type="submit">
+                Filtrele
+                @if ($filter->activeFilterCount() > 0)
+                    ({{ $filter->activeFilterCount() }})
+                @endif
+            </x-ui.button>
             <x-ui.button variant="ghost" :href="route('companies.index', $showTrashed ? ['trashed' => 1] : [])">Temizle</x-ui.button>
 
             <label for="per_page" class="ml-auto flex items-center gap-2 text-sm text-mut">
@@ -79,7 +84,17 @@
                     <td class="px-4 py-3">@include('companies::_status', ['company' => $company])</td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="px-4 py-10 text-center text-mut">Kayıt bulunamadı.</td></tr>
+                <tr>
+                    <td colspan="6" class="px-4 py-10 text-center text-sm text-mut">
+                        @if ($filter->hasActiveFilters())
+                            Bu filtrelerle eşleşen kayıt bulunamadı.
+                            <a href="{{ route('companies.index', $showTrashed ? ['trashed' => 1] : []) }}"
+                               class="ml-1 text-acc-tx underline underline-offset-2 hover:text-tx">Filtreleri temizle</a>
+                        @else
+                            Kayıt bulunamadı.
+                        @endif
+                    </td>
+                </tr>
             @endforelse
         </tbody>
     </x-ui.table>
@@ -107,7 +122,8 @@
                 </x-ui.card>
             </a>
         @empty
-            <x-ui.empty />
+            <x-ui.empty :filtered="$filter->hasActiveFilters()"
+                        :clear-href="route('companies.index', $showTrashed ? ['trashed' => 1] : [])" />
         @endforelse
     </div>
 

@@ -14,7 +14,7 @@ class CompanyFilter extends QueryFilter
      */
     protected function searchable(): array
     {
-        return ['name', 'tax_number', 'phone', 'contact_person', 'city'];
+        return ['name', 'tax_number', 'phone', 'email', 'contact_person', 'city'];
     }
 
     /**

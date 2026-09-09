@@ -44,6 +44,22 @@ class StayListingTest extends TestCase
         $this->assertSame(['Mehmet Demir'], $this->guests($this->index(['q' => '202'])));
     }
 
+    /**
+     * Gün 12 §4: arama firma adını da kapsar. Firma ayrı bir tabloda olduğu
+     * için `StayFilter::applySearch()` bunu `whereHas` ile ekler.
+     */
+    #[Test]
+    public function firma_adi_uzerinden_arama(): void
+    {
+        $ilgaz = Company::factory()->create(['name' => 'Ilgaz Turizm']);
+        $bergama = Company::factory()->create(['name' => 'Bergama Seyahat']);
+
+        Stay::factory()->create(['company_id' => $ilgaz->id, 'guest_name' => 'Ilgaz Misafiri']);
+        Stay::factory()->create(['company_id' => $bergama->id, 'guest_name' => 'Bergama Misafiri']);
+
+        $this->assertSame(['Ilgaz Misafiri'], $this->guests($this->index(['q' => 'ilgaz'])));
+    }
+
     #[Test]
     public function arama_turkce_i_farkini_gozetmez(): void
     {

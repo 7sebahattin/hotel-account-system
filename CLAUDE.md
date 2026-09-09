@@ -710,6 +710,12 @@ finansal hesap yazılmaz. Servis firmayı yalnızca `int $companyId` olarak bili
   hata vermez. Varlık kontrolü kaynak tipi başına tek sorgudur (N+1 yok).
 - **Firma bakiye listesi** (`ledger.view_all`): tüm firmalar, para birimi bazında bakiye,
   son hareket tarihi. Bakiyeler ve tarihler firma başına değil, iki toplu sorguda alınır.
+  **Para birimi filtresi, "yalnızca bakiyesi olanlar" ve bakiyeye göre sıralama (Gün 12):**
+  `balance` bir `companies` kolonu OLMADIĞI için (§6/L4) bu üç filtre SQL'de değil, filtreye
+  uyan firmaların toplu bakiye sorgusu üzerinde PHP tarafında uygulanır — yalnızca
+  görüntülenecek sayfa kadarı için firma modeli çekilir. Bakiyeye göre sıralama **para birimi
+  seçilmeden anlamsızdır** (§6/L5 — para birimleri asla birleştirilmez); seçilmeden istenirse
+  sessizce isim sırasına düşer, hata vermez.
 - **Yazdırma** (`layouts/print`): koyu tema UYGULANMAZ. Beyaz zemin, siyah metin, kenar
   çubuğu yok, A4. Sayfa kendi kendine yeten sade CSS taşır ve Vite çıktısını yüklemez.
   PDF kütüphanesi kullanılmaz; tarayıcının `window.print()` işlevi yeterlidir.
@@ -901,7 +907,7 @@ Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
 - Varsayılan sayfa boyutu 25, izinli değerler 25/50/100.
 - Sıralama alanları **beyaz liste** ile sınırlanır (SQL injection ve rastgele kolon sızıntısına karşı).
 - Filtreler sayfa yenilendiğinde korunur (query string).
-- Arama: firma adı, vergi no, telefon, yetkili, şehir üzerinde `LIKE`. Fulltext V1'de yok.
+- Arama: firma adı, vergi no, telefon, e-posta, yetkili, şehir üzerinde `LIKE`. Fulltext V1'de yok.
 - **Türkçe arama kuralı (ölçülerek karar verildi):** Türkçe'de büyük harfe çevirim çift
   yönlüdür (i↔İ, ı↔I) ve firma verisi çoğunlukla tümü büyük harfle girilir. Hiçbir tek
   collation her iki yönü de çözmez: `utf8mb4_turkish_ci` ile "ilgaz" araması `ILGAZ`
@@ -913,7 +919,38 @@ Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
   kullanmaya devam eder (Ç>C, ı<i, Ö>O, Ş>S, Ü>U).
 - Ortak altyapı `Core\Filters\QueryFilter` sınıfındadır; her modül kendi `Filters/`
   klasöründe bu sınıfı genişletir ve `searchable()` / `sortable()` beyaz listelerini tanımlar.
+  `foldTurkishI()` ve `turkishFoldColumnExpression()` **protected**'tır: bir alt sınıf
+  aramaya ilişkili bir tablonun kolonunu (`whereHas` içinde — ör. konaklama aramasında
+  firma adı, devir aramasında personel adı) aynı Türkçe katlama mantığıyla ekleyebilir;
+  SQL metni kopyalanmaz (`StayFilter`, `CashTransferFilter` örnekleri).
 - Tüm liste sorguları `paginate()` kullanır — `get()` ile tüm tablo çekilmez.
+
+**Aktif filtre göstergesi ve "boş sonuç" ayrımı (Gün 12):** `QueryFilter::hasActiveFilters()`/
+`activeFilterCount()` sayfalama/sıralama DIŞINDAKİ herhangi bir query param'ın dolu olup
+olmadığına bakar — modül başına ayrı bir uygulama GEREKMEZ. `<x-ui.empty :filtered="..."
+:clear-href="...">` bu bilgiyi kullanarak "hiç kayıt yok" ile "bu filtrelerle eşleşen kayıt
+yok" ekranlarını ayırır ve ikincisine "Filtreleri temizle" bağlantısı ekler.
+
+**Filtre UI deseni bilerek TEK'tir — Gün 12'de yeni bir "drawer" bileşeni AÇILMADI.**
+Tüm liste ekranları (Firmalar, Konaklamalar, Tahsilatlar, Cari Ekstre, Kasa Hareketleri,
+Devir Geçmişi) aynı `<form method="GET" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">`
+düzenini kullanır: mobilde alanlar üst üste dökülür, masaüstünde yan yana sıralanır. Bu,
+kullanıcı talimatının kabul ettiği "mevcut sade panel" seçeneğidir; ayrı bir mobil çekmece
+kasıtlı olarak eklenmedi (tutarlılık + gereksiz soyutlama yasağı, CLAUDE.md §11.3).
+
+**Kasa Hareketleri / Devir Geçmişi (Gün 12) — kasa defterinin en önemli filtre alanı.**
+`cash/movements` ve `cash/transfers` çapraz-vardiya, sayfalanan, filtrelenen listelerdir
+(`CashMovementFilter`/`CashTransferFilter`); `cashbook.index` (tek açık vardiya) ve
+`cashbook.day` (tek gün) bunların YERİNE geçmez, tarih/personel/tür bazında GEÇMİŞE
+dönük arama ihtiyacını onlar karşılayamaz. **Yetki kapsaması filtrelemeden ÖNCE
+uygulanır:** `cashbook.view_all` yoksa temel sorgu `created_by = kullanıcı` (hareketler)
+veya `from_user_id/to_user_id = kullanıcı` (devirler) ile SINIRLANIR, filtre parametreleri
+bu kapsamın **içinde** ek bir AND'dir — personel `user_id` param'ını başka bir personelin
+kimliğine değiştirerek erişimi genişletemez, en kötü ihtimalle sonuç boş döner.
+Hızlı filtreler (Bugün/Giderler/Gelirler/Ara Kasa/Benim Vardiyam) YENİ bir sorgu
+mantığı taşımaz — aynı `date_from`/`type`/`user_id` parametrelerine giden sade
+bağlantılardır; "Gelirler" ikisini birden döndürür (`type[]=room_income&type[]=extra_income`),
+bu yüzden `type` filtresi hem tekil hem dizi değer kabul eder.
 
 ---
 
@@ -1231,7 +1268,8 @@ kaydedilmelidir.
 | 10.1 | Search & Filters standardizasyonu + Excel export | Filtreli export doğru satırları veriyor |
 | 11 | **Dashboard V2 + Lemon Bar** — role duyarlı Operasyon/Finans ayrımı, personel "Vardiyam/Kasam", global Hızlı İşlem | Personel finans/kasa sorgusu koşturmaz; Operasyon/Finans birbirinin sorgusunu koşturmaz |
 | 11.1 | PWA + denetim kaydı ekranının cilası | Ana ekrana eklenebiliyor |
-| 12 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
+| 12 | **Arama + Filtre + Operasyon Hızı** — Kasa Hareketleri/Devir Geçmişi listeleri, cari ekstre bakiye filtresi/sıralaması, hızlı filtreler | Personel filtre param'ıyla erişimi genişletemez; filtreli ekstre bakiyesi bozulmaz |
+| 12.1 | Mevcut Excel geçmişinin aktarımı (§14.1) | Ledger bakiyesi, Excel KALAN BAKİYE ile mutabık |
 | 13 | Yetki testleri, güvenlik sertleştirme, yedekleme cron'u | Rol matrisi testleri yeşil |
 | 14 | Canlıya alma, kullanıcı eğitimi, paralel kullanım başlangıcı | Patron ve personel gerçek veri giriyor |
 

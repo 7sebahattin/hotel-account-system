@@ -32,6 +32,33 @@ class StayFilter extends QueryFilter
         return 'check_in_date';
     }
 
+    /**
+     * Temel arama `stays` kolonlarıyla sınırlıdır; firma adı ayrı bir
+     * tablodadır (kullanıcı talimatı Gün 12 §4). Aynı Türkçe katlama
+     * mantığı (`turkishFoldColumnExpression()`) `whereHas` içinde de
+     * kullanılır — SQL metni tekrar yazılmaz.
+     */
+    protected function applySearch(Builder $query): void
+    {
+        $term = trim((string) $this->request->query('q', ''));
+
+        if ($term === '') {
+            return;
+        }
+
+        $pattern = $this->searchPattern();
+
+        $query->where(function (Builder $inner) use ($pattern): void {
+            foreach ($this->searchable() as $column) {
+                $inner->orWhereRaw($this->turkishFoldColumnExpression($column).' LIKE ?', [$pattern]);
+            }
+
+            $inner->orWhereHas('company', function (Builder $companyQuery) use ($pattern): void {
+                $companyQuery->whereRaw($this->turkishFoldColumnExpression('name').' LIKE ?', [$pattern]);
+            });
+        });
+    }
+
     /** Liste varsayılanı en yeni konaklama üstte. */
     public function currentDirection(): string
     {

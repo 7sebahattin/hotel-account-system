@@ -49,6 +49,10 @@ Route::middleware('auth')->prefix('cash')->name('cashbook.')->group(function ():
         ->name('sessions.print');
 
     // -------------------------------------------------------------- hareket
+    Route::get('movements', [CashMovementController::class, 'index'])
+        ->middleware('can:'.Permission::CashBookView->value)
+        ->name('movements.index');
+
     Route::get('movements/create', [CashMovementController::class, 'create'])
         ->middleware('can:'.Permission::CashBookOperate->value)
         ->name('movements.create');
@@ -62,6 +66,10 @@ Route::middleware('auth')->prefix('cash')->name('cashbook.')->group(function ():
         ->name('movements.reverse');
 
     // ----------------------------------------------------------------- devir
+    Route::get('transfers', [CashTransferController::class, 'index'])
+        ->middleware('can:'.Permission::CashBookView->value)
+        ->name('transfers.index');
+
     Route::get('transfers/create', [CashTransferController::class, 'create'])
         ->middleware('can:'.Permission::CashBookOperate->value)
         ->name('transfers.create');

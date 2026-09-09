@@ -17,6 +17,11 @@ use App\Modules\CashBook\Models\CashTransfer;
  */
 class CashTransferPolicy
 {
+    public function viewAny(User $user): bool
+    {
+        return $user->can(Permission::CashBookView->value);
+    }
+
     public function view(User $user, CashTransfer $transfer): bool
     {
         if (! $user->can(Permission::CashBookView->value)) {

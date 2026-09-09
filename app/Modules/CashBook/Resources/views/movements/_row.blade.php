@@ -18,7 +18,15 @@
     </div>
 
     <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mut">
-        <span class="tabular-nums">{{ $movement->entry_at->format('H:i') }}</span>
+        {{-- Tarih yalnızca çapraz-vardiya listelerinde gösterilir; tek vardiya
+             ekranında zaten bağlamdan bellidir (yalnızca saat yeterlidir). --}}
+        <span class="tabular-nums">{{ $movement->entry_at->format(($showOwner ?? false) ? 'd.m.Y H:i' : 'H:i') }}</span>
+
+        {{-- Çapraz-vardiya listelerinde (Gün 12) kimin hareketi olduğu görünür. --}}
+        @if (($showOwner ?? false) && $movement->creator)
+            <span aria-hidden="true">·</span>
+            <span class="truncate">{{ $movement->creator->name }}</span>
+        @endif
 
         @if ($movement->is_reversal)
             <x-ui.badge tone="danger">Ters kayıt</x-ui.badge>
