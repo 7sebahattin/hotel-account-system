@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Rooms\Services\RoomService;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
@@ -22,13 +23,16 @@ use Illuminate\Http\Request;
 
 class StayController extends Controller
 {
-    public function __construct(private readonly StayService $stays) {}
+    public function __construct(
+        private readonly StayService $stays,
+        private readonly RoomService $rooms,
+    ) {}
 
     public function index(StayFilter $filter): View
     {
         $this->authorize('viewAny', Stay::class);
 
-        $stays = $filter->apply(Stay::query()->with(['company', 'creator']))
+        $stays = $filter->apply(Stay::query()->with(['company', 'room', 'creator']))
             ->paginate($filter->perPage())
             ->withQueryString();
 
@@ -48,6 +52,7 @@ class StayController extends Controller
 
         return view('stays::create', [
             'companies' => $this->companyOptions(),
+            'rooms' => $this->rooms->optionsForForm(),
             'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
             'selectedCompanyId' => $request->integer('company_id') ?: null,
@@ -67,7 +72,7 @@ class StayController extends Controller
         $this->authorize('view', $stay);
 
         return view('stays::show', [
-            'stay' => $stay->load(['company', 'creator', 'updater']),
+            'stay' => $stay->load(['company', 'room', 'creator', 'updater']),
         ]);
     }
 
@@ -78,6 +83,7 @@ class StayController extends Controller
         return view('stays::edit', [
             'stay' => $stay,
             'companies' => $this->companyOptions(),
+            'rooms' => $this->rooms->optionsForForm($stay->room_id),
             'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
         ]);

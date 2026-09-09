@@ -15,6 +15,7 @@ use App\Modules\CashBook\Models\CashTransfer;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -49,6 +50,7 @@ class AppServiceProvider extends ServiceProvider
             'cash_movement' => CashMovement::class,
             'cash_transfer' => CashTransfer::class,
             'cash_movement_category' => CashMovementCategory::class,
+            'room' => Room::class,
         ]);
 
         // CLAUDE.md §7.1: admin rolü yetki kontrollerini geçer.

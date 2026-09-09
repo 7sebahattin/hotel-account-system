@@ -232,6 +232,16 @@ class StayService
         return Stay::query()->whereIn('id', $ids)->pluck('id')->all();
     }
 
+    /**
+     * Bir odanın herhangi bir konaklamada kullanılıp kullanılmadığı — Room
+     * modülünün silme koruması bu sorguya dayanır (CLAUDE.md §4.3/1: Rooms
+     * modülü Stay modelini doğrudan KULLANMAZ, bu servis üzerinden sorar).
+     */
+    public function roomHasHistory(int $roomId): bool
+    {
+        return Stay::query()->where('room_id', $roomId)->exists();
+    }
+
     // ------------------------------------------------------------------ iç
 
     private function postDebit(Stay $stay, User $user): LedgerEntry
@@ -258,7 +268,7 @@ class StayService
     private function fillable(array $data): array
     {
         return array_intersect_key($data, array_flip([
-            'company_id', 'guest_name', 'room_no',
+            'company_id', 'guest_name', 'room_no', 'room_id',
             'check_in_date', 'check_out_date',
             'pricing_mode', 'daily_rate', 'amount', 'currency', 'notes',
         ]));
@@ -319,6 +329,7 @@ class StayService
             'company_id' => (int) $stay->company_id,
             'guest_name' => $stay->guest_name,
             'room_no' => $stay->room_no,
+            'room_id' => $stay->room_id === null ? null : (int) $stay->room_id,
             'check_in_date' => Carbon::parse($stay->check_in_date)->toDateString(),
             'check_out_date' => Carbon::parse($stay->check_out_date)->toDateString(),
             'nights' => (int) $stay->nights,

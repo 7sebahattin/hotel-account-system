@@ -56,6 +56,12 @@ class StayFilter extends QueryFilter
             $inner->orWhereHas('company', function (Builder $companyQuery) use ($pattern): void {
                 $companyQuery->whereRaw($this->turkishFoldColumnExpression('name').' LIKE ?', [$pattern]);
             });
+
+            // Oda Registry (K-100): yeni kayıtlarda `room_no` boş kalır, oda
+            // bilgisi `rooms.room_no` üzerindendir — arama bunu da kapsar.
+            $inner->orWhereHas('room', function (Builder $roomQuery) use ($pattern): void {
+                $roomQuery->whereRaw($this->turkishFoldColumnExpression('room_no').' LIKE ?', [$pattern]);
+            });
         });
     }
 

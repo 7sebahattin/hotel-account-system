@@ -6,7 +6,7 @@
         <x-slot:meta>
             <p class="mt-1 text-sm text-mut">
                 {{ $stay->company?->name ?? '—' }}
-                @if ($stay->room_no) · Oda <span class="tabular-nums">{{ $stay->room_no }}</span> @endif
+                @if ($stay->roomLabel()) · Oda <span class="tabular-nums">{{ $stay->roomLabel() }}</span> @endif
             </p>
             <div class="mt-2">@include('stays::_status', ['stay' => $stay])</div>
         </x-slot:meta>

@@ -66,11 +66,13 @@ class RolePermissionMatrixTest extends TestCase
             Permission::CashBookView, Permission::CashBookOperate, Permission::CashBookViewAll,
             // v2.1.1-B: patron kasa hareket türlerini (kategori) de yönetir.
             Permission::CashBookManageCategories,
+            // Room Registry (K-100): patron oda tanımlarını da yönetir.
+            Permission::RoomsManage,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
-        $this->assertCount(20, $granted);
+        $this->assertCount(21, $granted);
     }
 
     #[Test]
@@ -87,6 +89,8 @@ class RolePermissionMatrixTest extends TestCase
             Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
             // Personel kendi kasasını görür ama TÜM vardiyaları göremez.
             Permission::CashBookViewAll,
+            // Room Registry (K-100): oda tanımı yönetimi Admin/Patron'dadır.
+            Permission::RoomsManage,
         ] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted, "personel {$forbidden->value} yetkisine sahip olmamalı");
         }

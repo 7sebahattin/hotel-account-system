@@ -87,7 +87,7 @@
                     <td class="px-4 py-3 whitespace-nowrap tabular-nums text-mut">{{ $stay->check_out_date->format('d.m.Y') }}</td>
                     <td class="px-4 py-3 text-right tabular-nums text-mut">{{ $stay->nights }}</td>
                     <td class="px-4 py-3 text-tx">{{ $stay->guest_name }}</td>
-                    <td class="px-4 py-3 tabular-nums text-mut">{{ $stay->room_no ?: '—' }}</td>
+                    <td class="px-4 py-3 tabular-nums text-mut">{{ $stay->roomLabel() ?? '—' }}</td>
                     <td class="px-4 py-3 text-mut">{{ $stay->company?->name ?? '—' }}</td>
                     <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
                         {{ $stay->amountMoney()->format($stay->currency) }}
@@ -130,7 +130,7 @@
                             → <span class="tabular-nums">{{ $stay->check_out_date->format('d.m.Y') }}</span>
                             <br>
                             <span class="tabular-nums">{{ $stay->nights }}</span> gece
-                            @if ($stay->room_no) · Oda <span class="tabular-nums">{{ $stay->room_no }}</span> @endif
+                            @if ($stay->roomLabel()) · Oda <span class="tabular-nums">{{ $stay->roomLabel() }}</span> @endif
                         </p>
 
                         <span class="shrink-0 tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>

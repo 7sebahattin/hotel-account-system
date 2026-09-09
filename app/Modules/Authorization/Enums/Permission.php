@@ -28,6 +28,9 @@ enum Permission: string
     case StaysUpdate = 'stays.update';
     case StaysDelete = 'stays.delete';
 
+    /** Oda tanımları (Yönetim → Odalar). Görüntüleme ayrı yetki DEĞİLDİR — cashbook.manage_categories ile aynı desen. */
+    case RoomsManage = 'rooms.manage';
+
     case PaymentsView = 'payments.view';
     case PaymentsCreate = 'payments.create';
     case PaymentsCancel = 'payments.cancel';
@@ -60,6 +63,7 @@ enum Permission: string
             self::CompaniesDelete, self::CompaniesRestore => 'Firmalar',
             self::StaysView, self::StaysCreate,
             self::StaysUpdate, self::StaysDelete => 'Konaklamalar',
+            self::RoomsManage => 'Odalar',
             self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
             self::LedgerView, self::LedgerViewAll => 'Cari Hesap',
             self::CashBookView, self::CashBookOperate, self::CashBookViewAll,
@@ -85,6 +89,7 @@ enum Permission: string
             self::StaysCreate => 'Konaklama ekle',
             self::StaysUpdate => 'Konaklama düzenle',
             self::StaysDelete => 'Konaklama sil',
+            self::RoomsManage => 'Oda tanımlarını yönet',
             self::PaymentsView => 'Tahsilatları görüntüle',
             self::PaymentsCreate => 'Cari tahsilat',
             self::PaymentsCancel => 'Tahsilat iptal et',

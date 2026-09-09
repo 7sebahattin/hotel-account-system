@@ -76,6 +76,7 @@ Geliştirme ortamı 8.4 çalıştırabilir; bu üç kapı sayesinde fark sessizc
 10. **Excel Export** — listelerin ve ekstrenin dışa aktarımı
 11. **Basic Audit Log** — kim, ne zaman, neyi değiştirdi
 12. **Cash Book (Kasa Defteri)** — vardiya, kasa hareketi, personel devri, sayım (Gün 10)
+13. **Rooms (Odalar)** — oda tanım master data (K-100, kullanıcı onayıyla §3.2 istisnası)
 
 ### 3.2 ŞİMDİ YAPILMAYACAKLAR (kesin)
 
@@ -85,7 +86,6 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
 - TC kimlik / pasaport saklama, KVKK altyapısı, şifreleme
 - KBS entegrasyonu
 - Rezervasyon
-- Oda yönetimi (`room_no` sadece serbest metin)
 - Housekeeping
 - Stay charges / ekstra harcamalar
 - Banka hesap yönetimi, banka entegrasyonu, mutabakat
@@ -99,6 +99,15 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
 - Bildirim/e-posta gönderimi (şifre sıfırlama hariç)
 - Çok dilli arayüz (sadece Türkçe)
 - API / mobil uygulama
+
+> **Oda yönetimi K-100'de kapsama ALINDI** — kullanıcı bu listedeki kuralı
+> bilerek AŞMIŞTIR (istisna talep edildi, "dur ve sor" kuralı uygulanıp
+> kullanıcıya açıkça soruldu, "evet şimdi yap" yanıtı alındı). Kapsam
+> KASITLI OLARAK dar tutulmuştur: yalnızca oda tanım master data'sı
+> (`rooms` tablosu) ve `Stays.room_id` bağlantısı — Rezervasyon, Housekeeping,
+> Oda Tipi lookup tablosu, fiyatlandırma/oda ilişkisi, PMS durumları HÂLÂ
+> kapsam dışıdır ve bu istisnanın parçası DEĞİLDİR. Detay: §5.9, §8/Odalar,
+> `docs/kararlar.md` K-100.
 
 **Kural:** Bu listedeki bir şey isteniyorsa dur ve kullanıcıya sor. "Sadece küçük bir alan ekleyeyim" yapma.
 
@@ -131,6 +140,7 @@ app/
     ├── Authorization/
     ├── Companies/
     ├── Stays/
+    ├── Rooms/
     ├── Payments/
     ├── Ledger/
     ├── Dashboard/
@@ -246,7 +256,8 @@ Genel kurallar:
 | id | bigint PK | |
 | company_id | FK companies | zorunlu, index |
 | guest_name | varchar(150) | serbest metin, misafir tablosu **yok** |
-| room_no | varchar(20) null | serbest metin |
+| room_no | varchar(20) null | **eski serbest metin — K-100 SONRASI YAZILMAZ.** Yalnızca Room Registry öncesi kayıtlarda dolu; geriye dönük OKUMA içindir, hiçbir zaman geriye doldurulmaz (backfill yapılmaz) |
+| room_id | FK rooms null | K-100. Yeni kayıtlar odayı BUNUNLA seçer; `room_no` ile `room_id` AYNI ANDA anlamlı DEĞİLDİR — `Stay::roomLabel()` önce `room_id`'yi, o yoksa `room_no`'yu gösterir |
 | check_in_date | date | index |
 | check_out_date | date | `>= check_in_date` |
 | nights | unsigned int | sunucuda hesaplanır, doğrulanır, `>= 1` |
@@ -446,13 +457,39 @@ ile yazma arasında kilitsiz bir pencere bırakmaz. Aksi hâlde tam o anda başl
 bir devir ya da kapanış, devrin zaten bildirdiği tutarı sessizce stale bırakabilirdi
 (K-091, `CashBookConcurrencyTest`'te gerçek InnoDB kilitlenmesiyle kanıtlandı).
 
+### 5.9 `rooms` (K-100)
+
+Oda tanım master data'sı — Company/User ile AYNI basitlikte bir kayıttır,
+kendi cari hareketi/hesabı YOKTUR.
+
+| Alan | Tip | Not |
+|---|---|---|
+| id | bigint PK | |
+| room_no | varchar(20) | zorunlu, **unique** |
+| room_name | varchar(150) null | isteğe bağlı görünen ad ("Deniz Manzaralı") |
+| room_type | varchar(50) null | serbest metin — ayrı bir lookup tablosu AÇILMADI (§3.3 ilkesi) |
+| is_active | boolean | default true |
+| created_by / updated_by | FK users null | |
+| created_at / updated_at | | |
+
+**Kural: kullanılmış (bir `stays` satırında referans edilmiş) bir oda asla
+hard-delete edilmez** — `companies`/`cash_movement_categories` ile AYNI ilke.
+Kontrol `Stays\Services\StayService::roomHasHistory()` üzerinden yapılır;
+`Rooms` modülü `Stay` modelini doğrudan KULLANMAZ (§4.3/1). Kullanılmamış bir
+oda hard-delete edilebilir (soft delete YOKTUR, `deleted_at` kolonu açılmadı —
+gereksiz soyutlama, §3.3).
+
+Pasif (`is_active=false`) bir oda YENİ konaklama için seçilemez ama geçmişte
+görünmeye devam eder (`Stay.room_id` değişmez).
+
 ### 5.7 Morph map
 
 `AppServiceProvider::boot()` içinde `Relation::enforceMorphMap([...])` zorunlu:
 `'stay' => Stay::class`, `'payment' => Payment::class`, `'company' => Company::class`,
 `'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`,
 `'cash_session' => CashSession::class`, `'cash_movement' => CashMovement::class`,
-`'cash_transfer' => CashTransfer::class`, `'cash_movement_category' => CashMovementCategory::class`.
+`'cash_transfer' => CashTransfer::class`, `'cash_movement_category' => CashMovementCategory::class`,
+`'room' => Room::class`.
 Sınıf adı değişse bile veri bozulmaz.
 
 ---
@@ -571,6 +608,7 @@ users.view, users.manage
 roles.manage
 companies.view, companies.create, companies.update, companies.delete, companies.restore
 stays.view, stays.create, stays.update, stays.delete
+rooms.manage           # oda tanımlarını yönet (K-100)
 payments.view, payments.create, payments.cancel
 ledger.view            # tek firmanın ekstresi
 ledger.view_all        # tüm firmaların bakiyesi / toplam alacak
@@ -606,6 +644,7 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | stays.create | ✅ | ✅ | ✅ |
 | stays.update | ✅ | ✅ | ⚠️ kendi kaydı + süre |
 | stays.delete | ✅ | ✅ | ❌ |
+| rooms.manage | ✅ | ✅ | ❌ |
 | payments.view | ✅ (tümü) | ✅ (tümü) | ✅ (tümü) |
 | payments.create | ✅ | ✅ | ✅ |
 | payments.cancel | ✅ | ✅ | ❌ |
@@ -683,13 +722,44 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
   2. konaklama güncellenir
   3. yeni borç hareketi oluşturulur
 
-  Finansal olmayan alanlar (`guest_name`, `room_no`, `notes`) cari hareketi üretmez.
+  Finansal olmayan alanlar (`guest_name`, `room_no`, `room_id`, `notes`) cari hareketi üretmez.
 - **İptal:** `status = cancelled` + geçerli cari hareketinin ters kaydı, aynı transaction'da.
   Aynı konaklama ikinci kez iptal edilemez; iptal edilmiş konaklama düzenlenemez.
 - **Değişmez:** bir konaklamanın her an **tam olarak bir geçerli borç hareketi** vardır
   (iptal edilmişse hiç yoktur). Düzeltilen hareketler ters kayıtla net sıfıra gelir.
 - Denetim kaydı `Auditable` trait'i ile değil, `StayService` tarafından açıkça yazılır —
   finansal düzeltmenin kaydı ters kayıt ve yeni kayıt kimliklerini de taşımak zorundadır.
+- **Oda (K-100):** yeni konaklamalar `room_id` ile bir `Room` seçer; formda serbest metin
+  YOKTUR. `room_no` yalnızca Room Registry ÖNCESİ kayıtlarda dolu kalır ve hiç yeniden
+  yazılmaz — `Stay::roomLabel()` önce `room_id`'yi, o yoksa eski `room_no` metnini gösterir.
+  Pasif bir oda YENİ kayıt için seçilemez (`StayRequest`); düzenlemede kaydın KENDİ odası
+  pasifleşmiş olsa bile seçenekten kaybolmaz. `room_id` finansal alan DEĞİLDİR, değişimi
+  ters kayıt üretmez.
+
+### Rooms (Odalar) — K-100
+
+Oda tanım master data'sı. `Companies`/`Users` ile AYNI basitlikte bir CRUD'dur —
+`StayService` gibi özel bir akışa (ters kayıt, cari hareket) ihtiyacı YOKTUR,
+çünkü oda tanımının kendisi finansal bir olay üretmez.
+
+- Yönetim ekranı `rooms.manage` yetkisiyle korunur (Admin/Patron); Personel bu
+  ekranı hiç görmez. Konaklama formundaki oda SEÇİMİ ayrı bir yoldur
+  (`RoomService::optionsForForm()`, `stays.create`/`stays.update` yetkisine bağlı) —
+  seçenek listesini görmek `rooms.manage` GEREKTİRMEZ.
+- UI konumu: Yönetim → Odalar. Ayrı bir "Tanımlar Merkezi" AÇILMADI — kapsam
+  kasıtlı olarak dar tutuldu (bkz. §3.2 istisna notu).
+- **Silme:** kullanılmış (bir `stays` satırında referans edilmiş) oda asla
+  hard-delete edilmez — silme isteği reddedilir, kullanıcıya pasifleştirmesi
+  önerilir. Kontrol `StayService::roomHasHistory()` üzerinden yapılır (§4.3/1:
+  `Rooms` modülü `Stay` modelini doğrudan KULLANMAZ). Kullanılmamış oda hard-delete
+  edilebilir.
+- **Pasifleştirme:** `is_active=false` yeni konaklama için odayı seçilemez yapar
+  ama geçmiş kayıtlarda görünmeye devam eder (`Stay.room_id` değişmez).
+- Denetim kaydı `Auditable` trait'i ile otomatik yazılır (Company/User ile AYNI desen).
+- **CashBook "Oda Geliri" bağlantısı bilerek YAPILMADI:** bu turun kapsamı Room
+  master data + Stays entegrasyonu ile sınırlıdır; CashBook'a dokunmak açık
+  talimatla ("DO NOT TOUCH ... CASHBOOK") çelişirdi. İleride istenirse ayrı
+  bir onayla ele alınır.
 
 ### Payments
 - Kayıt oluşturulunca **credit** kaydı (`entry_date = payment_date`), aynı transaction içinde.
@@ -1082,7 +1152,7 @@ görür.
 açıkça yazılır (finansal kayıt deseni, §8/Payments ile aynı gerekçe).
 
 ### Basic Audit Log
-`Auditable` trait'i ile `Company` ve `User` modellerinde `created/updated/deleted` olayları;
+`Auditable` trait'i ile `Company`, `User` ve `Room` modellerinde `created/updated/deleted` olayları;
 ayrıca `login`, `login_failed`, `logout`, `payment cancelled`, `exported`, rol değişiklikleri.
 
 **İstisna — `Stay`, `Payment` ve `LedgerEntry`:** bu modellerin denetim kayıtları ilgili

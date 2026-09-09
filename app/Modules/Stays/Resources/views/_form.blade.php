@@ -21,7 +21,23 @@
     </div>
 
     <x-ui.input label="Misafir adı" name="guest_name" required maxlength="150" :value="$s->guest_name ?? null" />
-    <x-ui.input label="Oda" name="room_no" maxlength="20" :value="$s->room_no ?? null" />
+
+    <div>
+        <x-ui.select label="Oda" name="room_id">
+            <option value="">Seçilmedi</option>
+            @foreach ($rooms as $id => $label)
+                <option value="{{ $id }}" @selected((string) old('room_id', $s->room_id ?? '') === (string) $id)>
+                    {{ $label }}
+                </option>
+            @endforeach
+        </x-ui.select>
+
+        @if ($s?->room_id === null && $s?->room_no)
+            <p class="mt-1 text-xs text-mut">
+                Geçmiş kayıt oda bilgisi (serbest metin): <span class="tabular-nums">{{ $s->room_no }}</span>
+            </p>
+        @endif
+    </div>
 
     <x-ui.input label="Giriş tarihi" name="check_in_date" type="date" required
                 data-check-in

@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Models\Stay;
@@ -36,6 +37,7 @@ class StayFactory extends Factory
             'company_id' => Company::factory(),
             'guest_name' => fake()->name(),
             'room_no' => (string) fake()->numberBetween(101, 420),
+            'room_id' => null,
             'check_in_date' => $checkIn->toDateString(),
             'check_out_date' => $checkOut->toDateString(),
             'nights' => Stay::calculateNights($checkIn, $checkOut),
@@ -67,5 +69,11 @@ class StayFactory extends Factory
     public function cancelled(): static
     {
         return $this->state(fn () => ['status' => StayStatus::Cancelled->value]);
+    }
+
+    /** Yeni Room Registry akışı: oda serbest metin DEĞİL, `room_id` ile bağlıdır. */
+    public function forRoom(Room $room): static
+    {
+        return $this->state(fn () => ['room_id' => $room->getKey(), 'room_no' => null]);
     }
 }

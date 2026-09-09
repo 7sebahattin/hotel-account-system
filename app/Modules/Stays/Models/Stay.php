@@ -9,6 +9,7 @@ use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Database\Factories\StayFactory;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
@@ -29,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property int $company_id
  * @property string $guest_name
  * @property string|null $room_no
+ * @property int|null $room_id
  * @property Carbon $check_in_date
  * @property Carbon $check_out_date
  * @property int $nights
@@ -44,6 +46,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $updated_at
  * @property Carbon|null $deleted_at
  * @property-read Company|null $company
+ * @property-read Room|null $room
  * @property-read User|null $creator
  * @property-read User|null $updater
  */
@@ -59,6 +62,7 @@ class Stay extends Model
         'company_id',
         'guest_name',
         'room_no',
+        'room_id',
         'check_in_date',
         'check_out_date',
         'amount',
@@ -74,6 +78,7 @@ class Stay extends Model
             // company_id form'dan metin olarak gelir; cari servisine int geçmek
             // zorundayız (bkz. LedgerService::debit imzası).
             'company_id' => 'integer',
+            'room_id' => 'integer',
             'created_by' => 'integer',
             'updated_by' => 'integer',
             'check_in_date' => 'date',
@@ -90,6 +95,27 @@ class Stay extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * Oda Registry (K-100). Eloquent ilişki tanımı serbesttir (CLAUDE.md
+     * §4.3/1 istisnası, `company()` ile AYNI desen) — iş mantığı taşımaz,
+     * yalnızca gösterim için kullanılır.
+     */
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Room::class);
+    }
+
+    /**
+     * Görüntülenecek oda etiketi: `room_id` set edilmişse odanın kendi
+     * etiketi, aksi hâlde geriye dönük uyumluluk için eski serbest metin
+     * (`room_no`) — hiçbiri yoksa null. Eski veri hiçbir zaman yeniden
+     * yazılmaz (kullanıcı talimatı: Room Registry §2).
+     */
+    public function roomLabel(): ?string
+    {
+        return $this->room?->label() ?? $this->room_no;
     }
 
     public function amountMoney(): Money

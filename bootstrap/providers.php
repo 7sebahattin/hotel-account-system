@@ -8,6 +8,7 @@ use App\Modules\Companies\Providers\CompaniesServiceProvider;
 use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\Ledger\Providers\LedgerServiceProvider;
 use App\Modules\Payments\Providers\PaymentsServiceProvider;
+use App\Modules\Rooms\Providers\RoomsServiceProvider;
 use App\Modules\Stays\Providers\StaysServiceProvider;
 use App\Modules\Users\Providers\UsersServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -24,6 +25,7 @@ return [
     DashboardServiceProvider::class,
     LedgerServiceProvider::class,
     PaymentsServiceProvider::class,
+    RoomsServiceProvider::class,
     StaysServiceProvider::class,
     UsersServiceProvider::class,
 ];

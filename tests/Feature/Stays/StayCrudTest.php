@@ -36,7 +36,6 @@ class StayCrudTest extends TestCase
         return array_merge([
             'company_id' => $this->company->id,
             'guest_name' => 'John Smith',
-            'room_no' => '204',
             'check_in_date' => '2026-09-07',
             'check_out_date' => '2026-09-10',
             'pricing_mode' => 'total',
@@ -58,7 +57,6 @@ class StayCrudTest extends TestCase
         $stay = Stay::query()->firstOrFail();
 
         $this->assertSame('John Smith', $stay->guest_name);
-        $this->assertSame('204', $stay->room_no);
         $this->assertSame('9000.00', $stay->amount);
         $this->assertSame(Currency::TRY, $stay->currency);
         $this->assertSame(StayStatus::Active, $stay->status);

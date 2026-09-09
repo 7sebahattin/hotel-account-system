@@ -50,6 +50,7 @@ enum RoleName: string
                 Permission::StaysCreate,
                 Permission::StaysUpdate,
                 Permission::StaysDelete,
+                Permission::RoomsManage,
                 Permission::PaymentsView,
                 Permission::PaymentsCreate,
                 Permission::PaymentsCancel,

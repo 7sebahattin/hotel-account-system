@@ -33,10 +33,27 @@ class StayRequest extends FormRequest
      */
     public function rules(): array
     {
+        $stay = $this->route('stay');
+        $currentRoomId = $stay instanceof Stay ? $stay->room_id : null;
+
+        // Yeni kayıt: yalnızca AKTİF oda seçilebilir. Düzenlemede, kaydın
+        // KENDİ odası pasifleşmiş olsa bile seçenekten kaybolmaz — aksi
+        // hâlde form sessizce reddederdi (kullanıcı talimatı: Room Registry
+        // §1 "inactive rooms ... cannot be selected for new records").
+        $roomExists = Rule::exists('rooms', 'id')->where(function ($query) use ($currentRoomId): void {
+            $query->where(function ($inner) use ($currentRoomId): void {
+                $inner->where('is_active', true);
+
+                if ($currentRoomId !== null) {
+                    $inner->orWhere('id', $currentRoomId);
+                }
+            });
+        });
+
         return [
             'company_id' => ['required', Rule::exists('companies', 'id')->whereNull('deleted_at')],
             'guest_name' => ['required', 'string', 'max:150'],
-            'room_no' => ['nullable', 'string', 'max:20'],
+            'room_id' => ['nullable', 'integer', $roomExists],
             'check_in_date' => ['required', 'date'],
             'check_out_date' => ['required', 'date', 'after:check_in_date'],
             'pricing_mode' => ['required', Rule::enum(StayPricingMode::class)],
@@ -55,7 +72,7 @@ class StayRequest extends FormRequest
         return [
             'company_id' => 'firma',
             'guest_name' => 'misafir adı',
-            'room_no' => 'oda',
+            'room_id' => 'oda',
             'check_in_date' => 'giriş tarihi',
             'check_out_date' => 'çıkış tarihi',
             'pricing_mode' => 'ücret giriş şekli',

@@ -1744,3 +1744,87 @@ Blade dosyasında hardcoded değer YOKTUR (grep ile doğrulandı) ve her alan
 adımı eklendi), yeni `docs/release-checklist-v2.1.1.md` (tek kaynak
 kontrol listesi + 12 maddelik finansal duman testi). Hiçbir uygulama kodu
 DEĞİŞMEDİ — bu tamamen bir dokümantasyon/süreç düzeltmesidir.
+
+---
+
+## K-100 · Room Registry: CLAUDE.md §3.2'nin "şimdi yapılmayacak" istisnası, kullanıcı onayıyla açıldı
+
+**Bağlam:** Kullanıcı "acil, çok küçük bir yama" olarak bir Oda (Room) master
+data'sı ve Konaklama formunda serbest metin yerine oda SEÇİMİ istedi. Bu, §3.2
+listesindeki "Oda yönetimi (`room_no` sadece serbest metin)" satırıyla ve
+listenin kendi bağlayıcı kuralıyla ("Bu listedeki bir şey isteniyorsa dur ve
+kullanıcıya sor") DOĞRUDAN çelişiyordu. Talep ayrıca iki ayrı mimari çelişki
+taşıyordu:
+
+1. **Otomatik migration / "finalize" HTTP ucu isteği** — `docs/deploy-
+   github-actions.md` §6'da bu desen ZATEN değerlendirilip REDDEDİLMİŞTİ
+   (token sızarsa uzaktan şema değişikliği riski). Kullanıcıya soruldu;
+   yanıt: **"Manuel terminal komutu (önerilen)"** — bu yüzden bu turda
+   HİÇBİR otomatik migration/finalize-endpoint mekanizması YAZILMADI. Room
+   migration'ı production'a `docs/release-checklist-v2.1.1.md`'deki mevcut
+   MANUEL komut sırasıyla taşınacaktır (standart Laravel migration'ı,
+   `php artisan migrate --force`).
+2. **GitHub Actions "Deploy (Lemon)" workflow'unun otomatik/gözetimsiz
+   tetiklenmesi** — production ortamı `docs/deploy-lemon.md` §5'e göre
+   HÂLÂ boştur; bu, gerçekleşecek İLK production cutover olurdu. Kullanıcıya
+   soruldu; yanıt: **"Hayır — kendim tetikleyeceğim (önerilen)"** — bu
+   yüzden bu görev develop'a push ile SONLANDI, deploy workflow'u
+   TETİKLENMEDİ.
+
+Yalnızca Room Registry sorusu için yanıt **"Evet, şimdi yap"** oldu — bu
+istisna bilerek, kayıt altına alınarak açıldı; §3.2'deki diğer kalemler
+(Rezervasyon, Housekeeping, PMS durumları, Oda Tipi lookup tablosu vb.)
+kapsam DIŞINDA kalmaya devam eder.
+
+**Karar:**
+
+1. Yeni `Rooms` modülü açıldı: `rooms` tablosu (`room_no` zorunlu+unique,
+   `room_name`/`room_type` nullable, `is_active`, `created_by`/`updated_by`).
+   Soft delete YOK (§3.3 "gereksiz soyutlama açma" ilkesi) — kullanılmış oda
+   zaten hard-delete'e karşı `StayService::roomHasHistory()` ile korunuyor,
+   ikinci bir "silindi ama görünür kalsın" mekanizmasına ihtiyaç yok.
+2. `stays.room_id` (nullable FK, `rooms`e, `restrictOnDelete`) eklendi.
+   `stays.room_no` DOKUNULMADI: hem kolonun kendisi hem içindeki veri.
+   Yeni konaklamalar SADECE `room_id` ile oda seçer; `StayRequest` artık
+   `room_no`'yu KABUL ETMEZ (form alanı da select'e çevrildi). Bu, kullanıcı
+   talimatının birebir istediği şeydir: "replace free-text room entry for
+   NEW stays with Room selection" + "do not rewrite old data blindly."
+3. `Stay::roomLabel()`: `room_id` varsa odanın kendi etiketini, yoksa eski
+   `room_no` metnini gösterir — hiçbir geçmiş kayıt sessizce kaybolmaz.
+4. Modüler monolit kuralı (§4.3/1) korundu: `Rooms` modülü `Stay` modelini
+   HİÇ KULLANMAZ; "oda kullanılmış mı" kontrolü `StayService::
+   roomHasHistory(int $roomId): bool` üzerinden, `CompanyService::delete()`
+   → `LedgerService::hasEntriesForCompany()` ile AYNI desenle yapılır. Tersi
+   yönde `Stays` modülü, Room seçenek listesi için `RoomService::
+   optionsForForm()`u çağırır (Controller'ın başka modülün Service'ini
+   çağırması — CompanyController'ın StayService/PaymentService/LedgerService
+   çağırmasıyla AYNI, zaten var olan desen). İki modül birbirinin
+   Service'ini çağırıyor ama hiçbiri diğerinin Model'ine dokunmuyor.
+5. Yeni yetki `rooms.manage` (Admin+Patron) — `cashbook.manage_categories`
+   ile AYNI desen: ayrı bir "görüntüleme" yetkisi AÇILMADI, tek yetki
+   yönetimin tamamını kapsar. Konaklama formundaki oda SEÇİMİ bu yetkiyi
+   GEREKTİRMEZ (`stays.create`/`stays.update` yeterlidir) — Personel de oda
+   seçebilir, yalnızca oda TANIMLARINI yönetemez.
+6. UI: Yönetim → Odalar (kullanıcı talimatının "Tanımlar Merkezi çok
+   genişse sadece Odalar'ı ekle" seçeneği izlendi — ayrı bir Settings alt
+   sistemi AÇILMADI).
+7. CashBook "Oda Geliri" hareketine oda referansı eklenmedi (kullanıcı
+   talimatının kendi "do NOT force a large CashBook redesign" istisnası +
+   görevin üst düzey "DO NOT TOUCH ... CASHBOOK" kısıtı) — bilerek kapsam
+   dışı bırakıldı, istenirse ayrı bir onayla ele alınır.
+8. Test kapsamı: oda oluşturma, `room_no` benzersizliği, pasif odanın YENİ
+   kayıt için seçilememesi (ama düzenlemede kendi odasının kaybolmaması),
+   eski `room_no` metninin okunabilir kalması, yeni konaklamanın `room_id`
+   ile bağlanması, kullanım geçmişi olan odanın silinememesi, yetki
+   matrisi (`RoomCrudTest`, `RoomStayIntegrationTest`, 14 test). Otomatik
+   migration/eşzamanlılık testleri YAZILMADI çünkü o mekanizmanın kendisi
+   (madde 1) bu turda inşa EDİLMEDİ.
+
+**Etkilenen dosyalar:** yeni `app/Modules/Rooms/*` (migration, model,
+policy, service, request, controller, route, view), `app/Modules/Stays/*`
+(migration, model, service, request, controller, filter, factory, view),
+`app/Modules/Authorization/Enums/Permission.php` + `RoleName.php`,
+`app/Providers/AppServiceProvider.php` (morph map), `bootstrap/providers.php`,
+`resources/views/partials/sidebar.blade.php`, `CLAUDE.md` (§3.1, §3.2, §4,
+§5.9, §7.2, §7.3, §8, Basic Audit Log), test güncellemeleri
+(`StayCrudTest`, `RolePermissionMatrixTest`) + yeni `tests/Feature/Rooms/*`.

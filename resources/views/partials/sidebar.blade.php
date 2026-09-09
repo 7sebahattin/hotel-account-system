@@ -37,6 +37,7 @@
             'items' => [
                 ['route' => 'users.index', 'label' => 'Kullanıcılar', 'can' => Permission::UsersView->value, 'icon' => 'users'],
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
+                ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
                 ['route' => 'cashbook.categories.index', 'label' => 'Kasa Hareket Türleri', 'can' => Permission::CashBookManageCategories->value, 'icon' => 'log'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
