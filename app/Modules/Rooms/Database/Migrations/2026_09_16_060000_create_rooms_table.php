@@ -6,11 +6,27 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * KURTARMA GÜVENLİĞİ: `rooms` bu migration'ın ürettiği YENİ bir tablodur ve
+ * bir sonraki migration (`add_room_id_to_stays_table`) ona FK ile referans
+ * verir. Motor açıkça `InnoDB` olarak zorlanır — aksi hâlde sunucunun
+ * varsayılan depolama motoruna güvenilirdi ve `stays` (zaten InnoDB) ile
+ * `rooms` arasında sessiz bir motor uyuşmazlığı, ADD CONSTRAINT adımında
+ * "Foreign key constraint is incorrectly formed" (errno 150) hatasına yol
+ * açabilirdi — production'da GERÇEKTEN yaşanan hata budur (bkz.
+ * add_room_id_to_stays_table, docs/kararlar.md K-101).
+ */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('rooms')) {
+            return;
+        }
+
         Schema::create('rooms', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
+
             $table->id();
 
             $table->string('room_no', 20)->unique();

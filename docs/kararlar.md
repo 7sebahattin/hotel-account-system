@@ -1828,3 +1828,48 @@ policy, service, request, controller, route, view), `app/Modules/Stays/*`
 `resources/views/partials/sidebar.blade.php`, `CLAUDE.md` (§3.1, §3.2, §4,
 §5.9, §7.2, §7.3, §8, Basic Audit Log), test güncellemeleri
 (`StayCrudTest`, `RolePermissionMatrixTest`) + yeni `tests/Feature/Rooms/*`.
+
+---
+
+## K-101 · Production migration hatası: `stays_room_id_foreign` errno 150 — kurtarma güvenli hâle getirildi
+
+**Bulgu:** `2026_09_16_060100_add_room_id_to_stays_table` production'da FK
+ekleme adımında `SQLSTATE[HY000]: General error: 1005 ... errno: 150
+"Foreign key constraint is incorrectly formed"` ile başarısız oldu. Aynı iki
+migration yerelde (aynı MariaDB 10.11 motoruyla) hatasız çalıştı — sorun
+migration'ın SQL sözdizimi DEĞİL, production'a ÖZGÜ bir durumdur.
+
+**Kök neden analizi:** Laravel'in MySQL grammar'ı `Schema::table()` içindeki
+"kolon ekle" ve "FK kısıtı ekle" adımlarını AYRI ALTER TABLE ifadeleri olarak
+gönderir. Hata mesajının gösterdiği başarısız ifade YALNIZCA FK ekleme
+adımıdır — bu, `stays.room_id` kolonunun (ve örtük index'inin) bu denemede
+ZATEN eklenmiş olduğu, yalnızca FK kısıtının reddedildiği anlamına gelir.
+Migration `up()` metodu exception fırlattığı için Laravel bunu "çalıştı"
+olarak işaretlemedi; bir sonraki `migrate` denemesi dosyayı BAŞTAN çalıştırıp
+`room_id` kolonunu tekrar eklemeye çalışacak ve bu kez "Duplicate column
+name" ile başarısız olacaktı. FK'nin kendisinin errno 150 ile reddedilmesinin
+kesin sunucu tarafı nedeni (`rooms` tablosunun oluşturulduğu ANDA motor
+açıkça `InnoDB` olarak belirtilmemişti — sunucunun varsayılan depolama
+motoruna sessizce güvenilmişti) production veritabanına doğrudan erişim
+olmadan kesin doğrulanamadı; bu yüzden düzeltme HEM en olası nedeni ortadan
+kaldırır HEM de kısmi/tekrarlanan denemeye karşı güvenli hâle getirir.
+
+**Düzeltme:**
+1. `create_rooms_table`: `$table->engine = 'InnoDB';` açıkça eklendi; tablo
+   zaten varsa (`Schema::hasTable`) oluşturma adımı atlanır.
+2. `add_room_id_to_stays_table`: kolon ekleme ve FK ekleme artık BİRBİRİNDEN
+   BAĞIMSIZ olarak `Schema::hasColumn()`/`Schema::hasForeignKey()` ile
+   korunur — hangisi zaten uygulanmışsa o adım atlanır. `down()` de aynı
+   şekilde korunur. Gereksiz/yinelenen `$table->index('room_id')` çağrısı
+   kaldırıldı — FK kısıtı zaten kendi index'ini oluşturur.
+3. Yerelde tam kurtarma senaryosu simüle edilerek doğrulandı: FK elle
+   düşürülüp migration kaydı silindi (kolon production'daki gibi yerinde
+   bırakıldı), `php artisan migrate` yeniden çalıştırıldı — kolonu tekrar
+   eklemeye ÇALIŞMADI, yalnızca eksik FK'yi ekledi ve başarıyla tamamlandı.
+   Ayrıca tertemiz bir `migrate:fresh` ve bir `migrate:rollback` ile de
+   doğrulandı.
+
+**Kapsam:** Bu bir üretim düzeltmesidir, yeni bir özellik DEĞİLDİR. Yalnızca
+iki migration dosyası değişti; Room modülünün model/servis/controller/view
+katmanlarına dokunulmadı. Production migration'ı bu turda ÇALIŞTIRILMADI —
+kullanıcı ayrı bir adımda kendisi tetikleyecektir.
