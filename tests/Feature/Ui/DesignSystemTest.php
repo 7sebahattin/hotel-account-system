@@ -1,0 +1,357 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Ui;
+
+use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\Companies\Models\Company;
+use App\Modules\Stays\Models\Stay;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
+use Tests\TestCase;
+
+/**
+ * Tasarım sistemi ve erişilebilirlik iskeletinin render testleri.
+ *
+ * İş kuralı doğrulamaz; yalnızca her ekranın ortak kabuğu doğru kurduğunu kontrol eder.
+ */
+class DesignSystemTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedRoles();
+    }
+
+    #[Test]
+    public function kenar_cubugu_yetkiye_duyarlidir(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $personel = $this->userWithRole(RoleName::Personel);
+
+        $this->actingAs($admin)->get(route('home'))
+            ->assertSee('Firmalar')
+            ->assertSee('Konaklamalar')
+            ->assertSee('Kullanıcılar')
+            ->assertSee('Roller / Yetkiler')
+            ->assertSee('Denetim Kayıtları');
+
+        // Personel yönetim menülerini HİÇ görmez (gizlenmez, render edilmez).
+        $this->actingAs($personel)->get(route('home'))
+            ->assertSee('Firmalar')
+            ->assertSee('Konaklamalar')
+            ->assertDontSee('Kullanıcılar')
+            ->assertDontSee('Roller / Yetkiler')
+            ->assertDontSee('Denetim Kayıtları');
+    }
+
+    #[Test]
+    public function patron_kullanici_ve_rol_menusunu_gormez_denetimi_gorur(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Patron))->get(route('home'))
+            ->assertDontSee('Kullanıcılar')
+            ->assertDontSee('Roller / Yetkiler')
+            ->assertSee('Denetim Kayıtları');
+    }
+
+    #[Test]
+    public function aktif_menu_ogesi_isaretlenir(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('companies.index'))
+            ->assertSee('aria-current="page"', false);
+    }
+
+    /**
+     * Kullanıcı bildirimi: "Kasa Hareketleri"/"Devir Geçmişi"'ndeyken "Kasa
+     * Defteri" de yanlışlıkla aktif görünüyordu — `sidebar-link.blade.php`'nin
+     * eski deseni `cashbook.index`i `cashbook.movements.*`/`cashbook.
+     * transfers.*`yi de kapsayacak biçimde tanımlıyordu. Her rota artık
+     * YALNIZCA kendi sayfasında `aria-current` taşır.
+     */
+    #[Test]
+    public function kasa_hareketlerinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.movements.index'))
+            ->getContent();
+
+        $this->assertLinkActive($html, route('cashbook.movements.index'), true);
+        $this->assertLinkActive($html, route('cashbook.index'), false);
+        $this->assertLinkActive($html, route('cashbook.transfers.index'), false);
+    }
+
+    #[Test]
+    public function devir_gecmisinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.transfers.index'))
+            ->getContent();
+
+        $this->assertLinkActive($html, route('cashbook.transfers.index'), true);
+        $this->assertLinkActive($html, route('cashbook.index'), false);
+        $this->assertLinkActive($html, route('cashbook.movements.index'), false);
+    }
+
+    /** Bir <a href="…">…</a> bloğunun `aria-current="page"` taşıyıp taşımadığını doğrular. */
+    private function assertLinkActive(string $html, string $href, bool $expected): void
+    {
+        $pattern = '#<a\s+href="'.preg_quote($href, '#').'"([^>]*)>#s';
+        $this->assertMatchesRegularExpression($pattern, $html, "Bağlantı bulunamadı: {$href}");
+        preg_match($pattern, $html, $matches);
+
+        $isActive = str_contains($matches[1], 'aria-current="page"');
+
+        $this->assertSame($expected, $isActive, "'{$href}' için aria-current beklenmedik: ".($isActive ? 'aktif' : 'pasif'));
+    }
+
+    /**
+     * Kasa/Cari/Yönetim başlıkları koyu renkli, katlanabilir gruplardır;
+     * alt öğeler varsayılan olarak kapalıdır. Aktif sayfanın grubu sunucu
+     * tarafında `open` ile başlar ve başka bir gruba geçilene kadar açık
+     * kalır (her sayfa yüklemesinde rota bazında yeniden hesaplanır).
+     */
+    #[Test]
+    public function aktif_sayfanin_grubu_acik_baslar_digerleri_kapali_kalir(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.movements.index'))
+            ->getContent();
+
+        // "Kasa" grubunun <details> bloğu 'open' taşır, "Cari"/"Yönetim" taşımaz.
+        $this->assertDetailsOpen($html, 'Kasa', true);
+        $this->assertDetailsOpen($html, 'Cari', false);
+        $this->assertDetailsOpen($html, 'Yönetim', false);
+    }
+
+    #[Test]
+    public function baska_gruba_gecince_onceki_grup_kapanir(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('companies.index'))
+            ->getContent();
+
+        $this->assertDetailsOpen($html, 'Cari', true);
+        $this->assertDetailsOpen($html, 'Kasa', false);
+    }
+
+    /** İlgili grup başlığını taşıyan <details> bloğunun `open` özniteliği taşıyıp taşımadığını doğrular. */
+    private function assertDetailsOpen(string $html, string $groupLabel, bool $expected): void
+    {
+        $pattern = '#<details([^>]*)>\s*<summary[^>]*>\s*<span>'.preg_quote($groupLabel, '#').'</span>#s';
+        $this->assertMatchesRegularExpression($pattern, $html, "Grup bulunamadı: {$groupLabel}");
+        preg_match($pattern, $html, $matches);
+
+        $isOpen = str_contains($matches[1], 'open');
+
+        $this->assertSame($expected, $isOpen, "'{$groupLabel}' grubu için open beklenmedik: ".($isOpen ? 'açık' : 'kapalı'));
+    }
+
+    #[Test]
+    public function kabuk_erisilebilirlik_iskeletini_kurar(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertSee('İçeriğe atla')
+            ->assertSee('id="icerik"', false)
+            ->assertSee('aria-label="Ana menü"', false)
+            ->assertSee('lang="tr"', false);
+    }
+
+    /**
+     * PWA/mobil temizlik turu: mobil üst çubuktaki hamburger ve "+" KALDIRILDI
+     * — birincil gezinme alt çubuktur, "Daha Fazla" ikincil gezinmeyi zaten
+     * karşılar. Çekmecenin kendisi ve onu açan tetikleyici (artık tek başına
+     * alt çubuktaki "Daha Fazla") hâlâ vardır — bkz. `mobil_cekmece_
+     * erisilebilirlik_kablolamasi_tamdir`.
+     */
+    #[Test]
+    public function mobil_ust_cubuktaki_hamburger_ve_hizli_islem_kaldirilmistir(): void
+    {
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+            ->assertDontSee('aria-label="Menüyü aç"', false);
+    }
+
+    #[Test]
+    public function mobil_cekmece_erisilebilirlik_kablolamasi_tamdir(): void
+    {
+        // app.js bu data-* öznitelikleriyle elemanları bulur; biri silinirse
+        // JS sessizce çalışmaz olur (bkz. app.js: `if (!panel || !toggle) return`).
+        // Bu test, o regresyonu tarayıcı olmadan CI'da yakalar.
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $response
+            ->assertSee('id="kenar-cubugu"', false)
+            ->assertSee('data-sidebar', false)
+            ->assertSee('data-sidebar-overlay', false)
+            ->assertSee('data-sidebar-toggle', false)
+            ->assertSee('data-sidebar-close', false)
+            ->assertSee('aria-controls="kenar-cubugu"', false)
+            ->assertSee('aria-expanded="false"', false)
+            ->assertSee('aria-label="Menüyü kapat"', false);
+    }
+
+    /**
+     * Gün 9.6: mobil BİRİNCİL gezinme artık alt çubuktur. Beş öğe: Ana Sayfa,
+     * Firmalar, Konaklamalar, Tahsilatlar, Daha Fazla. "Daha Fazla" mevcut
+     * çekmeceyi açar (yeni bir menü kopyalanmaz) — bu yüzden aynı
+     * `data-sidebar-toggle` işaretini taşır ve çekmecedeki ekstre/kullanıcı
+     * bağlantılarını içerir.
+     */
+    #[Test]
+    public function alt_gezinme_cubugu_bes_oge_ile_render_edilir(): void
+    {
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $response
+            ->assertSee('data-bottom-nav', false)
+            ->assertSee('aria-label="Alt menü"', false)
+            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+    }
+
+    #[Test]
+    public function alt_gezinme_cubugundaki_daha_fazla_mevcut_cekmeceyi_acar(): void
+    {
+        // Yeni bir menü/sayfa DEĞİL: aynı çekmece, ikinci bir tetikleyiciyle
+        // açılıyor. Bu yüzden aynı data-sidebar-toggle işaretini taşımalı.
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        $html = $response->getContent();
+        $this->assertIsString($html);
+
+        preg_match('/<nav data-bottom-nav.*?<\/nav>/s', $html, $matches);
+        $this->assertNotEmpty($matches, 'Alt gezinme çubuğu bulunamadı');
+
+        $this->assertStringContainsString('data-sidebar-toggle', $matches[0]);
+        $this->assertStringContainsString('aria-controls="kenar-cubugu"', $matches[0]);
+    }
+
+    #[Test]
+    public function personel_alt_cubukta_ayni_dort_birincil_ogeyi_gorur(): void
+    {
+        // Personel'in companies.view/stays.view/payments.view yetkisi var
+        // (CLAUDE.md §7.3); bu yüzden birincil sekmeler admin ile aynı kalır.
+        $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))
+            ->assertSee('data-bottom-nav', false)
+            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+    }
+
+    #[Test]
+    public function form_alanlarinin_etiketi_input_ile_eslesir(): void
+    {
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('companies.create'));
+
+        foreach (['name', 'tax_number', 'city', 'notes'] as $field) {
+            $response->assertSee('for="'.$field.'"', false);
+            $response->assertSee('id="'.$field.'"', false);
+        }
+    }
+
+    #[Test]
+    public function dogrulama_hatasi_aria_invalid_isaretler(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $this->actingAs($admin)->post(route('companies.store'), ['name' => '']);
+
+        $this->actingAs($admin)->get(route('companies.create'))
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('id="name-error"', false);
+    }
+
+    #[Test]
+    public function tutar_kolonlari_tabular_nums_kullanir(): void
+    {
+        // Gün 9.6 öncesi bu test yanlışlıkla geçiyordu: sayfada hiç konaklama
+        // yokken bile page-header'ın sayaç rozeti (artık kaldırıldı) aynı
+        // sınıfı taşıyordu. Asıl niyeti karşılaması için gerçek bir tutar
+        // hücresi üretilir.
+        $company = Company::factory()->create();
+        Stay::factory()->create(['company_id' => $company->id]);
+
+        $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.index'))
+            ->assertSee('tabular-nums', false);
+    }
+
+    #[Test]
+    public function sayfalama_turkce_ve_erisilebilir(): void
+    {
+        Company::factory()->count(30)->create();
+
+        $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('companies.index'))
+            ->assertSee('aria-label="Sayfalama"', false)
+            ->assertSee('Sonraki')
+            ->assertSee('kayıt');
+    }
+
+    #[Test]
+    public function giris_ekrani_kabugu_dogru(): void
+    {
+        $this->get(route('login'))
+            ->assertSee('for="email"', false)
+            ->assertSee('for="password"', false)
+            ->assertSee('theme-color', false)
+            ->assertDontSee('aria-label="Ana menü"', false);
+    }
+
+    #[Test]
+    public function tema_tektir_ve_degistirilemez(): void
+    {
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'));
+
+        // Tema değiştirici, koyu tema veya kullanıcı tercihi yoktur.
+        $response->assertDontSee('theme-switch', false);
+        $response->assertDontSee('prefers-color-scheme', false);
+
+        // Mobil tarayıcı çubuğu kenar çubuğuyla aynı yüzeyi kullanır.
+        $response->assertSee('content="#172033"', false);
+    }
+
+    #[Test]
+    public function blade_icinde_ham_hex_rengi_yazilmaz(): void
+    {
+        // Tek renk kaynağı resources/css/app.css içindeki @theme bloğudur
+        // (CLAUDE.md §11.2). Bileşenlerde ham hex, token'ları anlamsızlaştırır.
+        $offenders = [];
+
+        foreach (['resources/views', 'app/Modules'] as $root) {
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator(base_path($root))
+            );
+
+            foreach ($files as $file) {
+                if (! str_ends_with((string) $file, '.blade.php')) {
+                    continue;
+                }
+
+                // Yazdırma görünümü bilinçli olarak kendi kendine yeten sade CSS
+                // taşır ve Vite çıktısını yüklemez (CLAUDE.md §8 / Ledger).
+                // Muafiyet dosya ADINA değil, `layouts.print`'i GENİŞLETMEYE
+                // bağlıdır: bu layout'u kullanan HER ekran (ör. `receipt.blade.php`)
+                // aynı gerekçeyle @theme token'larına erişemez — yalnızca
+                // literal `print.blade.php` isimli dosyaları muaf tutmak
+                // v2.1.1-B'nin `receipt.blade.php`'i yanlışlıkla yakalardı.
+                $contents = (string) file_get_contents((string) $file);
+
+                if (str_contains((string) $file, 'print.blade.php') || str_contains($contents, "@extends('layouts.print')")) {
+                    continue;
+                }
+
+                // `<meta name="theme-color">` CSS token'ı kabul etmez; tarayıcı
+                // çubuğu rengi HTML'de düz değer olmak zorundadır. Tek muafiyet budur.
+                $contents = (string) preg_replace('/^.*theme-color.*$/m', '', $contents);
+
+                if (preg_match('/#[0-9a-fA-F]{3,8}\b/', $contents) === 1) {
+                    $offenders[] = str_replace(base_path().'/', '', (string) $file);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'Blade dosyalarında ham hex rengi bulundu.');
+    }
+}

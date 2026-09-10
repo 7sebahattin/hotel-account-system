@@ -1,0 +1,17 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+
+    # Uygulama kodu ÜRETİM RUNTIME'ına göre analiz edilir. Geliştirme ortamı
+    # 8.4 olsa bile, yalnızca 8.4'te var olan bir işlev/sözdizimi kullanılırsa
+    # analiz burada kırmızıya döner — sunucuda fatal error olmadan önce.
+    phpVersion: 80300
+
+    paths:
+        - app
+        - config
+        - database
+        - routes
+        - tests

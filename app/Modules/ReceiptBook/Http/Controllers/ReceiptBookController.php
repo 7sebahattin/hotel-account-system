@@ -1,0 +1,76 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\ReceiptBook\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Modules\Core\Enums\Currency;
+use App\Modules\ReceiptBook\Enums\ReceiptPaymentMethod;
+use App\Modules\ReceiptBook\Http\Requests\StoreReceiptBookEntryRequest;
+use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
+use App\Modules\ReceiptBook\Services\ReceiptBookService;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+
+/**
+ * Tahsilat Makbuzu Defteri (v2.1.1-C §4) — mevcut muhasebe Tahsilatları'ndan
+ * (`Payments`) TAMAMEN AYRI, yazdırma amaçlı bir modül. Bkz. `ReceiptBookService`
+ * dosya başı yorumu: hiçbir muhasebe/kasa yan etkisi üretmez.
+ */
+class ReceiptBookController extends Controller
+{
+    public function __construct(private readonly ReceiptBookService $receiptBook) {}
+
+    public function index(): View
+    {
+        $this->authorize('viewAny', ReceiptBookEntry::class);
+
+        return view('receipt-book::index', [
+            'entries' => $this->receiptBook->paginate(),
+        ]);
+    }
+
+    /**
+     * "Yeni Makbuz" — modal/dialog içeriği (v2.1.1-C §5). Kasa Hareketi
+     * dialog'unun (v2.1.1-B.1) AYNI desenini kullanır: `$request->ajax()`
+     * iken yalnızca içerik parçası döner, normal gezinmede TAM sayfa döner —
+     * ikisi de AYNI `_form` partial'ını kullanır (iki farklı form YOKTUR).
+     */
+    public function create(Request $request): View
+    {
+        $this->authorize('create', ReceiptBookEntry::class);
+
+        $data = [
+            'currencies' => Currency::active(),
+            'methods' => ReceiptPaymentMethod::cases(),
+        ];
+
+        return $request->ajax()
+            ? view('receipt-book::_dialog-fragment', $data)
+            : view('receipt-book::create', $data);
+    }
+
+    public function store(StoreReceiptBookEntryRequest $request): RedirectResponse
+    {
+        $entry = $this->receiptBook->create($request->validated(), $request->user());
+
+        return redirect()->route('receipt-book.show', $entry)
+            ->with('success', 'Makbuz kaydedildi.');
+    }
+
+    public function show(ReceiptBookEntry $entry): View
+    {
+        $this->authorize('view', $entry);
+
+        return view('receipt-book::show', ['entry' => $entry->load('creator')]);
+    }
+
+    public function print(ReceiptBookEntry $entry): View
+    {
+        $this->authorize('view', $entry);
+
+        return view('receipt-book::print', ['entry' => $entry->load('creator')]);
+    }
+}

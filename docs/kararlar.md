@@ -1,0 +1,2340 @@
+# Mimari Kararlar
+
+Her karar: bağlam → karar → gerekçe. Yeni karar sona eklenir, eskisi silinmez.
+
+---
+
+## K-001 · Laravel 13
+**Bağlam:** Sıfırdan proje. Yerel PHP 8.4.19; cPanel'de PHP 8.3+ mevcut.
+**Karar:** Laravel 13 (13.30.1).
+**Gerekçe:** `spatie/laravel-permission` 8.x ve `maatwebsite/excel` 4.x güncel major
+sürümleri Laravel 13'ü destekliyor — hiçbir paketi eski sürüme çakmak gerekmiyor.
+En yeni major, en uzun destek ömrünü verir. Sıfırdan projede yeni major'ın maliyeti yok.
+**Alternatif:** Laravel 12 (PHP 8.2 tabanı). cPanel 8.3+ desteklediği için gerekmedi.
+
+## K-002 · Para aritmetiği: tamsayı kuruş, `bcmath` yok
+**Bağlam:** Geliştirme ortamında `bcmath` ve `gmp` eklentileri yok.
+**Karar:** `Core\Support\Money` tutarı tamsayı kuruş olarak tutar; toplama, çıkarma ve
+karşılaştırma tam sayı aritmetiğiyle yapılır. Veritabanı alanı `DECIMAL(15,2)` kalır,
+toplamlar SQL `SUM()` ile alınır.
+**Gerekçe:** Aynı kesinliği sıfır eklenti bağımlılığıyla verir. `bcmath`'e bağlanmak,
+hosting sağlayıcısının eklenti ayarına bağımlılık yaratır; eklenti kapanırsa uygulama çalışmaz.
+**Sonuç:** CLAUDE.md §13 güncellendi.
+
+## K-003 · Testler gerçek MySQL/MariaDB üzerinde koşar
+**Bağlam:** Laravel varsayılanı SQLite `:memory:`.
+**Karar:** `phpunit.xml` `hotel_account_test` (MySQL/MariaDB, `utf8mb4_turkish_ci`) kullanır.
+**Gerekçe:** SQLite'ta gerçek `DECIMAL` yoktur (NUMERIC affinity → float), `SUM()` float döner.
+Türkçe collation ve `RESTRICT` foreign key davranışı taklit edilemez. CLAUDE.md §12'deki
+cari testleri ile "cari hareketi olan firma silinemez" kuralı ancak canlıyla aynı motorda anlam taşır.
+**Doğrulama:** `utf8mb4_turkish_ci` altında `ı` = `I` ve `i` = `İ` eşleşiyor, `i` ≠ `I`.
+`utf8mb4_general_ci` bunu yanlış yapıyor.
+**Bedeli:** Test koşumu için çalışan bir MySQL sunucusu gerekir (CI'da servis olarak sağlanır).
+
+## K-004 · Uygulama saat dilimi `Europe/Istanbul`
+**Bağlam:** Laravel 13 `config/app.php` içinde timezone'u `'UTC'` sabit yazıyor.
+**Karar:** `env('APP_TIMEZONE', 'UTC')` olarak değiştirildi; `.env` içinde `Europe/Istanbul`.
+**Gerekçe:** Tek ülke, tek otel. Türkiye 2016'dan beri kalıcı UTC+3, yaz saati uygulaması yok —
+belirsizlik doğmaz. Zaman damgaları veritabanında da personelin gördüğü saatle aynı okunur;
+denetim kaydı incelenirken çevrim gerekmez.
+
+## K-005 · Dış font servisi kullanılmıyor
+**Bağlam:** Laravel 13 iskeleti `laravel-vite-plugin` ile derleme anında
+`fonts.bunny.net`'ten Instrument Sans çekiyor.
+**Karar:** Font eklentisi kaldırıldı; sistem font yığını kullanılıyor.
+**Gerekçe:** Derleme anında dış servise bağlı olmak CI'ı ve cPanel deploy'unu ağ kesintisine
+açık hale getirir (bu ortamda zaten 403 ile başarısız oldu). Kullanıcı tarayıcısından
+üçüncü taraf CDN'e istek de gitmez.
+**Geri alınabilir:** Belirli bir font istenirse, font dosyaları repoya konup yerelden servis edilir.
+
+## K-006 · Modül autoload'u için ek PSR-4 girdisi yok
+**Bağlam:** CLAUDE.md §4.1 `"App\\Modules\\": "app/Modules/"` girdisinden söz ediyordu.
+**Karar:** Eklenmedi. Mevcut `"App\\": "app/"` eşlemesi `App\Modules\*` sınıflarını zaten kapsıyor.
+**Gerekçe:** İkinci girdi gereksizdir ve Composer'da "ambiguous class resolution" uyarısı üretir.
+**Sonuç:** CLAUDE.md §4.1 güncellendi.
+
+## K-007 · İskelet temizliği
+**Karar:** `laravel/laravel` deposuna ait ve uygulamayla ilgisi olmayan dosyalar silindi:
+`CHANGELOG.md`, `.styleci.yml`, `.github/dependabot.yml` ve laravel/laravel'in kendi
+workflow'ları. İskeletin `CLAUDE.md` / `AGENTS.md` dosyaları projeye ait içerikle değiştirildi.
+**Gerekçe:** Bunlar framework deposunun bakım dosyaları; bu projede yanlış yönlendirme yapar.
+StyleCI yerine Pint kullanılıyor.
+
+## K-008 · Boş modül klasörü açılmıyor
+**Karar:** V1'in 11 modülünden şu an yalnızca `Core` ve `Auth` mevcut. Diğerleri kendi
+fazları geldiğinde oluşturulur.
+**Gerekçe:** CLAUDE.md §3.3 ve §4.1 — kullanılmayan klasör/dosya açmak yasak.
+`Core` şu anda yalnızca `ModuleServiceProvider` taban sınıfını barındırır.
+
+## K-009 · AuditLog Gün 11'den Gün 2'ye alındı
+**Bağlam:** CLAUDE.md §8 başarısız girişlerin loglanmasını istiyordu ama §14 AuditLog'u
+Gün 11'e koyuyordu; yani Gün 2–10 arasındaki tüm giriş ve yetki değişiklikleri kayıtsız kalacaktı.
+**Karar:** AuditLog altyapısı Users/Roles ile aynı fazda kuruldu.
+**Gerekçe:** Denetim kaydını sonradan eklemek geçmiş veriyi kurtarmaz. Maliyeti bir tablo,
+bir servis ve bir trait.
+
+## K-010 · `Gate::before` yalnızca argümansız yetki kontrollerinde kısa devre yapar
+**Bağlam:** CLAUDE.md §7.1 "admin her yetkiyi geçer" diyordu. Bunun düz uygulaması
+admin için **tüm Policy'leri** devre dışı bıraktı: test sırasında admin kendi hesabını
+silebildi ve sistem rolünü silme çağrısı Policy'yi atladı.
+**Karar:** `Gate::before` yalnızca argümansız yetki kontrollerini (ör. `can:users.manage`)
+kısa devre yapar. Model/kayıt argümanı taşıyan Policy yetenekleri normal akışta değerlendirilir.
+Denetim kaydının değiştirilmesi/silinmesi kesin `false` döner.
+**Ek kural:** Erişim kaybettirebilecek iş kuralları Policy'ye ek olarak Service katmanında
+da uygulanır (`SelfActionException`, `LastActiveAdminException`). Policy arayüzü ve HTTP'yi
+korur; Service son savunmadır.
+**Gerekçe:** Blanket `Gate::before` sessiz bir güvenlik açığıdır — en yetkili rolde en az
+koruma sağlar. İki test bunu somut olarak yakaladı.
+**Sonuç:** CLAUDE.md §7.1 güncellendi.
+
+## K-011 · Bir kullanıcı tek role sahiptir
+**Karar:** `UserService::assignRole()` `syncRoles([$role])` kullanır; rol değişimi eskisini kaldırır.
+**Gerekçe:** 20'den az kullanıcılı bir işletmede çoklu rol birleşimi yetki matrisini
+anlaşılmaz kılar. Admin gerektiğinde özel rol tanımlayabilir.
+**Geri alınabilir:** Çoklu rol gerekirse `syncRoles` → `assignRole` yeterli; şema değişmez.
+
+## K-012 · Denetim kaydı üç katmanda korunur
+**Karar:** (1) `audit_logs` tablosunda `updated_at` yok; (2) `AuditLog` modeli `update()` ve
+`delete()` çağrılarında exception fırlatır; (3) Policy ve `Gate::before` admin dahil herkese
+`false` döner; (4) yazma yapan hiçbir HTTP ucu yoktur.
+**Gerekçe:** CLAUDE.md'nin en katı kuralı; tek bir katmana güvenilmez. Dördü de testle doğrulandı.
+
+## K-013 · Seed verisi ortama göre değişir
+**Karar:** Rol/yetki matrisi her ortamda seed edilir. Admin hesabı `.env` üzerinden gelir.
+`patron@example.com` ve `personel@example.com` örnek hesapları **yalnızca production dışında** oluşturulur.
+**Gerekçe:** Canlıda varsayılan şifreli demo hesap bırakmak açık kapıdır.
+
+## K-014 · Deploy SSH'ya bağlı değil; FTPS + GitHub Actions
+**Karar:** Derleme GitHub Actions runner'ında, aktarım FTPS ile. `.env` ve `storage/app/`
+deploy tarafından hiç dokunulmaz. Ayrıntı: `docs/deploy-github-actions.md`.
+**Açık kalan:** SSH olmadan `migrate --force` nasıl tetiklenecek? cPanel cron + işaret dosyası
+(önerilen) veya token korumalı HTTP ucu. Karar verilmeden workflow etkinleştirilmeyecek.
+
+## K-015 · Session-start hook yalnızca yerel ortamı hazırlar
+**Karar:** `.claude/hooks/session-start.sh` MariaDB'yi kurar/başlatır, test veritabanlarını
+Türkçe collation ile oluşturur, composer/npm bağımlılıklarını ve frontend derlemesini kontrol eder,
+migration'ları uygular.
+**Sınır:** Hook hiçbir production veya hosting işlemi yapmaz — deploy yok, uzak veritabanı yok,
+dış servis çağrısı yok. Yalnızca `CLAUDE_CODE_REMOTE=true` iken çalışır.
+
+## K-016 · SSH'sız migration: cPanel cron + işaret dosyası
+**Karar:** Deploy `storage/app/deploy-pending` işaret dosyası bırakır; cPanel cron bunu
+görünce `migrate --force` çalıştırır, sonucu loglar, başarılıysa dosyayı siler, başarısızsa korur.
+**Reddedilen:** Token korumalı HTTP migrate ucu — internete açık, migration çalıştırabilen bir uç,
+token sızarsa veritabanı şemasının uzaktan değiştirilmesine izin verir.
+**Durum:** Yalnızca karar. `finalize.php` ve deploy workflow'u deploy fazına kadar yazılmayacak.
+
+## K-017 · Türkçe aramada iki i sorunu
+**Bağlam:** Türkçe'de büyük harfe çevirim çift yönlüdür (i↔İ, ı↔I) ve firma verisi çoğunlukla
+tümü büyük harfle girilir. Ölçüm sonuçları:
+
+| Arama | `turkish_ci` | `unicode_ci` | `uca1400_ai_ci` |
+|---|:--:|:--:|:--:|
+| "ilgaz" → `ILGAZ` kaydı | ✗ | ✓ | ✓ |
+| "çınar" → `ÇINAR` kaydı | ✓ | ✗ | ✗ |
+
+**Karar:** Karşılaştırmadan önce her iki tarafta noktalı/noktasız i tek karaktere indirgenir:
+`REPLACE(REPLACE(col,'ı','i'),'İ','i') COLLATE utf8mb4_unicode_ci LIKE ?`; terim PHP tarafında
+`str_replace(['ı','İ'], 'i', ...)` ile normalize edilir.
+**Sıralama etkilenmez:** `ORDER BY` kolonun `utf8mb4_turkish_ci` collation'ını kullanmaya devam eder.
+**Maliyet:** İfade indeks kullanmaz — ancak `LIKE '%...%'` zaten kullanmıyordu, ek kayıp yok.
+**Sonuç:** CLAUDE.md §9 güncellendi; iki yönü de doğrulayan testler yazıldı.
+
+## K-018 · `companies.restore` ayrı bir yetkidir
+**Karar:** Silme ve geri alma ayrıldı. Admin her ikisine, Patron yalnızca silmeye sahiptir.
+Silinmiş firmaları listeleme de `companies.restore` yetkisine bağlıdır — Personel ve Patron
+silinmiş kayıtları görmez.
+**Gerekçe:** Kullanıcı kararı (Patron silebilir, geri alamaz). Rol adı yerine yetki kullanmak
+CLAUDE.md §7.2 isimlendirmesine uyar ve Admin'in ileride bu yetkiyi özel bir role vermesini mümkün kılar.
+**Sonuç:** CLAUDE.md §7.2 ve §7.3 güncellendi (yetki sayısı 19 → 20).
+
+## K-019 · PHPStan level 5, baseline yok
+**Karar:** `larastan/larastan` v3.11.0 + `phpstan/phpstan` 2.2.13, level 5, CI'da zorunlu adım.
+İlk çalıştırmada 38 bulgu çıktı; hepsi kaynağından düzeltildi — baseline dosyası veya
+`@phpstan-ignore` yorumu kullanılmadı.
+**Düzeltilenler:** model kolonları için `@property` blokları, spatie `Contracts\Role` yerine proje
+modeli tipi (`Role::byName()`, `Role::query()->create()`), trait closure'larında `self` tipi,
+`registerModelEvent('restored')`, `env()` çağrılarının `config/hotel.php`'ye taşınması,
+`??` solunda gereksiz `?->` kullanımı.
+
+## K-020 · Bu container'da bazı composer paketleri git ile getirilir
+**Bağlam:** Claude Code on the web ortamında GitHub zipball indirmeleri (api.github.com, codeload)
+proxy tarafından 403 ile engellenir; `git clone` çalışır. `phpstan/phpstan` paketinin packagist'te
+**source tanımı yoktur**, yalnızca zipball vardır — bu yüzden `composer install` bu ortamda tamamlanamaz.
+**Karar:** `.claude/hooks/fetch-blocked-packages.php`, composer.lock'taki sürümü git ile getirip
+`vendor/composer/installed.json`'a kaydeder. Yalnızca `vendor/` dizinini değiştirir; `composer.json`
+ve `composer.lock` dokunulmaz.
+**Kapsam:** Ortama özgü onarım. CI ve geliştirici makinelerinde normal `composer install` çalışır,
+script hiçbir şey yapmaz.
+
+## K-021 · Şifre değişikliği denetim kaydında görünür, değer görünmez
+**Bağlam:** Maskelenen alanlar denetim kaydından tamamen çıkarılıyordu; bu durumda admin bir
+kullanıcının şifresini değiştirdiğinde denetim kaydı "güncellendi" diyor ama neyin değiştiğini göstermiyordu.
+**Karar:** Maskeleme artık **anahtarı korur, değeri `***` ile değiştirir**. Böylece "şifre değiştirildi"
+bilgisi denetlenebilir; şifrenin kendisi veya hash'i hiçbir zaman yazılmaz.
+**Kapsam:** `password`, `remember_token`, `two_factor_secret`, `two_factor_recovery_codes`.
+E-posta ile şifre sıfırlama V1'de yoktur; admin kullanıcı düzenleme ekranından yeni şifre belirler.
+
+## K-022 · Denetim anlık görüntüsünde uzunluk sınırı
+**Karar:** Denetim kaydına yazılan metin değerleri 500 karakterle sınırlıdır; aşan değerin sonuna
+`… (kısaltıldı)` eklenir.
+**Sınır yalnızca denetim kaydına uygulanır** — gerçek `companies.notes` kaydı tam uzunlukta saklanır.
+**Gerekçe:** `notes` gibi uzun alanlar `audit_logs` tablosunu kontrolsüz büyütür.
+
+## K-023 · Demo hesaplar yalnızca local ve testing ortamında
+**Karar:** `patron@example.com` / `personel@example.com` hesapları yalnızca
+`app()->environment(['local','testing'])` iken oluşturulur. Staging ve production'da
+oluşturulmaz. Admin hesabı `config('hotel.seed.*')` üzerinden gelir.
+**Değişiklik:** Önceki koşul yalnızca production'ı dışlıyordu; staging'de demo hesap oluşabilirdi.
+
+## K-024 · Cari hareketi olan firmanın silinememesi ertelendi
+**Durum:** CLAUDE.md §5.2 bu kuralı gerektirir ancak `ledger_entries` tablosu henüz yoktur.
+**Karar:** Kural Gün 4'te `CompanyService::delete()` içinde `LedgerService` üzerinden uygulanacaktır.
+Bugün taklit bir kontrol yazılmamıştır — sahte kontrol, gerçek koruma varmış izlenimi verirdi.
+Karar `CompanyService` sınıf yorumunda da kayıtlıdır.
+
+## K-025 · `Money`: tamsayı kuruş, sıfır bağımlılık
+**Karar:** `Core\Support\Money` tutarı `int` kuruş olarak tutar. Ayrıştırma metin üzerinden
+(regex) yapılır, biçimlendirme tam sayı bölmesiyle — **hiçbir adımda kayan nokta yoktur**.
+`DECIMAL(15,2)` sınırı kuruş cinsinden 999.999.999.999.999'dur ve 64 bit tam sayıya sığar.
+**Sonuç:** `bcmath` eklentisine ihtiyaç yok (K-002). 22 birim testi, 0.1+0.2 sapması dahil doğruluyor.
+
+## K-026 · Ledger dört katmanda korunur
+**Karar:** (1) `CHECK` kısıtları — negatif tutar ve iki yönün aynı anda dolu/boş olması engellenir;
+(2) `UNIQUE (reverses_entry_id)` — ikinci ters kayıt imkânsız; (3) `BEFORE UPDATE`/`BEFORE DELETE`
+tetikleyicileri — ham SQL ve query builder toplu güncellemesi dahil her yazma reddedilir;
+(4) model olayları ve `LedgerService`.
+**Gerekçe:** Uygulama katmanı Eloquent'ten geçmeyen yazmaları göremez. Finansal defterde
+"kod düzgün yazılırsa güvenli" yeterli değildir.
+**Dağıtım riski:** Tetikleyiciler TRIGGER yetkisi gerektirir. Yetki yoksa migration hata verir ve
+deploy durur — sessizce atlanmaz. `docs/deploy-cpanel.md` §1'e eklendi.
+
+## K-027 · Ters kayıt orijinalin tarihini taşır
+**Karar:** Ters kayıt orijinalin `entry_date` değerini kullanır; iki kayıt her tarih aralığında
+birbirini götürür.
+**Bilinen etki:** Geçmiş bir dönemin bakiyesi geriye dönük değişir. Örneğin Mart'ta girilen bir
+konaklama Mayıs'ta iptal edilirse Mart bakiyesi de değişir.
+**Neden şimdilik böyle:** Kullanıcı "tam tersini üretmeli" dedi ve V1'de dönem kilidi yoktur.
+**Yeniden değerlendirilecek:** Cari ekstre (Gün 8) ve dönem kapatma geldiğinde. `reverse()`
+metodunun açıklama parametresi gibi bir tarih parametresi eklemek tek satırlık iştir.
+
+## K-028 · Ledger hiçbir modülü tanımaz
+**Karar:** `LedgerService` firma kimliğini `int $companyId` olarak alır, `Company` modelini
+kullanmaz. Kaynak kayıt `?string $sourceType, ?int $sourceId` olarak geçirilir — `Stay`/`Payment`
+modellerine bağımlılık yoktur.
+**Gerekçe:** CLAUDE.md §4.3/3. Bağımlılık yönü tek yönlüdür: Companies → Ledger, Stays → Ledger,
+Payments → Ledger. Ters yön yoktur.
+
+## K-029 · Açılış bakiyesi için ayrı tablo yok
+**Karar:** `source_type` serbest metindir; Excel göçü `'opening'` değerini teknik olarak
+kullanabilir. Ayrı `opening_balances` tablosu **açılmadı** (CLAUDE.md §3.3).
+**Durum:** Yalnızca teknik imkân; arayüz ve göç kodu yazılmadı. Testle doğrulandı.
+
+## K-030 · Firma silme koruması iki katmanda
+**Karar:** Cari hareketi olan firma silinemez. Asıl koruma `CompanyService::delete()` içindedir
+(HTTP dışı çağrı yollarını da kapsar); `CompanyPolicy::delete()` aynı kuralı arayüzde butonu
+gizlemek ve isteği erken reddetmek için tekrarlar.
+**Gerekçe:** K-010 — `Gate::before` admin için Policy'leri kısa devre yapabilir; tek katman yetmez.
+**Kapsam:** Bakiye sıfır olsa bile (ters kayıtla kapatılmış) hareket geçmişi varsa silme yasaktır.
+Kullanımdan kaldırmak için doğru işlem `is_active = false`.
+
+## K-031 · Aynı gün giriş/çıkış kabul edilir (0 gece)
+**Çelişki:** Kullanıcının Gün 5 kuralları `check_out_date >= check_in_date` ve
+`nights = check_out - check_in` diyor; CLAUDE.md §8 ise "0 gece kabul edilmez (min 1)" diyordu.
+**Karar:** Kullanıcının daha yeni ve açık talimatı uygulandı — aynı gün giriş/çıkış geçerlidir
+ve 0 gece üretir (günübirlik kullanım). Tutar yine `> 0` olmak zorundadır, dolayısıyla
+günübirlik kayıt da cariye normal şekilde işlenir.
+**Risk:** Aynı tarihi iki kez yazan bir kullanıcı hatası 0 geceli kayıt üretir ve engellenmez.
+Günübirlik kullanım istenmiyorsa `check_out_date` kuralı `after:check_in_date` yapılarak
+tek satırda geri alınır.
+**Sonuç:** CLAUDE.md §8 güncellendi.
+
+## K-032 · İptal `status` ile, soft delete ile değil
+**Karar:** Konaklama iptali `status = cancelled` alanıyla yapılır. `deleted_at` kolonu şemada
+durur ama iptal akışında kullanılmaz; görevi yalnızca kazara yapılacak bir `delete()` çağrısının
+fiziksel silme olmasını engellemektir.
+**Gerekçe:** İptal edilmiş konaklama listede görünmeye devam etmeli ve "Durum" filtresiyle
+ayrılabilmelidir; soft delete onu varsayılan sorgulardan tamamen düşürürdü.
+**V1'de iptal geri alınamaz:** restore route'u, servis metodu veya arayüzü yoktur — testle doğrulandı.
+
+## K-033 · Stay denetim kaydı serviste yazılır, trait ile değil
+**Karar:** `Stay` modeli `Auditable` trait'ini KULLANMAZ; denetim kayıtları `StayService`
+tarafından açıkça yazılır.
+**Gerekçe:** Finansal düzeltmenin denetim satırı `reversed_ledger_entry_id`,
+`reversal_ledger_entry_id` ve `new_ledger_entry_id` referanslarını taşımak zorundadır. Bu
+kimlikler ancak ters kayıt ve yeni kayıt oluştuktan SONRA bilinir; model olayları ise
+`save()` anında tetiklenir. Trait ile bunu ifade etmek ya iki ayrı denetim satırı ya da
+modele geçici durum taşıyan bir hile gerektirirdi.
+**Sonuç:** CLAUDE.md §8 (Basic Audit Log) güncellendi.
+
+## K-034 · Konaklama "silme" yerine "iptal"
+**Karar:** Arayüzde ve route'ta silme yoktur; `PATCH /stays/{stay}/cancel` vardır. Yetki adı
+CLAUDE.md §7.2'deki `stays.delete` olarak KALIR (yeni yetki eklenmedi); policy yeteneği `cancel`
+adını taşır ve bu yetkiye bağlıdır.
+**Gerekçe:** Yetki matrisini değiştirmeden domain dilini doğru kullanmak. Admin ve Patron iptal
+edebilir, Personel edemez — mevcut matrisle birebir örtüşür.
+
+## K-035 · Personel finansal alanları değiştirebilir
+**Karar:** Personel kendi kaydını ve düzenleme penceresi içinde, **finansal alanlar dahil**
+değiştirebilir. Bu değişiklik ters kayıt + yeni hareket üretir.
+**Uygulama yeri:** Kısıt frontend'de değil `StayPolicy` ve `StayService` katmanındadır;
+`nights` ve `status` alanları kullanıcı girdisinden hiçbir koşulda alınmaz.
+
+## K-036 · Tek tema, tek token kaynağı
+**Karar:** Koyu tema uygulamanın tek temasıdır. Light mode, tema değiştirici ve kullanıcı
+tema tercihi yoktur; `prefers-color-scheme` sorgusu hiçbir yerde kullanılmaz.
+Tüm renk/tipografi token'ları yalnızca `resources/css/app.css` içindeki `@theme` bloğunda
+tanımlıdır ve Tailwind bunlardan yardımcı sınıfları (`bg-card`, `border-line`, `text-mut`…)
+üretir. Blade dosyalarında ham hex kodu yazılmaz.
+**Gerekçe:** Tek kaynak, palet değişiminde tek dosya düzenlemesi demektir; testle de
+doğrulanmıştır (`DesignSystemTest::tek_tema_kullanilir`).
+
+## K-037 · `--color-field`: form sınırları için ayrı token (WCAG 1.4.11)
+**Sorun:** Belirlenen palette hiçbir form kontrolü sınırı 3:1 kontrast eşiğini geçmiyordu —
+`line`/`card` 1.41:1, `line`/`well` 1.81:1, dolgu farkı `well`/`card` 1.28:1. WCAG 2.1
+1.4.11 arayüz bileşeni sınırları için en az 3:1 ister; input'un nerede başladığı görünmüyordu.
+**Karar:** `--color-field: #64748b` eklendi ve **yalnızca** form kontrolü (`input`, `select`,
+`textarea`, `checkbox`), ikincil buton ve sayfalama bağlantısı sınırlarında kullanılır.
+Kullanıcının verdiği `--color-line` değeri **değiştirilmedi**; ayraç ve kart sınırı olarak
+aynen kalır.
+**Ölçüm:** Tüm metin çiftleri ≥ 4.5:1, tüm arayüz sınırları ≥ 3:1 (headless Chromium ile
+hesaplandı).
+
+## K-038 · Tablo kırılımı `md` değil `lg`
+**Karar:** Veri tabloları 1024px (`lg`) ve üzerinde gösterilir; altında kart listesine düşer.
+**Gerekçe:** 768px'te 256px kenar çubuğundan sonra içeriğe ~460px kalıyor ve tablo sayfayı
+yatay kaydırmaya zorluyordu (ölçüldü: `window.scrollX = 285`). `lg` kırılımıyla 375/768/1366/1920
+kırılımlarının tamamında yatay sayfa kaydırması sıfırdır.
+**Sonuç:** CLAUDE.md §11.5 güncellendi ("tablolar `md` altında karta düşer" → `lg`).
+
+## K-039 · Alpine.js yerine sade JavaScript
+**Karar:** Kenar çubuğu çekmecesi ~40 satır sade JavaScript ile yazıldı; Alpine.js **kurulmadı**.
+**Gerekçe:** Kullanıcı "yeni npm/UI framework paketi ekleme" dedi ve Alpine projede zaten kurulu
+değildi. Tek etkileşim gereksinimi bir çekmece aç/kapa idi; bunun için paket eklemek gerekmiyor.
+**İleride:** Modal, tutar maskesi veya dinamik firma arama kutusu gerektiğinde Alpine kullanıcı
+onayıyla eklenir (CLAUDE.md §2 yığında duruyor).
+
+## K-040 · Görsel doğrulama araçları proje dışında
+**Karar:** Ekran görüntüsü, kontrast ve taşma doğrulaması için `playwright-core` proje
+`package.json`'ına **eklenmedi**; geçici bir dizine kurulup ortamda hazır bulunan Chromium
+sürücülendi.
+**Gerekçe:** Doğrulama aracı uygulamanın bağımlılığı değildir; `npm ci` süresini ve deploy
+yükünü artırmamalıdır.
+
+## K-041 · Konaklama ücreti iki modlu: toplam veya günlük
+**Karar:** `stays.pricing_mode` (`total` | `daily`) ve `stays.daily_rate` eklendi.
+`amount` her iki modda da NİHAİ TOPLAM'dır ve cariye yazılan değer odur; `daily`
+modunda `amount = nights × daily_rate` olarak **sunucuda** hesaplanır.
+**Güvenlik (iki katman):** İstek gövdesine sahte bir `amount` yazılsa bile kullanılmaz.
+1. `StayRequest` içinde `exclude_if:pricing_mode,daily` — alan doğrulanmış veriden düşer,
+   servise hiç ulaşmaz.
+2. `StayService::resolvePricing()` tutarı her koşulda yeniden hesaplar — servis doğrudan
+   çağrılsa (import, konsol) bile kural geçerlidir.
+Testle doğrulandı: HTTP üzerinden sahte tutar ve doğrudan servis çağrısı, ikisi de ezilir.
+**Hesap:** `Money::multiply(int)` eklendi; çarpım tamsayı kuruş üzerinden yapılır, float yok.
+
+## K-042 · 0 gece kararı geri alındı — asgari 1 gece
+**Önceki karar (K-031):** Aynı gün giriş/çıkış kabul edilir, 0 gece üretirdi.
+**Yeni karar:** `check_out_date > check_in_date`; asgari gece sayısı 1'dir.
+**Gerekçe:** Günübirlik (day-use) kullanım ayrı bir iş kuralıdır ve V1'de PMS kapsamına
+girilmiyor (CLAUDE.md §3.2). Ayrıca günlük ücretlendirmede 0 gece, sıfır tutarlı bir cari
+hareketi üretirdi — `CHECK (amount > 0)` ile çelişirdi.
+**Uygulama yerleri:** validasyon `after:check_in_date`, veritabanında `stays_date_range`
+(`>` olarak güncellendi) ve yeni `stays_nights_positive` CHECK kısıtı.
+**Geri alma:** Migration'ın `down()` metodu eski `>=` kısıtını geri koyar.
+**Not:** Tabloda 0 geceli kayıt varsa migration hata verir — bu bilinçlidir, veri sessizce
+kabul edilmez.
+
+## K-043 · Türkçe doğrulama mesajları (bulunan hata)
+**Sorun:** `APP_LOCALE=tr` ve `APP_FALLBACK_LOCALE=tr` olmasına rağmen `lang/tr/validation.php`
+yoktu. FormRequest'in `messages()` metodunda ezilmeyen her kural kullanıcıya ham çeviri
+anahtarı olarak görünüyordu: "validation.required", "validation.max.string".
+Bu, bu turdan önce de var olan bir hataydı; yeni zorunlu `pricing_mode` alanı görünür kıldı.
+**Karar:** `lang/tr/validation.php` eklendi — yalnızca projede fiilen kullanılan kurallar.
+Alan adları (`:attribute`) her FormRequest'in kendi `attributes()` metodundan gelmeye devam
+eder; dosyada `attributes` listesi tutulmaz (tek kaynak ilkesi).
+
+## K-044 · Tahsilatta finansal alan değişmezliği üç katmanlı
+**Karar:** `company_id`, `payment_date`, `amount`, `currency`, `payment_method` oluşturulduktan
+sonra hiçbir rol tarafından değiştirilemez. Düzeltme yolu tektir: iptal + yeniden giriş.
+**Katmanlar** (hiçbiri tek başına yeterli sayılmadı):
+1. `UpdatePaymentRequest` bu alanları hiç tanımaz — `validated()` onları döndürmez, servise ulaşmazlar.
+2. `PaymentService::updateMetadata()` gelen veride farklı bir finansal değer görürse
+   `PaymentFinancialFieldsAreImmutable` fırlatır (servis doğrudan çağrılsa bile).
+3. `Payment::booted()` içindeki `updating` dinleyicisi aynı kuralı zorlar — `$payment->update()`
+   çağrısı bile reddedilir.
+**Gerekçe:** HTTP/UI seviyesinde gizlemek yeterli değildir; ileride Excel import kodu ve konsol
+komutları servisi doğrudan çağıracak. Üç katman da ayrı ayrı testlidir.
+**Not:** Aynı değerin tekrar gönderilmesi (form gizli alanı) sessizce kabul edilir; yalnızca
+GERÇEK farklılık reddedilir. Çözümlenemeyen bir girdi (bozuk tutar) "değişiklik yok" sayılmaz,
+reddedilir.
+
+## K-045 · `payment_method` de değişmezdir
+**Karar:** Ödeme yöntemi finansal alanlar arasındadır ve değiştirilemez.
+**Gerekçe ve karşı görüş:** Bu, operasyon açısından katıdır — "havale" yerine yanlışlıkla
+"nakit" seçildiğinde, tutarı doğru olan bir tahsilatın iptal edilip yeniden girilmesi gerekir
+ve cari defterde iki gereksiz satır oluşur. Buna rağmen değişmez tutuldu: ödeme yöntemi ileride
+kasa/banka/POS hesaplarına bağlanacak alandır (§3.2'de bu modüller kapsam dışı); bugün serbestçe
+değiştirilebilir olması, o modüller geldiğinde mutabakatı bozan bir geçmiş bırakır.
+**Gevşetme yolu:** Tek satır — `Payment::IMMUTABLE_FIELDS` listesinden çıkarılıp
+`EDITABLE_FIELDS`'a alınması ve `UpdatePaymentRequest`'e eklenmesi yeterlidir.
+
+## K-046 · Metadata düzeltmesi için yeni yetki açılmadı
+**Karar:** `payments.edit/update` route'ları `payments.create` yetkisine bağlıdır.
+**Gerekçe:** Tahsilat girebilen herkes kendi girdiği kaydın referans numarasını
+düzeltebilmelidir; matriste "girebilen ama düzeltemeyen" bir rol yoktur. Kayıt bazlı kısıt
+(kendi kaydı + süre penceresi) `PaymentPolicy::update`'tedir. Konaklama iptalinin
+`stays.delete`'e bağlanmasıyla (K-034) aynı yaklaşım.
+
+## K-047 · Personel tüm tahsilatları görür (matris değişikliği)
+**Önceki (CLAUDE.md §7.3):** `payments.view` Personel için "⚠️ kendi tahsilatları".
+**Yeni karar:** Personel tahsilat listesinin TAMAMINI görür.
+**Gerekçe:** Kullanıcının Gün 7 talimatı Personel yetkilerini tek tek saydı ve görüntülemede
+kısıt belirtmedi ("tahsilatları görür"), buna karşılık düzenleme kısıtını ayrıntısıyla yazdı.
+Konaklamalarda da Personel tüm kayıtları görüyor; tahsilatta farklı davranmak tutarsız olurdu.
+**Etkisi:** `PaymentFilter`'da `created_by` daraltması YOKTUR. Personel yine bakiye, toplam
+alacak ve finansal dashboard kartlarını göremez (§7.4 değişmedi).
+**Geri alma:** `PaymentPolicy::viewAny` ve controller sorgusuna tek bir `created_by` koşulu
+eklemek yeterlidir.
+
+## K-048 · Türkçe biçimli tutar girdisi kabul edilir (bulunan hata)
+**Sorun:** Uygulama tutarları `5.000,50 ₺` diye GÖSTERİYOR ama form aynı biçimi geri kabul
+etmiyordu: `prepareForValidation` yalnızca virgülü noktaya çeviriyor, binlik ayırıcı noktayı
+bırakıyordu → `5.000.50` → doğrulama hatası. Gün 5'ten beri Stays'te de vardı.
+**Karar:** `Money::normalizeInput()` Core'a eklendi ve hem `StayRequest` hem
+`StorePaymentRequest` bunu kullanıyor (CLAUDE.md §4.3/4 — tekrar eden şey Core'a taşınır).
+**Kural:** Nokta yalnızca virgül de varsa binlik ayırıcı sayılıp atılır. Aksi hâlde nokta
+ondalık ayırıcıdır — `5.50` yazan kullanıcının beş buçuk lirası sessizce 550 liraya
+dönüşmemelidir. Virgülsüz `5.000` bilinçli olarak çözümlenmez; doğrulama reddeder ve
+kullanıcı düzeltir. Para tutarında tahmin etmek kabul edilemez.
+
+## K-049 · `cheque` (Çek) ödeme yöntemi eklendi
+**Karar:** `PaymentMethod` enum'una `cheque = 'Çek'` eklendi. DB CHECK kısıtı, oluşturma
+migration'ı GERİYE DÖNÜK DEĞİŞTİRİLMEDEN, ileri bir migration ile güncellendi (CLAUDE.md §15).
+**Not:** Migration'ın `down()` metodu, halihazırda `cheque` taşıyan satır varsa başarısız olur.
+Bu bilinçlidir — veri sessizce kaybedilmez, önce dönüştürülmesi gerekir.
+
+## K-050 · Ekstre ekranları Companies modülünde, hesap Ledger'da
+**Sorun:** Cari ekstre firma adını göstermek zorunda; ancak §4.3/3 "Ledger hiçbir modülü
+tanımaz" diyor. Ekranı Ledger'a koymak bu kuralı kırardı.
+**Karar:** Controller, route ve view'lar `Companies` modülünde; hesabın tamamı
+`Ledger\Services\LedgerStatementService`'te. Servis firmayı yalnızca `int $companyId`
+olarak bilir ve hiçbir modülü tanımaz.
+**Sonuç:** Ledger çekirdeği bağımlılıksız kalır; Companies zaten Stays ve Payments
+servislerine bağımlıydı, Ledger da aynı kapıdan eklendi.
+
+## K-051 · Filtreler ikiye ayrılır: bakiye evreni vs. gösterim
+**Sorun:** Kullanıcı "yalnızca tahsilatlar" filtrelerse, yürüyen bakiye kolonu ne göstermeli?
+Filtrelenmiş satırlar üzerinden hesaplanan bir bakiye gerçek bakiye DEĞİLDİR ve kullanıcıyı
+yanıltır.
+**Karar:** İki filtre türü ayrıldı:
+- `date_from`/`date_to`/`currency` → bakiyenin EVRENİ. SQL'de uygulanır, devreden bakiye
+  bunlara göre hesaplanır. Defteri temiz biçimde bölerler.
+- `type`/`q` → yalnızca GÖSTERİM. Yürüyen bakiye hesaplandıktan SONRA PHP'de uygulanır.
+  Görünen her satır, defterin tamamı üzerinden yürüyen GERÇEK bakiyesini taşır.
+**Ekranda:** Gösterim filtresi etkinken bir bilgi kutusu bunu açıkça söyler.
+**Performans:** Ağır filtre (tarih + para birimi) SQL'dedir; PHP'ye yalnızca aralık içindeki
+satırlar gelir.
+
+## K-052 · Ekstre sayfalanmaz
+**Karar:** Cari ekstrede sayfalama yoktur.
+**Gerekçe:** Ekstre bütün olarak okunan ve yazdırılan bir belgedir; sayfa 2'nin başında
+devreden bakiye göstermek gerekir ve bu, kullanıcı sıralamayı ters çevirdiğinde anlamsızlaşır.
+Veri hacmi de buna izin veriyor (CLAUDE.md §1: yılda ~binlerce konaklama, firma başına çok
+daha az). Tarih filtresi büyük dönemleri bölmek için yeterlidir.
+**Yeniden değerlendirme:** Bir firmanın tek aralıktaki hareket sayısı binleri bulursa,
+sayfalama yerine önce zorunlu tarih aralığı düşünülmelidir.
+
+## K-053 · Ekstre görüntüleme denetim kaydı üretmez
+**Karar:** Ekstre sayfası her açılışında `audit_logs`'a yazılmaz.
+**Gerekçe:** Salt okuma olayını loglamak, gerçek değişiklikleri gürültü içinde boğar.
+`exported` olayı Excel export geldiğinde (Gün 10) kullanılacaktır. Yazdırma tarayıcı
+işlevidir; sunucu tarafında ayrı bir olay yoktur.
+
+## K-054 · Yazdırma görünümü Vite çıktısını yüklemez
+**Karar:** `layouts/print.blade.php` kendi kendine yeten sade CSS taşır; uygulamanın
+Tailwind/koyu tema derlemesini yüklemez.
+**Gerekçe:** `app.css` `html { color-scheme: dark }` ve koyu gövde zemini tanımlar; bunları
+yazdırma için tek tek geri almak kırılgan olurdu. Kağıt beyazdır. Sonuç testle doğrulanır:
+yazdırma çıktısında `bg-bg`, kenar çubuğu ve `data-sidebar` bulunmaz.
+
+## K-055 · Deploy workflow'u üç kilitle devre dışı doğar
+**Karar:** `.github/workflows/deploy.yml` depoya eklendi ancak bu hâliyle gerçek
+aktarım yapamaz. Üç bağımsız kilit:
+1. Yalnızca `workflow_dispatch` — `push`/`pull_request` tetiklemesi yok.
+2. Varsayılan biçim `dry-run`; araç bağlanır, raporlar, hiçbir şey yazmaz.
+3. `DEPLOY_ENABLED` repository variable'ı `true` değilse `guard` işi durur.
+   Bu değişken henüz oluşturulmadı.
+Ek olarak gerçek deploy, `confirm_target` alanına hedef alan adının birebir
+yazılmasını ister.
+**Gerekçe:** Paylaşımlı hostingde yanlış deploy'un geri alınması pahalıdır ve
+aynı hesapta başka aktif siteler vardır. Workflow'un "kazara çalışabilir" hâlde
+depoda durması kabul edilemez.
+
+## K-056 · Hedef dizin, kalıp doğrulamasından geçmeden kullanılmaz
+**Sorun:** `SamKirkland/FTP-Deploy-Action` hedef dizinde senkronizasyon yapar.
+`server-dir` yanlış olursa aynı cPanel hesabındaki DİĞER SİTELER etkilenebilir.
+**Karar:** `guard` işi, hedef dizinleri aktarımdan önce doğrular: sonu `/` ile
+bitmeli, `public_html` altında olmamalı, `..` içermemeli ve en az
+`/home/<hesap>/<dizin>/` derinliğinde olmalı. Laravel kökü ile DocumentRoot
+aynı olamaz. Değerler loglanmaz; yalnızca geçti/kaldı yazılır.
+**Uygulama notu:** Kabuk `case` kalıplarında `*` eğik çizgiyi de eşler; bu yüzden
+"hesap kökü" kontrolü kalıpla değil derinlik ölçümüyle yapılır. Kalıplar yerel
+olarak dokuz senaryoyla sınandı.
+**`dangerous-clean-slate` hiçbir koşulda kullanılmaz** — hedef dizinin tüm
+içeriğini, `exclude` edilenler dahil siler.
+**Bilinmeyen:** Aracın, durum dosyası yokken (ilk çalıştırma) sunucuda var olan
+dosyalara ne yaptığı belgelenmemiştir ve kaynak koda inilerek doğrulanmadı.
+Bu yüzden ilk çalıştırma zorunlu olarak `dry-run` olmalıdır.
+
+## K-057 · BLOCKER: kilitli bağımlılıklar PHP 8.3'te çalışmaz
+**Bulgu:** `composer.lock` Symfony 8.1.x'e kilitli ve bu paketler `php >=8.4.1`
+istiyor. Hosting'de PHP 8.3 var. Kilit, PHP 8.4.19 üzerinde çözüldüğü için
+Laravel'in izin verdiği `^7.4.0 || ^8.0.0` aralığından yenisi seçilmiş.
+`laravel/framework` v13.30.1'in kendisi `^8.3` istiyor — sorun çerçevede değil,
+çözümlemede.
+**Doğrulama:** `composer update --dry-run` (platform 8.3'e sabitlenmiş kopyada)
+19 Symfony paketini 7.4.x'e indiren geçerli bir çözüm buldu.
+**Seçenekler:** (A) hosting'i PHP 8.4'e almak — önerilen, kod değişikliği yok;
+(B) `config.platform.php = "8.3.99"` ekleyip kilidi yeniden çözmek.
+**Bu turda `composer.lock` DEĞİŞTİRİLMEDİ** — karar kullanıcınındır.
+**Kalıcı önlem:** Deploy workflow'u vendor'ı hedef PHP sürümüyle derler ve
+`composer check-platform-reqs --no-dev` ile doğrular. Uyumsuzluk artık sessizce
+üretime gidemez; build kırmızıya döner.
+
+## K-058 · Dizin mimarisi kararı kullanıcıya bırakıldı
+**Durum:** Lemon'un DocumentRoot'u şu anda `/home/derspros/lemon.derspros.com.tr`.
+İki mimari değerlendirildi:
+- **A (önerilen):** DocumentRoot Laravel'in `public/` dizinine yönlendirilir.
+  `index.php` hiç değiştirilmez, `public_path()`/`asset()`/`storage:link` doğal
+  çalışır, deploy tek hedefe yazar.
+- **B:** DocumentRoot değiştirilemiyorsa Laravel kökü web dışında tutulur,
+  DocumentRoot'a yalnızca `index.php`, `.htaccess` ve `build/` konur.
+  Maliyeti: `public_path()` servis edilmeyen bir dizini gösterir, `storage:link`
+  elle kurulur, Vite çıktısı iki yere gider.
+**Karar verilmedi:** cPanel'de DocumentRoot'un değiştirilebildiği doğrulanmadan
+workflow'un son hâli yazılamaz — tahmine dayalı `server-dir` yanlış dizine yazma
+riski taşır. Workflow her iki mimariyi de destekleyecek biçimde yazıldı;
+Mimari A seçilirse ikinci aktarım adımı kaldırılacaktır.
+
+## K-059 · Lemon'a `develop` dalı deploy edilir
+**Öneri:** Lemon ilk kabul/staging ortamı olduğundan `develop` dalı deploy edilir.
+`main`'i Lemon'a bağlamak, gerçek production geldiğinde iki ortamın aynı dalı
+paylaşmasına ve geriye dönük ayrıştırma işine yol açar.
+**Otomatik push deployment hiçbir dal için etkinleştirilmedi.** Onay verilse bile
+öneri `workflow_dispatch`'te kalmaktır: paylaşımlı hostingde geri alma pahalıdır.
+
+## K-060 · Uygulama PHP 8.3'e kilitlendi (K-057 blocker'ı çözüldü)
+**Bağlam:** Hosting'de PHP 8.4 kurulu ama **alan adı bazlı PHP izolasyonu kapalı**;
+sürüm yalnızca hesabın tamamı için değiştirilebiliyor ve aynı hesapta başka aktif
+siteler var. Global yükseltme onları da etkilerdi. Bu yüzden K-057'nin "Çözüm A"sı
+(hosting'i 8.4'e almak) uygulanabilir değil; **Çözüm B seçildi.**
+
+**Yapılan:** `composer.json` → `config.platform.php = "8.3.0"`, kilit yeniden çözüldü.
+
+**Yama sürümü neden `8.3.0`:** `8.3.0` ve `8.3.99` ile çözüm birebir aynı çıktı
+(ölçüldü — bu ağaçtaki hiçbir paket belirli bir 8.3 yamasına bağlı değil).
+Eşit sonuçta en muhafazakârı seçildi: hosting hangi 8.3.x yamasını çalıştırırsa
+çalıştırsın kilit geçerlidir.
+
+**Değişen paketler (114 → 115):**
+- **16 düşüş, hepsi Symfony 8.1.x → 7.4.x (LTS):** clock, console, css-selector,
+  error-handler, event-dispatcher, finder, http-foundation, http-kernel, mailer,
+  mime, process, routing, string, translation, uid, var-dumper
+- **3 küçük yükseliş:** league/commonmark 2.10.0→2.10.1, laravel/pao, laravel/pint
+- **1 yeni:** symfony/polyfill-php83 (7.4 paketlerinin bağımlılığı)
+- **0 kaldırma.** Laravel v13.30.1 ve spatie/laravel-permission 8.3.0 DEĞİŞMEDİ.
+
+**Doğrulama:**
+- `composer why-not php 8.3` → "There is no installed package depending on 'php'
+  in versions not matching 8.3"
+- Kilitte (dev dahil) PHP 8.4+ isteyen paket kalmadı
+- `composer validate --strict` geçti, `composer audit` güvenlik uyarısı vermedi
+- Laravel 13 zaten `symfony/* ^7.4.0 || ^8.0.0` kabul ediyor — uyumluluk korunuyor
+
+**Üç kapı, farkın sessizce üretime sızmasını engeller:**
+1. `config.platform.php` — 8.4 isteyen paket kilide giremez
+2. `phpstan.neon` → `phpVersion: 80300` — 8.4'e özgü işlev/sözdizimi analizde kırılır
+3. CI ve deploy build'i PHP 8.3 kullanır + `composer check-platform-reqs`
+
+**Sınır:** `composer check-platform-reqs` ÇALIŞAN PHP'yi denetler, `config.platform`
+değerini değil. Bu yüzden 8.3 kanıtı `why-not php 8.3` + CI'ın gerçek 8.3
+koşusundan gelir.
+
+## K-061 · Faker Türkçe verisi arama testlerini rastgele kırıyordu
+**Bulgu:** `CompanyListingTest::all_caps_kaydedilmis_firma_kucuk_harfle_bulunur`
+aralıklı olarak kırılıyordu. Kök neden: faker'ın tr_TR **isim** listesinde 'Çınar'
+var (`Person.php`), `CompanyFactory` de `contact_person`'ı oradan dolduruyor.
+`CompanyFilter::searchable()` `contact_person`'ı kapsadığı için "çınar" araması
+fazladan bir kayıt buluyordu — **uygulama doğru davranıyor**, kırılgan olan testin
+sayım beklentisiydi. Bu turdaki PHP 8.3 değişikliğiyle ilgisi yok; K-038'de
+düzeltilen `city`/'Trabzon' çakışmasıyla aynı sınıf.
+**Karar:** Test sınıfına `searchableCompany()` yardımcısı eklendi; arama iddiası
+taşıyan tüm testler ARANABİLİR alanların tamamını nötr sabitlerle doldurur.
+Test zayıflatılmadı — Türkçe i-katlama davranışı aynen doğrulanmaya devam ediyor,
+yalnızca sayım deterministik hâle geldi. 10 ardışık koşuda yeşil.
+
+## K-062 · Mimari A kesinleşti; Mimari B kaldırıldı
+**Karar:** cPanel'de `lemon.derspros.com.tr` alan adının Document Root alanının
+değiştirilebildiği doğrulandı. Laravel kökü `/home/derspros/lemon-app/`, DocumentRoot
+`/home/derspros/lemon-app/public` olacak. **Mimari B (ayrık public dizini) kullanılmayacak.**
+**Kaldırılanlar:** `deploy/public_html-index.php`, `deploy/public_html-htaccess` ve boşalan
+`deploy/` dizini; `phpstan.neon`'daki artık geçersiz `excludePaths: deploy` girdisi;
+workflow'daki ikinci (DocumentRoot) FTP aktarım adımı; `LEMON_DOCROOT` repository variable'ı.
+**Kazanç:** Laravel'in kendi `public/index.php` dosyası hiç değiştirilmiyor; `public_path()`,
+`asset()` ve `storage:link` doğal çalışıyor; deploy tek hedefe yazıyor.
+**Ek doğrulama:** Build adımı `public/index.php` içinde standart
+`require __DIR__.'/../vendor/autoload.php'` satırını arıyor — dosya kazara uyarlanırsa
+build kırmızıya döner.
+
+## K-063 · `.htaccess` sertleştirmesi Laravel'in public/.htaccess dosyasına taşındı
+**Sorun:** Kaldırılan `deploy/public_html-htaccess` şablonunda, Laravel'in stok
+`public/.htaccess` dosyasında **bulunmayan** üç şey vardı: HTTPS zorunluluğu (CLAUDE.md §15),
+gizli dosya erişim engeli ve güvenlik başlıkları (`X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`). Mimari A'da servis edilen dosya Laravel'inki olduğu için bunlar
+**sessizce kaybolacaktı.**
+**Karar:** Sertleştirme `public/.htaccess` içine taşındı. Laravel'in kendi kuralları
+(Authorization, X-XSRF-Token, trailing slash, front controller, MultiViews) aynen korundu —
+şablonda X-XSRF-Token kuralı yoktu, o da kaybolmadı.
+
+## K-064 · Hedef dizin doğrulaması fail-closed ve iki biçimle sınırlı
+> **Güncellendi: K-067 ile tek değere daraltıldı.** Aşağıdaki iki biçimli hâli tarihsel kayıttır.
+**Bağlam:** Hesapta `public_html` (derspros.com.tr) ve en az dört başka canlı site klasörü var.
+**Karar:** `guard` işi yalnızca iki değeri kabul eder: `/home/derspros/lemon-app/` (chroot yok)
+veya `/lemon-app/` (FTP kökü `/home/derspros` ise). Başka her değerde **iş durur**.
+Tam eşleşmenin yanı sıra bağımsız ikinci bir kontrol seti çalışır: sonu `/`, `..` yok,
+`public_html` yok, diğer alan adı klasörleri yok, son dizin adı `lemon-app`.
+Değer boşsa iş hemen durur — tanımsız değişken yüzünden hesap köküne yazmak imkânsızdır.
+**Doğrulama:** 14 senaryo yerelde sınandı; yalnızca iki meşru biçim geçti, hesaptaki tüm
+diğer site klasörleri ve `/`, `/home/derspros/`, `..` içeren yollar reddedildi.
+**`dangerous-clean-slate` hiçbir koşulda kullanılmaz.**
+
+## K-065 · DocumentRoot değişikliği EN SON yapılır
+**Sorun:** `/home/derspros/lemon-app/public` bugün boştur. DocumentRoot şimdi değiştirilirse
+Lemon alan adı, ilk gerçek deploy tamamlanana kadar 403/404 verir.
+**Karar sırası:** dizin+`.env`+DB hazırlığı → dry-run → ilk gerçek deploy → sunucuda
+`key:generate`/`migrate`/`storage:link`/cache → **ancak o zaman** cPanel'den DocumentRoot
+değişikliği → §7 güvenlik doğrulaması.
+**GitHub Actions bu değişikliği yapmaz ve yapamaz** — cPanel erişimi yoktur.
+
+## K-066 · Rollback: analiz edildi, kurulmadı
+**Değerlendirilen üç yol:** (A) deploy öncesi elle klasör yedeği, (B) sürümlü dizin +
+symlink, (C) git ile ileri düzeltme.
+**Öneri: A + C.** B elendi çünkü FTPS ile güvenilir symlink kurulamıyor ve SSH yok.
+**Kritik ayrım:** dosya yedeği veritabanını geri almaz. `ledger_entries` append-only'dir
+(§6/L1) ve migration'lar ileri alınmıştır; şema değiştiren bir deploy öncesi ayrıca
+`mysqldump` alınmalıdır.
+**Uygulama:** ilk gerçek deploy öncesi, ayrı bir turda. Bu turda hiçbir şey kurulmadı.
+
+## K-067 · FTP kökü doğrulandı; guard tek hedef değerine daraltıldı
+**Bağlam:** K-064'te hedef dizin için iki biçim kabul ediliyordu, çünkü FTP hesabının
+chroot davranışı bilinmiyordu ve tahmin edilmemişti (`docs/deploy-lemon.md` §12 bir
+açık soruydu).
+**Doğrulama (kullanıcı, FileZilla):** ana FTP hesabına bağlanıldı, "TLS bağlantısı kuruldu";
+uzak kökte `lemon-app`, `lemon.derspros.com.tr`, `nuvernatrade.com` klasörleri **doğrudan**
+göründü. Yani hesap `/home/derspros` altına chroot'ludur ve Lemon uygulamasının yolu köke
+göre `/lemon-app/`'tir. Salt okunur listeleme; hiçbir dosya yüklenmedi/silinmedi/değiştirilmedi.
+**Karar:**
+1. `deploy.yml` içindeki `EXPECTED_DIR` **tek değer** olur: `/lemon-app/`.
+   `/home/derspros/lemon-app/` biçimi kaldırıldı — kabul kümesi ne kadar darsa yanlış
+   hedefe yazma olasılığı o kadar küçüktür.
+2. `LEMON_APP_DIR` variable'ının değeri kesinleşti: `/lemon-app/`.
+3. Bağımsız ikinci kontrol seti (sonu `/`, `..` yok, `public_html` yok, diğer alan adı
+   klasörleri yok, son dizin adı `lemon-app`) **aynen korunur**; tek eşleşme bir gün
+   gevşetilse bile yasak hedefler yakalanmaya devam eder.
+4. FTP hesabı değişirse `EXPECTED_DIR` **bilinçli olarak** güncellenir — tek satır,
+   gözden geçirilebilir bir değişiklik. Guard başka hiçbir değeri kabul etmez.
+**Yan bulgu — kalan yapısal risk:** ana FTP hesabı chroot'lu olduğu için hesaptaki tüm
+sitelere yazabilir; koruma yalnızca workflow düzeyindedir. Yapısal çözüm, cPanel'den
+yalnızca `/home/derspros/lemon-app` dizinine erişebilen **ayrı bir FTP hesabı** açmaktır.
+Bunun sonucu: o hesapta hedef `/lemon-app/` değil `/` olur ve `EXPECTED_DIR` ile
+"son dizin adı `lemon-app`" kontrolü yeniden düşünülmelidir. Bu yüzden bugün
+**uygulanmadı**, yalnızca önerildi (`docs/deploy-lemon.md` §12).
+**Deploy durumu değişmedi:** `DEPLOY_ENABLED` yok, varsayılan `dry-run`, yalnızca
+`workflow_dispatch`. Bu turda dry-run dahil hiçbir workflow çalıştırılmadı.
+
+## K-068 · TRIGGER yetkisi blocker olmaktan çıkarıldı; doğrulama migration'a taşındı
+**Bağlam:** `SHOW GRANTS FOR CURRENT_USER();` çıktısında `derspros_lemon.*` için
+ALL PRIVILEGES görüldü. Ancak `CURRENT_USER` phpMyAdmin oturum kullanıcısıdır;
+Laravel'in kullanacağı `derspros_sebahattin` ile birebir aynı kullanıcı değildir —
+yani bu çıktı dolaylı bir kanıttır. cPanel Manage Databases ekranında
+`derspros_sebahattin` → `derspros_lemon` → TÜM AYRICALIKLAR atanmış durumdadır.
+**Karar:** TRIGGER yetkisi artık **dry-run blocker değildir.** Dry-run veritabanına
+hiç dokunmaz; onu bir DB yetkisine bağlamak gereksizdi.
+**Kesin doğrulama ilk gerçek production migration'dadır.** `CREATE TRIGGER` doğrudan
+kanıttır, `SHOW GRANTS` dolaylı.
+**Zorunlu davranış — CREATE TRIGGER başarısız olursa:** `migrate --force` fail eder ve
+orada durulur; **DocumentRoot KESİNLİKLE değiştirilmez** (yarım migrate edilmiş bir
+veritabanına kimse yönlenmez); karar kullanıcıya sorulur.
+**Değişmeyen:** migration'da hiçbir `try/catch`, `IF NOT EXISTS` veya sessiz atlama
+yoktur ve eklenmeyecektir. **Ledger trigger koruması hiçbir koşulda bypass edilmez
+veya kaldırılmaz** (CLAUDE.md §6/L1).
+
+## K-069 · Dry-run kilitsizdir; kilitler yalnızca gerçek deploy yolundadır
+**Sorun:** Kilitlerin güvenli doğrulamayı da engellemesi tasarım hatasıdır. Dry-run'ı
+`DEPLOY_ENABLED`'a bağlamak, hiçbir şey yazmayan bir işlemi yazma iznine bağlamak olurdu.
+**Karar — iki çalışma biçimi:**
+| | `mode: dry-run` (varsayılan) | `mode: deploy` |
+|---|---|---|
+| `DEPLOY_ENABLED` | gerekmez, okunmaz | `true` zorunlu |
+| `confirm_target` | gerekmez; dolu ve yanlışsa yalnızca uyarı | `lemon.derspros.com.tr` birebir |
+| `LEMON_APP_DIR` | `/lemon-app/` (hedef doğrulaması her iki biçimde de çalışır) | `/lemon-app/` — deploy yolunda ikinci kez kontrol edilir |
+| Dosya oluşturma/değiştirme/silme | yok | var |
+**Fail-closed korundu:** karar iki kez, birbirinden bağımsız hesaplanır (`guard` işi ve
+aktarım işi); ikisi uyuşmazsa iş durur. Aktarım adımının `dry-run` bayrağı artık guard
+çıktısına değil, aktarım işinin kendi hesabına bağlıdır — guard çıktısının kaybolması
+veya ileride değiştirilmesi tek başına gerçek aktarım açamaz. `'true'` dışındaki her
+değer dry-run demektir. `mode: deploy` seçilip kilitlerden biri kapalıysa iş **durur**;
+sessizce dry-run'a düşülmez, çünkü kullanıcı deploy istemiştir.
+**Doğrulama:** 11 senaryolu karar matrisi yerelde sınandı — dry-run'ın dört varyantı da
+yazmasız geçti, `deploy` yalnızca dört kilit birden açıkken gerçek aktarıma döndü.
+
+## K-070 · FTP aracının dry-run ve ilk-yayın davranışı kaynaktan doğrulandı
+**Bağlam:** İki iddia şimdiye kadar belgeye dayanıyordu, kaynağa değil.
+**Yöntem:** `@samkirkland/ftp-deploy` paketi indirilip `dist/` okundu.
+**Bulgu 1 — dry-run gerçekten yazmıyor.** Sunucuyu değiştiren beş işlemin tamamı
+bayrakla kapalı: `createFolder` (`if (this.dryRun === true) return;`), `uploadFile`
+(upload + replace), `removeFile`, `removeFolder` ve durum dosyası yazımı
+(`if (this.dryRun === false) { … }`).
+**Bulgu 2 — bilinen tek istisna.** `getServerFiles()`, dry-run kontrolünden ÖNCE
+`ensureDir(server-dir)` çağırır; hedef dizin yoksa **oluşturulabilir**. Sonuç boş bir
+dizindir; dosya yazılmaz, hiçbir şey silinmez. Hedefimiz `/lemon-app/` zaten mevcut
+olduğu için pratikte no-op'tur ve guard tek değere kilitli olduğu için yanlış bir yola
+dizin açılması mümkün değildir. Bu istisna belgeye açıkça yazıldı.
+**Bulgu 3 — ilk yayında silme yok (K-064'teki açık soru kapandı).** Durum dosyası
+bulunamazsa araç sunucu durumunu boş kabul eder (`data: []`); boş duruma göre hesaplanan
+fark yalnızca **upload** üretir, **delete üretmez**. İlk gerçek aktarım sunucuda
+önceden bulunan dosyaları silmez. İlk çalıştırmanın dry-run olması önerisi yine de
+geçerlidir — hedefin ve aktarım listesinin beklenen şey olduğu görülmelidir.
+
+## K-081 · Üretimde varsayılan yönetici kimlik bilgisiyle seed YASAKTIR
+> Numara, henüz birleştirilmemiş dal(lar)daki K-071…K-080 ile çakışmasın diye seçildi.
+
+**Sorun:** `SEED_ADMIN_PASSWORD` boş bırakılırsa
+`config/hotel.php` varsayılanı devreye giriyor ve seeder `admin@example.com` /
+`degistir-beni` hesabı oluşturuyordu. Negatif testle doğrulanmıştı: parola geçerliydi.
+Belgeye yazmak yetmez — `.env` unutulursa kapı açık kalır.
+**Karar — koruma iki katmanlı:**
+1. `config/hotel.php` artık e-posta ve parola için **varsayılan vermiyor**; env yoksa
+   `null` döner. Güvensiz değerin config'te durması, "ayarlanmış" gibi görünmesine yol açıyordu.
+2. `DatabaseSeeder::guardProductionCredentials()` local/testing DIŞINDAKİ her ortamda
+   çalışır ve şu dört durumda `RuntimeException` fırlatır: parola boş, parola geliştirme
+   varsayılanı (`degistir-beni`), e-posta boş, e-posta geliştirme varsayılanı
+   (`admin@example.com`).
+**Kapsam `production` değil `! local/testing`:** dosyada zaten demo hesapları aynı koşulla
+sınırlayan bir kural vardı; iki farklı "üretim" tanımı taşımak yerine tek tanım kullanıldı.
+`staging` de korunur.
+**Fail-closed:** guard `RolePermissionSeeder`'dan hemen sonra, **hiçbir kullanıcı
+yazılmadan** çalışır. Testle doğrulandı: guard tetiklendiğinde `users` tablosu boş kalır.
+Yarım kalan tek şey rol/yetki tablolarıdır; o seeder idempotenttir, yeniden çalıştırmak güvenlidir.
+**Geliştirici deneyimi korundu:** varsayılanlar `DatabaseSeeder` sabitlerine taşındı ve
+yalnızca local/testing'de uygulanır. `php artisan migrate:fresh --seed` `.env` olmadan
+da çalışmaya devam eder.
+**Doğrulama:** 12 yeni test (`tests/Feature/Security/ProductionSeedGuardTest.php`) +
+gerçek CLI provası: `APP_ENV=production php artisan db:seed --force` `SEED_ADMIN_*`
+olmadan RuntimeException verdi ve `users` tablosunda 0 kayıt kaldı; güçlü parolayla
+tek admin oluştu. Toplam test 454 → 466, hepsi yeşil.
+
+## K-082 · Tasarım sistemi açık temaya taşındı; kenar çubuğu kendi paletini kullanır
+**Bağlam:** CLAUDE.md §11 koyu slate + turuncu temayı "tek tema" olarak tanımlıyordu.
+Kullanıcı Gün 9'da açık zemin + beyaz kart + koyu lacivert kenar çubuğu + sıcak altın
+vurgu istedi. §18 gereği aynı commit'te CLAUDE.md §11 yeniden yazıldı.
+**Neden ucuz oldu:** tüm bileşenler zaten token kullanıyordu (`bg-card`, `text-tx`, …)
+ve Blade'de ham hex yoktu. Tema değişimi büyük ölçüde `app.css` içindeki `@theme`
+bloğunun değişmesiyle oldu.
+**Ölçülerek seçilen renkler (WCAG 2.1 formülü):** ana metin #1F2937 kart üzerinde 14.68;
+ikincil #6B7280 kart 4.83 / sayfa 4.51; form sınırı #8A8A85 kart 3.47 / sayfa 3.23 (1.4.11).
+**Kritik bulgu — altın metin olarak KULLANILAMAZ:** #C8A96B beyaz üzerinde 2.25 verir.
+Bu yüzden üç token ayrıldı: `--color-acc` (dolgu), `--color-acc-tx` #8A6A2F (metin ve
+odak halkası, 5.02), `--color-on-acc` #1F2937 (altın dolgu üzerindeki metin, 6.53).
+Odak halkası da `--acc-tx` kullanır; altın dolgu 1.4.11'in 3:1 eşiğini geçmezdi.
+**Kullanım kuralı:** `--color-well` (#F1F0EC) üzerine `text-mut` yazılmaz — 4.24'te kalır.
+Çukur alanlarda `text-tx` kullanılır.
+**Borç kırmızı DEĞİLDİR:** kırmızı "iptal / tehlike" demektir. Borç `--color-debit`
+(#B45309), alacak `--color-credit` (#15803D) ve her ikisi de daima metin etiketiyle birlikte.
+**Testle korunuyor:** `DesignSystemTest::blade_icinde_ham_hex_rengi_yazilmaz` Blade'lerde
+ham hex arar. Tek muafiyet `<meta name="theme-color">` (HTML düz değer ister) ve
+yazdırma görünümü (kendi kendine yeten CSS taşır).
+**Alpine.js EKLENMEDİ.** İstek "mevcut Blade + Tailwind + Alpine mimarisini koru" diyordu
+ama Alpine bu projede hiç kurulu değildi (§11.7). Yeni paket eklemek yerine mevcut sade
+JavaScript korundu ve genişletildi.
+
+## K-083 · Dashboard modülü ve sabit sorgu bütçesi
+**Karar:** Pano `app/Modules/Dashboard/` altında yeni bir modüldür; uygulama kökü (`/`,
+route adı `home`) `routes/web.php`'den modülün kendi route dosyasına taşındı. Route adı
+`home` KORUNDU: kenar çubuğu, giriş sonrası yönlendirme ve mevcut testler bunu kullanır.
+**Modüller arası erişim yalnızca Service'ten (§4.3/1):** `DashboardService` Company, Stay,
+Payment veya LedgerEntry modeline hiç dokunmaz. Gerekli raporlama metotları ilgili
+servislere eklendi (`CompanyService::activeCount/namesByIds`,
+`StayService::totalsByCurrencyBetween/currentAndUpcoming/…`, aynısı PaymentService'te,
+`LedgerStatementService::openBalanceTotalsByCurrency/topDebtorCompanies/recentEntries`).
+**Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır.** Alt sorgu firma+para
+birimi kırılımında bakiye üretir, dış sorgu yöne göre ayırır — tek sorgu, para birimi
+sayısı kadar satır. Bir firmanın borcu başka firmanın alacağını götürmez.
+**"Bu ay" cari hareketin `entry_date` sütunuyla aynı alandan uygulanır:** konaklamada
+`check_out_date`, tahsilatta `payment_date`. Böylece ay toplamı, o ay deftere düşen
+tutarla birebir tutar.
+**Personel panosu tutar TAŞIMAZ:** `PersonnelSummary` nesnesinde hiç `Money` alanı yoktur
+ve controller finansal servisi hiç çağırmaz. Testle doğrulandı: personel isteğinde
+`ledger_entries` sorgusu sıfır.
+**Sorgu bütçesi ölçüldü: 11 sorgu, firma sayısından bağımsız.** `DashboardTest` hem
+N+1 yokluğunu hem 15 sorguluk üst sınırı doğrular.
+**Test tuzağı:** `DB::enableQueryLog()` mevcut günlüğü TEMİZLEMEZ. İki ölçüm arka arkaya
+yapıldığında ikincisi birincininkileri de sayar ve sahte bir N+1 raporlar
+(11 → 22 görüldü). Ölçümden hemen önce `DB::flushQueryLog()` şart.
+
+## K-084 · Çift gönderim koruması sade JavaScript ile
+**Sorun:** Aynı formun iki kez gönderilmesi iki konaklama ya da iki tahsilat demektir;
+defter append-only olduğu için düzeltmesi elle ters kayıt gerektirir.
+**Çözüm:** genel `submit` dinleyicisi; ikinci gönderim `preventDefault` ile durdurulur.
+**İki tuzak ve çözümleri:** (1) devre dışı bırakılan submit butonunun `name`/`value`
+çifti istek gövdesine GİRMEZ — bu yüzden kilitleme `setTimeout(0)` ile gövde
+toplandıktan sonra yapılır; (2) tarayıcı doğrulaması gönderimi iptal ederse form
+kilitli kalmamalı — `invalid` olayında ve bfcache dönüşünde (`pageshow`) kilit açılır.
+Muafiyet gerekirse forma `data-allow-resubmit` konur.
+
+## K-085 · Gerçek tarayıcıda doğrulama iki gerçek hata yakaladı
+**Yöntem:** kurulu Chromium ile 375/768/1366/1920 genişliklerinde ekran görüntüsü ve
+yatay taşma ölçümü.
+**Bulgu 1:** panoda 375px'te 7px yatay taşma. Neden: `<x-ui.panel>` bir grid öğesidir ve
+grid öğelerinin varsayılan `min-width: auto` değeri uzun içerikle küçülmelerini engeller.
+`min-w-0` eklendi.
+**Bulgu 2:** dar ekranda tutarlar `truncate` yüzünden "21.250,5…" olarak kırpılıyordu.
+**Bir finans ekranında kırpılmış tutar yanlış bilgidir**; `truncate` kaldırıldı, dar
+ekranda yazı küçülüyor ve gerekirse satır kırılıyor.
+**Ayrıca:** iptal edilmiş tahsilat panoda "alacak yeşili" ile görünüyordu; cariye etkisi
+ters kayıtla sıfırlandığı için nötr ve üstü çizili gösterime alındı.
+
+## K-086 · Mobil dokunma turu: gerçek tarayıcı ölçümü, tahmin değil
+**Bağlam:** Gün 9'un "yatay taşma yok" sonucu mobil desteğin yeterli olduğunu göstermiyordu.
+Bu tur 14 ekranı 6 viewport'ta (360/375/390/430/768/1366) gerçek Chromium ile denetledi:
+yatay taşma, kırpılmış tutar ve dokunma hedefi boyutu programatik olarak ölçüldü.
+**Sonuç: 84 kontrolün tamamında (14 ekran × 6 viewport) sıfır yatay taşma, sıfır kırpılmış
+tutar.** Gün 9'daki `min-w-0`/`truncate` düzeltmeleri kalıcı kaldı.
+**Gerçek bulgular (tahmini değil, ölçülmüş):**
+1. Pano panellerinde (en yüksek bakiyeli firmalar, son cari hareketler, son tahsilatlar,
+   yaklaşan konaklamalar) yalnızca firma adı/misafir adı tıklanabilirdi; tutar ve dolgu alanı
+   değildi. Satırlar artık tutarı da kapsayan TEK `<a>` ile sarmalanıyor — liste ekranlarının
+   zaten kullandığı `<a class="block"><x-ui.card>` desenine (payments/stays/companies mobil
+   kart görünümü) hizalandı.
+2. Firma detayında telefon/e-posta linkleri ve "Ekstreyi aç"; panel başlığındaki "Tümü"
+   linki; cari ekstredeki kaynak linkleri ("Konaklama kaydı"/"Tahsilat kaydı") 14-20px
+   yüksekliğindeydi. `min-h-11` ile 44px garanti edildi — `-m-N p-N` negatif kenar boşluğu
+   hilesi yerine, çünkü satır yüksekliği tahmini yanlış çıktı (ilk denemede 32-36px'te kaldı,
+   ölçülerek yakalandı ve düzeltildi).
+3. Checkbox etiketi 20px yükseklikteydi; `<label>` artık `min-h-11 items-center` taşıyor.
+   Görsel kutu (16px) kasıtlı olarak küçük kalıyor — dokunma alanı tüm satırdır.
+**Kalan küçük hedefler yalnızca 1366px'te (masaüstü tablo sıralama başlıkları, satır
+aksiyon düğmeleri) — 360-768px arasının HİÇBİRİNDE yok.** Bu, fare odaklı standart bir
+desendir (CLAUDE.md §11.5: tablolar yalnızca `lg`/1024px ve üzerinde gösterilir); mobil
+kart görünümü zaten tam satır bağlantısı kullanıyor. Değiştirilmedi.
+**Gerçek klavye tuzağı bulundu ve düzeltildi:** kapalı (ekran dışı) mobil çekmece DOM'da
+kalmaya devam ediyor ve `Tab` tuşu "İçeriğe atla"dan sonra doğrudan görünmeyen "Menüyü
+kapat" düğmesine ve menü linklerine atlıyordu. Çözüm: `inert` özniteliği, `matchMedia
+('(min-width: 768px)')` ile senkronize — masaüstünde (`md` ve üzeri, kenar çubuğu her zaman
+sabit/görünür) asla uygulanmaz; mobilde yalnızca çekmece kapalıyken uygulanır. Açılışta/
+kapanışta ve viewport `md` eşiğini geçtiğinde yeniden hesaplanır. Doğrulandı: mobilde Tab
+artık çekmeceyi atlıyor, çekmece açıkken içine giriyor; masaüstünde davranış değişmedi
+(Tab hâlâ kenar çubuğuna doğal olarak giriyor).
+**Değiştirilmeyen (bilerek):** hiçbir yeni JS paketi/framework eklenmedi — `inert` yerleşik
+bir HTML özniteliğidir, `matchMedia` yerleşik bir Web API'sidir. Native `confirm()` diyalogları
+(silme/iptal onayı) zaten viewport-güvenlidir; özel modal hiç yoktu, eklenmedi. Backend, ledger
+kuralları, authorization/policy, finansal hesaplamalar HİÇ değişmedi.
+**Test:** `DesignSystemTest::mobil_cekmece_erisilebilirlik_kablolamasi_tamdir` — app.js'in
+bağımlı olduğu `data-sidebar*`/`aria-*` işaretlemesinin silinmesini CI'da (tarayıcısız)
+yakalar. `DashboardTest::panel_satirlari_tutari_da_kapsayan_tek_baglantidir` — regex ile
+`<a href="…">` etiketinin firma adı VE tutarı `</a>`'dan önce aynı anda sardığını doğrular.
+`inert`/dokunma boyutu/taşma gibi CSS-JS davranışları PHPUnit'te ölçülemediği için asıl kanıt
+gerçek tarayıcı denetimidir (84/84 kontrol temiz); bu, rapor edilen sayılarla birlikte sonuçtur.
+
+## K-087 · Para birimi kümesi ISO 4217 tabanlı ve config-driven genişletilebilir yapıldı
+**Bağlam (Gün 9.6):** İş modeli TRY/EUR/GBP üçlüsüne sabitliydi — Currency enum'unda
+sadece 3 case, dashboard/ekstre/form kodunda hiçbir yerde "3'ten fazla para birimi"
+varsayımını bozan hard-code YOKTU (audit ile doğrulandı: hiçbir yerde `in_array($c,
+['TRY','EUR','GBP'])` gibi bir kapalı liste bulunmadı), ama enum'un kendisi kapalıydı.
+Hedef: en az TRY, EUR, GBP, USD, RUB, GEL desteklemek; gelecekte yeni bir ISO kodu
+eklemek onlarca dosyaya dokunmayı gerektirmemeli.
+
+**DB migration GEREKMEDİ.** `stays.currency`, `payments.currency`, `ledger_entries.currency`
+zaten `CHAR(3)`; `information_schema.CHECK_CONSTRAINTS` ve canlı şema sorgusuyla doğrulandı —
+değeri kısıtlayan hiçbir CHECK yok. Genişleme tamamen `App\Modules\Core\Enums\Currency`
+enum'unda (TRY/EUR/GBP/USD/RUB/GEL, 6 case) ve `config/hotel.php`'de kaldı.
+
+**İki katman, bilinçli ayrım:**
+- `Currency` enum'u = TEKNİK geçerlilik kümesi (validasyon, DB güvenliği, testler).
+- `config('hotel.currencies')` = İŞ KARARI — hangi kodlar aktif ve hangi sırayla
+  gösterilir; enum'un alt kümesi olmak ZORUNDA (testle korunur), enum'u genişletemez.
+- `Currency::active()` (config'ten, sıralı) YALNIZCA yeni kayıt formlarında (Konaklama/
+  Tahsilat oluşturma/düzenleme) kullanılır. `Currency::cases()` (enum'un tamamı)
+  raporlama/filtre/geçmiş ekranlarında (liste filtreleri, ekstre filtresi, dashboard
+  toplamları) kullanılmaya DEVAM eder — bir kod "aktif" listeden çıkarılsa bile o kodda
+  geçmiş borç/alacak dashboard'da veya ekstrede asla gizlenmemeli.
+- `Currency::decimalPlaces()` eklendi: `Money`'nin sabit ×100 (kuruş) varsayımını
+  ADLANDIRIR ve test eder. Money'nin kendisi değiştirilmedi — V1'in 6 para biriminin
+  tamamı 2 ondalıklı; farklı ondalık basamaklı bir ISO kodu (JPY, BHD gibi) eklenmeden
+  önce bu varsayım yeniden değerlendirilmeli.
+- RUB/GEL için sembol yerine ISO kodu gösterilir (`symbol()` → `'RUB'`/`'GEL'`); ₽/₾
+  glifleri az tanınır ve CLAUDE.md §7'nin "sembole güvenilmez" ilkesiyle çelişir.
+
+**Regresyon:** 4 mevcut test `'USD'`'yi "geçersiz para birimi" örneği olarak kullanıyordu
+— USD artık desteklendiği için bu testler yanlış pozitif üretirdi. Testler ZAYIFLATILMADI;
+geçersiz örnek gerçekten enum dışı kalan `'CHF'` ile değiştirildi
+(`LedgerInvariantsTest`, `PaymentCrudTest`, `StayCrudTest`, `StayListingTest`).
+
+**Yeni test:** `tests/Feature/Core/CurrencyTest.php` — enum/config bütünlüğü, `active()`
+sıralaması ve geçersiz kod filtrelemesi, RUB/GEL/USD ile uçtan uca konaklama+tahsilat+
+cari hareket, farklı para birimlerinin toplanmadığı, ekstre/dashboard/formların yeni
+kodları ayrı ayrı gösterdiği, ham SQL ile herhangi bir 3 harfli kodun DB'de kabul
+edildiği (şema güvenliği) ve TRY/EUR/GBP'nin mevcut davranışının bozulmadığı — 24 test,
+82 assertion.
+
+**Değiştirilmeyen (bilerek):** exchange rate/kur servisi, currency conversion, Kasa
+Defteri modülü — bu turun kapsamı dışında (§3.2, kullanıcı talimatı). `StatementController`
+ve `DashboardService` filtre/toplama noktaları `Currency::cases()` üzerinde bırakıldı,
+`active()`'e GEÇİRİLMEDİ — kasıtlı, yukarıdaki ayrım gereği.
+
+## K-088 · Mobil birincil gezinme kenar çubuğundan alt gezinme çubuğuna taşındı
+**Bağlam (Gün 9.6):** Mobilde tek gezinme yolu hamburger + soldan kayan çekmeceydi —
+bu, "her ekrana bir dokunuşta erişim" beklentisine uymuyordu (native mobil uygulama
+deseninin aksine). Hedef: 4 sabit sekme + Daha Fazla; Kasa Defteri (Gün 10) geldiğinde
+Konaklamalar'ın Daha Fazla'ya taşınıp yerine Kasa'nın geçeceği bir yapı.
+
+**Çekmece yeniden kullanıldı, kopyalanmadı.** "Daha Fazla" sekmesi YENİ bir menü/sayfa
+DEĞİL — mevcut kenar çubuğu çekmecesini ikinci bir tetikleyiciyle açıyor. Bu, yetkiye
+duyarlı grup/öğe render mantığının (`partials/sidebar.blade.php`) tekrarlanmasını
+önledi ve çekmecenin zaten test edilmiş erişilebilirlik kablolamasını (Escape, dışarı
+tıklama, `inert`, odak yönetimi — K-086) aynen miras aldı. `resources/js/app.js`'teki
+`drawer` nesnesi tek bir `toggle` yerine `toggles` (NodeList) tutacak şekilde
+genelleştirildi; hangi tetikleyici açtıysa kapanışta odak ona döner (`lastToggle`).
+
+**Bulunan ve düzeltilen gerçek hata — katman sırası:** ilk uygulamada alt çubuk ve
+çekmece overlay'i AYNI `z-30` değerini taşıyordu; DOM sırası yüzünden alt çubuk overlay'in
+ÜSTÜNDE kalıyordu — hem görsel olarak (dimlenmemiş, tam parlaklıkta görünüyordu) hem
+işlevsel olarak (`elementFromPoint` alt çubuğu döndürüyordu, yani çekmece açıkken bile
+tıklanabilir/odaklanabilir kalıyordu). Gerçek Chromium ekran görüntüsüyle yakalandı,
+tahmin edilmedi. Düzeltme: katman sırası `bottom-nav(z-20) < overlay(z-30) < panel(z-40)`
+olarak sabitlendi VE çekmece açıkken alt çubuğa da `inert` uygulanır oldu — yalnızca
+görsel örtüşmeyi düzeltmek yetmezdi, klavye/ekran okuyucu için de gerçek bir "arkada
+kalan içerik etkileşilemez olmalı" garantisi gerekiyordu.
+
+**İkon tekrarını önleme denemesi bir kez başarısız oldu, ikinci denemede çözüldü:**
+önce ikon `d` yol verileri Blade `@include` ile paylaşılmaya çalışıldı — ama bir
+`@include` içinde tanımlanan değişken üst kapsama SIZMAZ (her Blade view izole render
+edilir); bu, `Undefined variable $icons` hatasıyla testte yakalandı (tahmin değil,
+gerçek çalıştırma). Çözüm: `App\Modules\Core\Support\NavIcons::PATHS` sınıf sabiti —
+hem kenar çubuğu hem alt çubuk aynı kaynağı okur.
+
+**Yeni testler:** `DesignSystemTest::alt_gezinme_cubugu_bes_oge_ile_render_edilir`,
+`::alt_gezinme_cubugundaki_daha_fazla_mevcut_cekmeceyi_acar`,
+`::personel_alt_cubukta_ayni_dort_birincil_ogeyi_gorur`. `inert`/z-index/dokunma boyutu
+gibi CSS-JS davranışları PHPUnit'te ölçülemez; asıl kanıt gerçek Chromium denetimidir
+(360-768px arası, "Daha Fazla" tıklama + Escape kapama dahil, 0 bulgu).
+
+**Değiştirilmeyen (bilerek):** masaüstü/tablet kenar çubuğu (`md` ve üzeri) hiç
+değişmedi — hâlâ birincil ve sabit. Ayrı bir Profil/Hesap sayfası/route'u EKLENMEDİ;
+böyle bir ekran bu turdan önce de yoktu ve yeni route açmak CLAUDE.md §18'e aykırı
+olurdu — kimlik bilgisi zaten çekmecenin alt bloğunda görünüyor.
+
+## K-089 · Mobil sayfa header standardı + pano üç bilgi katmanına ayrıldı
+**Bağlam (Gün 9.6):** Liste ekranlarının başlığı sadece `Başlık (sayı)` idi —
+mobilde bu, gerçek bir "durum satırı" değil, küçük bir parantez içi rakamdı.
+Pano ise tek uzun bir widget yığınıydı; "şu anda bilmem gereken ne?" sorusuna
+sırayla cevap vermiyordu.
+
+**Header standardı:** `<x-ui.page-header>` zaten `title`/`count`/`subtitle`/
+`actions` destekliyordu (bileşen DEĞİŞMEDİ) — kullanılmıyordu. Firmalar, Konaklamalar,
+Tahsilatlar, Kullanıcılar, Roller ekranlarına `subtitle` eklendi. Firmalar'da
+`subtitle` sayaç rozetinin TEKRARI değil — `CompanyService::activeCount()` (zaten
+var, Dashboard'ın da kullandığı metot) ile ayrı bir anlam taşıyor: toplam (filtrelenmiş
+sonuç) `count` rozetinde, "kaç tanesi aktif" `subtitle`'da. Diğer ekranlarda ikinci
+bir anlamlı boyut olmadığı için `count` rozeti kaldırıldı, tek bir `subtitle`
+cümlesi ("7 konaklama kaydı" gibi) kullanıldı — aynı sayıyı iki farklı görsel
+biçimde tekrar etmek gerçek bilgi eklemiyordu.
+
+**Bulunan ve düzeltilen bir test kusuru:** `DesignSystemTest::tutar_kolonlari_
+tabular_nums_kullanir` hiç konaklama oluşturmadan `stays.index`'te `tabular-nums`
+sınıfını arıyordu — testi YEŞİL tutan şey tablo hücresi değil, kaldırılan sayaç
+rozetinin KENDİSİydi (`page-header`'ın `count` span'i de aynı sınıfı taşıyor).
+Yani test, adının iddia ettiği şeyi hiç doğrulamıyordu; `count` kaldırılınca bu
+GERÇEK Chromium/PHPUnit çalıştırmasıyla ortaya çıktı (tahmin değil). Düzeltme:
+teste gerçek bir `Stay` eklendi, artık asıl tablo hücresini doğruluyor.
+
+**Pano üç katmana ayrıldı — Bugün / Finansal durum / Dikkat gerekenler:**
+`DashboardService`/`FinancialSummary` HİÇ değişmedi (11 sorguluk bütçe aynı
+kaldı, `DashboardTest` bunu doğruluyor) — bu yalnızca `financial.blade.php`'nin
+GÖRÜNÜM sırası. Aynı veri, üç adlandırılmış `<section>` altında yeniden
+gruplandı: Bugün (hızlı aksiyonlar + yaklaşan konaklama + son hareketler/tahsilat),
+Finansal durum (para birimi kartları + aktif firma), Dikkat gerekenler (en yüksek
+bakiyeli firmalar). Personel panosuna da aynı "Bugün" başlığı eklendi (tutarlılık
+için) — B ve C katmanları personele hiç uygulanmaz (CLAUDE.md §7.4), o yüzden
+personel panosu tek katmanlı kalır.
+
+**Yan düzeltme — başlık hiyerarşisi:** `<x-ui.panel>`'in dahili başlığı `<h2>`'den
+`<h3>`'e indirildi; artık yeni bölüm başlıklarının (`<h2>Bugün</h2>` vb.) altında
+doğru iç içe geçiyor. `panel` yalnızca Dashboard'da kullanıldığı için bu değişiklik
+başka hiçbir ekranı etkilemedi (kontrol edildi: `grep -rl x-ui.panel`).
+
+**Yeni testler:** `DashboardTest::admin_panosu_uc_bilgi_katmanini_da_gorur`,
+`::admin_bugun_katmaninda_hizli_aksiyon_butonlari_gorur`,
+`::personel_panosu_bugun_baslikli_tek_katmandir`.
+
+**Değiştirilmeyen (bilerek):** "Kasada Şu An" kartı YAZILMAZ, sahte veri KONMAZ
+(§3.2) — yalnızca Bugün ile Finansal durum arasına nerede ekleneceğini işaretleyen
+bir yorum satırı var. Dashboard sorgu bütçesi, N+1 koruması, para birimi ayrımı
+(§6/L5) hiç dokunulmadı.
+
+## K-090 · Kasa Defteri ayrı modüldür; fiziksel para ile firma borcu aynı deftere yazılmaz
+**Bağlam (Gün 10):** Otelin günlük kasa defteri ve personel devir sistemi
+dijitalleştirildi. İlk karar: bu veri `ledger_entries`'e YAZILMAZ.
+**Gerekçe:** cari defter firmanın BORCUNU izler (5.000 TRY'lik konaklama, para
+tahsil edilmese bile borçtur); kasa defteri FİZİKSEL PARAYI izler (tahsil
+edilmediyse kasada +0). İkisini tek tabloya sıkıştırmak "bakiye" kelimesini iki
+anlama gelir hâle getirirdi. `CashBookService` Company/Stay/Payment/Ledger
+modellerine hiç dokunmaz.
+
+**Tek açık vardiya — kullanıcı başına DEĞİL, işletme genelinde.** Fiziksel kasa
+tektir; iki açık vardiya olsaydı "kasada şu an ne var" sorusunun tek doğru
+cevabı olmaz ve devir zinciri (X → Y → Z) kopardı. Kısıt veritabanındadır:
+`is_open` kolonu açıkken 1, kapalıyken NULL ve UNIQUE index taşır (MySQL tekil
+indexte NULL'ları tekrarlanabilir sayar). Eşzamanlı ikinci açılış DB tarafından
+reddedilir — gerçek çalıştırmayla doğrulandı.
+
+**Tutar DECIMAL(15,2), `amount_minor` DEĞİL.** Kullanıcı taslağında `amount_minor`
+önerilmişti ("Alanlar örnek" notuyla). CLAUDE.md §5/§13 bağlayıcıdır: veritabanında
+para DECIMAL(15,2) tutulur, tamsayı kuruş aritmetiği PHP'de `Money` ile yapılır.
+Kasa için ayrı saklama birimi kullanmak aynı uygulamada iki para konvansiyonu
+demek olurdu — "en az kırıcı model" tercihi budur.
+
+**`type` ile `direction` AYRI kolonlardır, tutar her zaman POZİTİFtir.** Yön tipin
+doğal yönüdür ve TERS KAYITTA tersine döner. Böylece hem beklenen kasa hem
+gelir-gider raporu ters kayıtları kendiliğinden doğru sayar; negatif tutar ya da
+açıklama metni okumak gerekmez. Ledger'daki debit/credit ayrımının kasa
+karşılığıdır. Veritabanı CHECK'i yön-tip uyumunu zorlar: "gelir ama kasadan
+çıkan" satır yazılamaz.
+
+**Açılış bakiyesi ayrı tablo DEĞİL, `opening` tipli bir harekettir.** Beklenen kasa
+tek formülle (Σ işaretli hareket) hesaplanır ve para için iki kaynak olmaz.
+Ledger'da da `source_type = 'opening'` aynı amaçla kullanılabilir durumdadır.
+
+**Ara kasa/patron teslimi bir HAREKETTİR, devir kaydı değil.** Kullanıcı talimatı
+§6 bunu zaten "ayrı bir cash transfer out hareketi" diye adlandırıyor. `cash_transfers`
+tablosu YALNIZCA personel devri içindir: devir iki taraflı onay ister ve iki
+vardiyayı birbirine bağlar; ara kasa teslimi tek taraflıdır ve anında olur.
+İkisini tek tabloya koymak "kabul bekliyor" durumunu anlamsız kılardı.
+**Ve en kritik kural:** kasa çıkışı gelir-gider raporunda GİDER ÜRETMEZ —
+`CashMovementType::affectsIncomeStatement()` bu ayrımın tek kaynağıdır.
+
+**Devir, kabul edilene kadar tamamlanmaz.** Kabul anında tek transaction içinde:
+kapanış sayımı yazılır → teslim eden vardiya kapanır → teslim alan için yeni
+vardiya açılır → tutarlar yeni vardiyanın açılış hareketleri olur. Sıra önemlidir:
+`UNIQUE(is_open)` yüzünden eski vardiya kapanmadan yenisi açılamaz — veritabanı
+sıralamayı garanti eder. Kabul `lockForUpdate` + koşullu durum kontrolüyle
+alınır; iki kişi aynı devri kabul edemez.
+
+**Sayım kabul/kapanış ANINDA yazılır, devir başlatılırken değil.** İlk tasarımda
+sayım devir başlatılırken yazılacaktı; iptal edilen bir devirden sonra ikinci
+devir `UNIQUE(cash_session_id, currency)` kısıtını ihlal ederdi. Sayımın tek
+yazıldığı an "gerçeğin anı"dır: kabul ya da kapanış.
+
+**Fark saklanmaz, hesaplanır.** Beklenen ve sayılan tutar değişmez olduğu için
+fark her zaman aynı çıkar; saklamak üçüncü bir doğruluk kaynağı yaratırdı.
+
+**Hesap verebilirlik:** vardiyaya hareket girmek/ters kaydetmek/devretmek YALNIZCA
+vardiya sahibine açıktır — **admin dahil**. Kayıt argümanı taşıyan Policy
+yetenekleri `Gate::before` ile kısa devre yapılmaz (CLAUDE.md §7.1), bu yüzden
+admin kısayolu buraya sızmaz; testle doğrulandı. Tek istisna KAPATMAdır: personel
+kapatmadan giderse kasa kilitli kalmasın diye `cashbook.view_all` yetkisi olan da
+kapatabilir.
+
+**Personel `cashbook.view`+`operate` alır, `view_all` ALMAZ.** Bu, §7.4'teki
+"personel finansal toplamları görmez" kuralıyla çelişmez: orada yasaklanan FİRMA
+cari bakiyesi ve toplam alacaktır; buradaki tutar personelin ELİNDEKİ paradır ve
+saymak zorundadır. Başkasının vardiyasının tutarını göremez (ekranda kasanın
+kimde olduğu görünür, tutar görünmez).
+
+**Açılış bakiyesi ters kaydedilemez** (gerçek tarayıcı turunda fark edildi):
+devirle gelen açılış, teslim edenin onayladığı devir kaydıyla birebir eşleşir;
+kullanıcı onu ters kaydedebilseydi devredilen para ile kasadaki para sessizce
+çelişirdi. Kural hem Policy'de hem serviste.
+
+**Bulunan ve düzeltilen gerçek hatalar:**
+1. `CashMovementPolicy::reverse()` her satır için `$movement->session`'ı lazy
+   yüklüyordu — liste ekranında klasik N+1. `preventLazyLoading` testte patlattı;
+   `movementsFor()` artık `session`'ı da eager yükler.
+2. Pano kartı, cari defter boşken hiç çizilmiyordu: "Sistem henüz boş" bloğu
+   kasayı da yutuyordu. Kasa cari hesaptan bağımsızdır — boş durum artık ikisi de
+   boşken gösteriliyor.
+3. Blade bileşen etiketinde `:subtitle="…\"…\"…"` — öznitelik değerindeki gömülü
+   çift tırnak bileşen etiketini erken kapatıyor ve şablon sessizce derlenmiyordu.
+   İfade `@php` bloğuna taşındı. (`@unless` + `@else` de Blade'de geçersizdir.)
+4. Yazdırma düzeni (`layouts/print`) dar ekranda yatay kayıyordu ve araç çubuğu
+   düğmeleri 33px'ti. Bu **mevcut ekstre yazdırmasında da vardı** (429>360 px,
+   ölçüldü). Paylaşılan düzen düzeltildi: mm cinsinden A4 boşluğu yalnızca
+   `@media print`'te, tablolar `.scroll-x` sarmalında, araç çubuğu 44px.
+   Hem kasa hem ekstre kazandı.
+5. "+ Hareket ekle" ana ekranda iki kez çiziliyordu (başlıkta ve aksiyon
+   satırında); ikincisi kaldırıldı.
+
+**Değiştirilmeyen (bilerek):** kur servisi/çevrim, PMS oda yönetimi, banka
+entegrasyonu, muhasebe genel defteri, PDF kütüphanesi, Alpine — hiçbiri
+eklenmedi (kullanıcı talimatı §22). `reference_type/reference_id` ileride
+Payments/PMS bağlanabilsin diye şemada açık ama V1'de DOLDURULMUYOR; oda geliri
+V1'de manuel girilir.
+
+## K-091 · Kasa Defteri red-team doğrulaması: gerçek yarış koşulu bulundu ve kapatıldı
+
+**Bağlam:** Gün 10'un ardından, CashBook implementasyonu gerçek otel kasa
+senaryolarıyla (X→Y→ara kasa→Z devir zinciri, kasa eksiği/fazlası, eşzamanlılık,
+ters kayıt, çoklu para birimi, yetki, gün sonu kapanış) kırılmaya çalışıldı.
+Amaç yeni özellik değil, mevcut implementasyonun matematiğini ve devir zincirini
+gerçek testlerle kanıtlamaktı.
+
+**Bulunan gerçek hata — yarış koşulu (kritik):** `recordMovement()`,
+`startHandover()` ve `closeSession()`, `guardOpenSession()` kontrolünü
+`DB::transaction()` dışında, satır kilidi OLMADAN çağırıyordu; `reverseMovement()`
+ise bekleyen devir kontrolünü HİÇ yapmıyordu. Kontrol ile yazma arasındaki
+pencerede, tam o anda başlayan bir devir (`startHandover`) ya da tam o anda
+kapatılan bir vardiya araya girebilir — devrin zaten bildirdiği tutar sessizce
+stale kalırdı. **Düzeltme:** `lockOpenSession()` eklendi — vardiyayı
+`lockForUpdate()` ile satır kilidiyle okur, SONRA kapalı/bekleyen-devir
+durumunu kontrol eder; dördü de (`recordMovement`, `reverseMovement`,
+`startHandover`, `closeSession`) artık BU metottan geçer ve kontrol+yazma
+atomik bir bütündür. Gerçek InnoDB kilitlenmesi (`SELECT ... FOR UPDATE` +
+kısa `innodb_lock_wait_timeout` ile ölçülen kilit bekleyişi) ile ampirik olarak
+kanıtlandı — bkz. `tests/Feature/CashBook/CashBookConcurrencyTest.php`.
+`closeSession()`'daki eski yol ayrıca bir ikincil hata daha üretiyordu:
+bekleyen devir varken kapatma engellenmediği için `acceptHandover()`'daki
+`writeCounts()` ikinci kez çağrılınca `cash_counts`'ın `UNIQUE(cash_session_id,
+currency)` kısıtına çarpıp 500'e düşerdi.
+
+**Bulunan gerçek hata — eksik değişmezlik:** `cash_transfer_amounts` ve
+`cash_counts`, `cash_movements`'ın aksine UPDATE/DELETE'e karşı hiç korumasızdı.
+Devir kabul edildiğinde tutar zaten yeni vardiyanın açılış bakiyesine
+kopyalanmıştır; sonradan değiştirilebilseydi imzalanmış devir kaydı ile gerçek
+açılış bakiyesi sessizce koparırdı. **Düzeltme:** `CashMovement` ile AYNI desen
+— model `booted()` guard'ı + `update()`/`delete()` override'ı + DB tetikleyicisi
+(`protect_cash_transfer_amounts_and_counts_from_writes` migration'ı). Ortak tek
+`CashRecordIsImmutable` istisnası kullanıldı, varlık başına ayrı sınıf açılmadı.
+
+**Doğrulanan, DEĞİŞTİRİLMEYEN karar — "expected mi, counted mi?":** kullanıcı
+talimatının en kritik sorusu, yeni vardiyanın açılış bakiyesinin BEKLENEN
+(hesaplanan) tutardan mı yoksa SAYILAN/gerçekten devredilen tutardan mı
+oluştuğuydu. Denetim: `acceptHandover()` teslim edilen tutarı (`transferAmounts()`)
+HEM sayım satırının "sayılan" alanına HEM yeni vardiyanın açılış hareketine
+aynı değişkenden yazıyor — mevcut implementasyon zaten DOĞRUYDU, kod değişikliği
+gerekmedi. Kasa eksiği/fazlasında yeni personelin kasası her zaman fiilen
+teslim aldığı tutardır; fark ayrı bir `CashCount` satırında görünür, otomatik
+gelir/gider hareketi ÜRETMEZ.
+
+**Sıfır bakiyeli para birimi:** `writeCounts()` hem beklenen hem sayılan 0.00
+olduğunda satır hiç yazmaz — devredilmeyen bir para biriminin ne yeni vardiyada
+gereksiz bir `opening` hareketi NE DE eski vardiyada gereksiz bir sayım satırı
+üretmediği doğrulandı.
+
+**Eklenen testler:** `CashBookScenarioTest` (13, §1-§6/§9/§10/§12 senaryoları),
+`CashTransferTest`'e 2 yeni test (bekleyen devir ters kaydı ve devirsiz
+kapanışı da engeller — önceden yalnızca yeni hareketi engellediği test
+ediliyordu), `CashBookConcurrencyTest` (4 test — `RefreshDatabase` DEĞİL
+`DatabaseTruncation` kullanır, çünkü `RefreshDatabase` her testi tek bir açık
+transaction'a sarar ve bu, iki GERÇEK veritabanı bağlantısının birbirini
+kilitlemesini test etmeyi imkânsız kılar). Toplam: 624 test, 1959 assertion,
+hepsi MySQL/MariaDB üzerinde yeşil.
+
+**Test yazarken bulunan ortam ayrıntısı (gerçek uygulama hatası DEĞİL):**
+`APP_TIMEZONE=Europe/Istanbul` iken Eloquent/Carbon ile yazılan bir zaman damgasını
+ham SQL'in `NOW()`'ı ile karşılaştırmak (ikisi farklı saatleri temsil eder)
+`cash_sessions_closed_after_opened` gibi bir CHECK'i sahte biçimde tetikler.
+Uygulama kodu bunu hiç yapmaz (`closed_at`/`opened_at` ikisi de her zaman
+Carbon üzerinden yazılır); yalnızca ham SQL kullanan test kodu buna dikkat
+etmelidir — concurrency testlerinde `NOW()` yerine PHP'nin `now()`'ı bağlanır.
+
+**Değiştirilmeyen (bilerek):** yeni özellik, UI redesign, gerçek bug dışında
+refactor yapılmadı (kullanıcı talimatı bağlayıcıydı). §11 yetki testleri
+zaten Gün 10'da yeterliydi (`admin_bile_baskasinin_vardiyasina_hareket_ekleyemez`,
+`baskasinin_hareketi_ters_kaydedilemez` — admin'in bile finansal yazma
+işlemlerinde kısayolu olmadığını zaten kanıtlıyordu); §12 gün sonu kapanışı ve
+§9 ters kaydın tersinin alınamaması da Gün 10'da zaten doğru ve testliydi.
+
+## K-092 · Dashboard V2: Operasyon/Finans ayrı sorgulanır, Lemon Bar durum verisini yeniden kullanır
+
+**Bağlam (Gün 11):** Admin/Patron panosu tek şablonlu "klasik admin paneli"
+olmaktan çıkarıldı; iki AYRI görünüme bölündü — Operasyon ("otelde şu an ne
+oluyor" — kasa) ve Finans ("para ve cari hesap durumu" — ledger/firma).
+Personel panosu "Vardiyam/Kasam" mantığına geçti.
+
+**Sorgu izolasyonu kritik karardı.** `DashboardService::operations()` ve
+`finance()` birbirinin verisine HİÇ dokunmaz — Operasyon seçiliyken
+`ledger_entries`/`companies`/`stays`/`payments` sorgulanmaz, Finans seçiliyken
+`cash_*` tabloları sorgulanmaz. Controller yalnızca seçilen dalı çağırır; eski
+tek `financial()` metodu ikiye bölündü, `FinancialSummary`'den `recentEntries`
+ve `cash` alanları kaldırıldı (kasa artık `OperationsSummary`'de).
+
+**"Bugün" (Operasyon C) için yeni sorgu YAZILMADI.** Bugünün oda geliri/ek
+gelir/gider/ara kasa toplamı, `CashBookService::sessionsForDate()` +
+`summariesFor()`'un ZATEN hesapladığı `CashSessionTotals` nesnelerini toplayarak
+üretilir (`DashboardService::aggregateTodayTotals()`). Bilinen sınır: bir
+vardiya gece yarısını geçerse "bugün" o vardiyanın TÜM hareketlerini sayar
+(yalnızca o günün hareketlerini değil) — V1'de vardiyalar pratikte aynı gün
+kapandığı için (Gün 10 testleriyle doğrulanmış davranış) bu kabul edilebilir
+bir yaklaşıklıktır; gerçek tarih-bazlı bir sorgu (yeni bir CashBookService
+metodu) yalnızca bu varsayım kırılırsa eklenir.
+
+**Lemon Bar'ın "kritik durum" metni GLOBAL bir sorgu DEĞİLDİR.** İlk tasarımda
+her sayfada (ör. firma düzenleme ekranında da) kasa durumunu göstermek için bir
+View Composer düşünüldü — ama bu, `cashbook.view` yetkisi olan (işletmedeki
+HEMEN HEMEN HERKES) için HER sayfa yüklemesinde +1-2 sorgu demekti, sonsuza
+kadar. Bunun yerine durum metni yalnızca PANO isteğinin zaten yüklediği veriden
+(`@section('lemon-bar-status')`) doldurulur; diğer ekranlarda boş kalır. Bu,
+paylaşımlı hosting gerçeğiyle (§2) ve "yalnızca seçilen view için gerekli veri
+yüklenir" ilkesiyle (kullanıcı talimatı §17) tutarlıdır.
+
+**Personel "Kasam"da artık Money var — bilinçli bir istisna, `PersonnelSummary`
+kısıtının ihlali DEĞİL.** Gün 10'da zaten kurulmuş kural şuydu: personelin
+ELİNDEKİ fiziksel para, FİRMA cari bakiyesinden ayrı bir kategoridir ve
+personel bunu Kasa ekranından zaten görüyordu. Gün 11 bu veriyi panoya da
+taşıdı; `PersonnelSummary` hâlâ hiçbir LEDGER/firma alanı taşımıyor — yapısal
+kısıt orada, olması gereken yerde duruyor.
+
+**Hızlı İşlem menüsü rol bazında FARKLI listeler gösterir, tek bir birleşik
+liste değil.** Personel `payments.create`/`stays.create` yetkisine sahip olsa
+bile global menüde bu kısayollar YOKTUR — kullanıcı talimatı §10 personel için
+yalnızca 5 kasa aksiyonunu listeliyor. Bu kasıtlı bir kapsam daraltmasıdır:
+panonun kendisi zaten "Bugün girdiğim kayıtlar" altında ayrı ekleme butonları
+taşır, global menü kasa-öncelikli kalır.
+
+**Bulunan gerçek test-metodolojisi hatası (uygulama hatası DEĞİL):** ilk N+1
+testi "1 vardiya, 0 devir" durumunu "4 vardiya, 3 devir" durumuyla
+karşılaştırıyordu. Eloquent boş bir eager-load kümesi için sorgu ÇALIŞTIRMAZ
+(ör. hiç devir yoksa `toUser`/`fromUser`/`amounts` sorguları hiç atılmaz), bu
+yüzden "0 devir → 3 devir" geçişi sahte bir "sorgu arttı" izlenimi veriyordu.
+Düzeltme: her iki ölçüm de EN AZ BİR devir içerir (1 devirden 4 devire), asıl
+soru doğru şekilde "devir sayısı arttıkça sorgu sabit mi kalıyor" oldu.
+
+**Gerçek tarayıcı QA'de bulunan gerçek hata:** personel panosundaki "Ek Gelir"/
+"Kasa Çıkışı" ghost butonları dar ekranda gizlenmiyordu — `<x-ui.button
+class="hidden sm:inline-flex">` deseni, bileşenin KENDİ `inline-flex` temel
+sınıfıyla AYNI elemanda çakışıyordu (ikisi de temel/önekli olmayan `display`
+yardımcı sınıfı; hangisinin kazandığı Tailwind'in derleme sırasına bağlı ve
+güvenilmez). Düzeltme: görünürlük SARMALAYICI `<div class="hidden sm:flex">`
+düzeyine taşındı — bileşenin kendi temel sınıfıyla asla aynı elemanda çakışmaz.
+Ayrıca: bekleyen bir devri olan (henüz vardiyası olmayan) kullanıcı için boş
+bir "Vardiyam" başlığı altında hiçbir şey görünmediği fark edildi; o dal artık
+bölümün TAMAMINI atlıyor.
+
+## K-093 · Arama/Filtre Gün 12: yetki kapsaması filtreden önce, bakiye sıralaması PHP-taraflı
+
+**Bağlam:** Gün 10.1'de kurulmuş olan `Core\Filters\QueryFilter` altyapısı
+(Firmalar/Konaklamalar/Tahsilatlar zaten tam donanımlıydı) Kasa Defteri'ne HİÇ
+uygulanmamıştı — kasa tarafında yalnızca tek-vardiya (`cashbook.index`) ve
+tek-gün (`cashbook.day`) ekranları vardı, geçmişe dönük tarih/personel/tür
+araması yapılamıyordu. Bu tur bunu kapattı: `cash/movements` ve
+`cash/transfers` iki yeni, çapraz-vardiya, filtrelenen liste ekranı oldu.
+
+**Yetki kapsaması sırası bağlayıcıdır: ÖNCE scope, SONRA filtre.**
+`CashMovementController::index()`/`CashTransferController::index()`, temel
+Eloquent sorgusunu `cashbook.view_all` yoksa `created_by`/`from_user_id OR
+to_user_id = kullanıcı` ile SINIRLAR — bu adım `CashMovementFilter`/
+`CashTransferFilter` hiç çalışmadan ÖNCE olur. Filtre nesnesi kendi
+`user_id`/`from_user_id`/`to_user_id` parametrelerini bu ZATEN daraltılmış
+sorgunun ÜZERİNE ekler. Sonuç: personel `user_id` query param'ını başka bir
+personelin kimliğine değiştirse bile erişim GENİŞLEMEZ — iki koşul AND'lenmiş
+olduğu için en kötü ihtimalle sonuç boş döner, asla başkasının verisi sızmaz.
+Bu, "filtering authorization'dan SONRA scope üzerine uygulanmalı" ilkesinin
+somut uygulamasıdır ve testle kanıtlandı
+(`personel_user_id_parametresiyle_baskasinin_hareketlerini_goremez`).
+
+**"Gelirler" hızlı filtresi iki türü birden kapsar — bunun için `type`
+parametresi hem tekil hem dizi değer kabul edecek şekilde genelleştirildi**
+(`type=expense` ve `type[]=room_income&type[]=extra_income` ikisi de
+çalışır). Bu YENİ bir sorgu mantığı değildir, aynı beyaz listenin
+`whereIn` ile birden çok değerle uygulanmasıdır — kullanıcı talimatının
+"özel yeni sorgu mantığı yazma" kısıtına uygundur.
+
+**Cari ekstre firma listesinde bakiye filtresi/sıralaması PHP tarafındadır,
+SQL'de DEĞİL.** `balance` bir `companies` kolonu değildir (§6/L4 —
+önbelleklenmiş bakiye kolonu V1'de kesinlikle yoktur) ve iki firmanın
+bakiyesini karşılaştırmak `ledger_entries` üzerinde ayrı bir GROUP BY
+gerektirir; bunu SQL'de sayfalamayla birlikte yapmak karmaşık bir alt sorgu
+ister. Bunun yerine: yalnızca para birimi/bakiye filtresi ya da bakiye
+sıralaması İSTENDİĞİNDE, filtreye uyan TÜM firmaların bakiyesi TEK toplu
+sorguda hesaplanır (mevcut `balancesForCompanies()`, değişmedi), süzülür/
+sıralanır, yalnızca GÖRÜNTÜLENECEK sayfa için firma modeli çekilir. V1 veri
+hacminde (firma sayısı düşük-orta, CLAUDE.md §1) bu pragmatiktir. İSTENMEDİYSE
+(çoğu ziyaret) eski hızlı SQL-sayfalama yolu DEĞİŞMEDEN çalışır — yeni kod
+yolunun maliyeti yalnızca gerçekten kullanıldığında ortaya çıkar.
+
+**Bakiyeye göre sıralama para birimi seçilmeden ÇALIŞTIRILMAZ, sessizce isim
+sırasına düşer.** Para birimleri asla birleştirilmez (§6/L5) — "en yüksek
+bakiye" seçilebilecek tek bir sayı olmadığı için bu istek anlamsızdır; hata
+göstermek yerine öngörülebilir bir varsayılana (isim sırası) düşmek tercih
+edildi.
+
+**Filtreli ekstrenin yürüyen bakiyesi ZATEN doğruydu — denetlendi, değiştirilmedi.**
+`LedgerStatementService::forCompany()` tür/arama filtrelerini yürüyen bakiye
+HESAPLANDIKTAN SONRA uyguluyordu (Gün 10.1'den beri); `tur_filtresi_bakiyeyi_bozmaz`
+testi bunu zaten kanıtlıyordu. Kullanıcı talimatının bu konudaki "audit et,
+gerekirse düzelt" isteği bir denetimle karşılandı, kod değişikliği gerekmedi.
+
+**Aktif filtre göstergesi (`hasActiveFilters()`/`activeFilterCount()`) TEK
+yerde, `QueryFilter` temel sınıfında tanımlıdır** — sayfalama/sıralama dışında
+herhangi bir query param'ın varlığına bakar, modül başına ayrı bir liste
+gerekmez. Aynı prensiple mobil filtre "drawer"ı AÇILMADI: tüm ekranlar zaten
+aynı `grid sm:grid-cols-2 lg:grid-cols-4` deseniyle çalışıyordu; kullanıcı
+talimatının kabul ettiği "mevcut sade panel" seçeneği tutarlılık için tercih
+edildi (yeni bir soyutlama katmanı CLAUDE.md §18'e aykırı olurdu).
+
+**Gerçek tarayıcı QA'de bulunan test-metodolojisi hataları (uygulama hatası
+DEĞİL):** (1) kasa hareketi güncellenemediği için (append-only DB tetikleyicisi)
+bir testin `forceFill()->saveQuietly()` ile tarih "geriye alma" denemesi
+gerçek bir SQL hatasıyla reddedildi — düzeltme: `recordMovement()`'ın zaten
+var olan `entryAt` parametresi kullanıldı; (2) devir tutarı transferde
+1000+777=1777 gibi bir toplam ürettiğinde "1.777,00 ₺" alt dizesi "777,00 ₺"yi
+İÇERİYORDU, bu yüzden `assertDontSee('777,00 ₺')` yanlış geçti/kaldı — sayısal
+alt dize çakışmasına karşı testler tutar yerine ayırt edici açıklama metnine
+geçirildi; (3) N+1 testlerinde ısınma isteği eksikti, bu da "sorgu sayısı
+AZALDI" gibi ters bir sahte sonuç üretiyordu (Gün 11'den bilinen desen) —
+her ölçümden önce bir ısınma isteği eklendi.
+
+## K-094 · v2.1.1-A: Ödeme kanalı mimarisi — nakit kasaya bağlanır, kart/banka bağlanmaz
+
+**Bağlam:** Canlı kullanım audit'i (LEMON v2.1.1) `PaymentMethod`'un o ana
+kadar salt bilgi amaçlı olduğunu, kasa ile hiç ilişkilendirilmediğini tespit
+etti. Aynı audit'te P0 bir güvenlik açığı bulundu: kapanış sayımı/devir
+formlarındaki tutar alanı sistemin BEKLENEN tutarıyla önceden dolduruluyordu
+— personel gerçekte saymadan formu olduğu gibi gönderebilirdi.
+
+**Karar 1 — Kanal ayrımı, yeni modül DEĞİL:** `Payments\Services\PaymentService`
+artık `CashBookService`'i TEK YÖNLÜ çağırıyor (Stays/Payments'ın zaten
+`LedgerService`'e yaptığı desenin aynısı, CLAUDE.md §4.3/1). `CashBookService`
+Payments'ın var olduğunu hâlâ bilmiyor — `cash_movements.reference_type/
+reference_id` (§3.3'ten beri açık, hiç doldurulmamış kolonlar) artık ilk kez
+kullanılıyor ve CashBookService bu değerlerin anlamını bilmeden yalnızca
+saklıyor. Yeni bir Model/Servis katmanı, yeni bir "ödeme" soyutlaması AÇILMADI
+— mevcut `Payment` modeli kanonik tahsilat kaydı olarak KORUNDU.
+
+**Karar 2 — Yeni `CashMovementType::CompanyCollection` ('company_collection'),
+`selectable()`'da YOK:** Nakit tahsilatın kasa karşılığı, mevcut `room_income`/
+`extra_income` (manuel, tahsilattan bağımsız girişler) ile KARIŞTIRILMADI —
+ayrı bir tip açıldı ki iki farklı kavram (kasadan elle girilen gelir vs.
+tahsilattan otomatik gelen nakit) birbirine karışmasın ve raporlanabilir
+kalsın. `selectable()`'da YOK: personel Kasa Hareketi formundan elle
+seçemez — aksi hâlde aynı tahsilatın kasa etkisi iki farklı yoldan (elle +
+otomatik) üretilebilir, tek doğruluk kaynağı ilkesi bozulurdu.
+`affectsIncomeStatement() = true`: gerçek gelirdir, firma borcu fiilen
+azalmıştır — `cash_out`/`cash_in`'in "para taşır, gelir/gider üretmez"
+ilkesiyle KARIŞTIRILMAMALIDIR.
+
+**Karar 3 — Yalnızca vardiya sahibi nakit tahsilat girebilir/iptal edebilir:**
+CLAUDE.md §8/Kasa Defteri "Hesap verebilirlik" kuralının ("admin/patron dahil
+kimse başkasının vardiyasına hareket yazamaz") DOĞAL bir uzantısı olarak
+uygulandı — yeni bir istisna İCAT EDİLMEDİ. Nakit tahsilat kaydı bir kasa
+hareketi ÜRETTİĞİ için aynı kural geçerli: `PaymentService::create()` açık
+vardiyayı `activeSession()`'dan okur, sahibi aktörle eşleşmiyorsa
+`CashSessionNotOwnedByActor` fırlatır, açık vardiya hiç yoksa mevcut
+`NoOpenCashSession` (CashBook modülünden yeniden kullanıldı, kopyalanmadı)
+fırlatır — HER İKİ durumda da tüm işlem (Payment + Ledger dahil) geri alınır.
+
+**Karar 4 — İptalde kasa düzeltmesi orijinal vardiyaya değil GÜNCEL açık
+vardiyaya yazılır:** `CashBookService::reverseMovement()`'a geriye dönük
+uyumlu iki yeni parametre eklendi: `?CashSession $intoSession = null`
+(verilmezse eski davranış — orijinal hareketin KENDİ vardiyasına, hâlâ açık
+olmalı) ve `bool $allowLinkedSource = false`. 7/24 işletmede bir tahsilat,
+onu alan vardiya çoktan kapanmış/devredilmiş olduktan SONRA iptal edilebilir;
+CLAUDE.md'nin "ters kayıt orijinalin tarihini taşır" ilkesi CARİ tarafı için
+hâlâ geçerli (Ledger değişmedi) ama KASA tarafı için para geçmişe gidip
+kapanmış bir vardiyayı değiştiremez — bunun yerine güncel vardiyaya bir
+düzeltme yazılır ("bugünün kasası beklenenden X az, çünkü geçmiş bir tahsilat
+iptal edildi"), tıpkı gerçek bir kasanın çalıştığı gibi. Kasa tarafı
+düzeltilemiyorsa (o an açık vardiya yok) TÜM iptal reddedilir — cari ile kasa
+yarım kalmış biçimde ayrışmaz (`DB::transaction()` zaten bunu garanti eder,
+yeni olan yalnızca "hangi vardiyaya yazılacağı" kararı).
+
+**Karar 5 — Bağlı hareket genel Kasa Hareketleri ekranından ters
+kaydedilemez:** `allowLinkedSource` varsayılan `false`'tur — genel ekran
+(`CashMovementController::reverse()`) hiçbir zaman `true` geçmez.
+`CashMovementPolicy::reverse()` da aynı kısıtı UI seviyesinde uygular
+(`reference_type !== null` ise buton hiç görünmez). İkisi de gerekli: Policy
+HTTP'yi korur, Service son savunmadır (CLAUDE.md §7.1). Bu korumanın
+gerekçesi somut: korunmasaydı personel kasa tarafını düzeltip tahsilatı/
+cariyi düzeltmeden bırakabilirdi — aynı mali etki iki farklı yoldan yarım
+sonlandırılmış olurdu.
+
+**Karar 6 (P0 düzeltme) — Sayım/devir tutar alanı ASLA ön-doldurulmaz:**
+`_amount-fields.blade.php`'deki `$default = $expectedMoney?->toDecimal()`
+kaldırıldı; alan yalnızca `old()`'dan (doğrulama hatası sonrası kullanıcının
+KENDİ yazdığı değer) doldurulur. Beklenen tutar hâlâ ipucu METNİNDE görünür
+("Beklenen: …") — bilgi kaybolmaz, yalnızca giriş alanının GERÇEK değeri
+olmaktan çıkarılır. `sessions/open.blade.php` zaten bu deseni doğru
+uyguluyordu (hiç `expected` geçmiyordu); düzeltme yalnızca `close`/`transfers.
+create` ekranlarını bu ZATEN VAR OLAN doğru desenle hizaladı.
+
+**Karar 7 — Vardiya kanal özeti yeni bir sorgu YAZAR ama SABİT sayıdadır:**
+"Bir vardiyada kim ne kadar kart/banka tahsilatı aldı" sorusu için `payments`
+tablosuna `cash_session_id` kolonu EKLENMEDİ (kart/banka hiç kasaya
+yazılmadığı için oturumla fiziksel bir bağı yok) — bunun yerine vardiya
+sahibinin (`created_by`) o vardiyanın zaman penceresinde (`opened_at`–
+`closed_at`/şu an) yazdığı kayıtlarla yaklaşıklandı; bu, CashBook'un
+"yalnızca vardiya sahibi hareket yazar" kuralıyla tutarlıdır. Migration
+gerekmedi.
+
+**Karar 8 — Geriye dönük uyum:** hiçbir mevcut `payments` satırı taşınmadı/
+değiştirilmedi. `payment_method` zaten `nullable` olduğu için "eski/
+sınıflandırılamayan kayıt" durumu zaten `NULL` ile temsil ediliyordu — yeni
+bir "legacy" değeri İCAT EDİLMEDİ. `payment_method = 'cash'` taşıyan ama bu
+özellikten ÖNCE oluşturulmuş (bağlı kasa hareketi hiç olmayan) bir kayıt,
+iptal edildiğinde `CashBookService::activeMovementForSource()` null döner ve
+kasa tarafı sessizce atlanır — açık vardiya ZORUNLULUĞU dahi aranmaz (yoksa
+var olmayan bir şeyi düzeltmeye çalışırdı). `cash_movements_type_valid` ve
+`cash_movements_direction_matches_type` CHECK'leri ileri-yönlü migration'la
+(DROP + yeniden CREATE, `add_cheque_to_payment_methods` ile AYNI kalıp)
+genişletildi; mevcut satırlar hiç etkilenmedi.
+
+**Karar 9 — Yeni yetki AÇILMADI:** Kural mevcut `payments.create` +
+`cashbook.operate` üzerinden yürür (Personel'de zaten ikisi de var,
+CLAUDE.md §7.3). `RolePermissionSeeder`'a dokunulmadı — canlı ortamda
+yaşanan `cashbook.operate` eksikliği olayının AYNISININ tekrarlanmaması için
+bilinçli bir tercih: yeni yetki = yeni seed riski.
+
+**Etkilenen dosyalar (özet):** `CashMovementType`, migration (yeni CHECK),
+`CashSessionTotals` (+`companyCollection`), `CashBookService` (`recordMovement`/
+`reverseMovement`/`insertMovement` imzaları + `activeMovementForSource()`),
+`CashMovementPolicy`, `DashboardService::combineTotals()`, `PaymentMethod`
+(docblock), `PaymentService` (kanal mantığı + `shiftCollectionSummary()` +
+`totalsByMethodAndCurrencyBetween()`), yeni `CashSessionNotOwnedByActor`
+istisnası, yeni `ShiftCollectionSummary` DTO'su, `PaymentController`,
+`_amount-fields.blade.php` (P0).
+
+## K-095 · v2.1.1-A.1: Vardiya atfı EXPLICIT FK'dir, zaman penceresi çıkarımı DEĞİL
+
+**Bağlam:** K-094'ün (`470009f`) `shiftCollectionSummary()`'si kart/banka
+tahsilatlarını vardiya sahibinin (`created_by`) o vardiyanın zaman
+penceresinde (`opened_at`–`closed_at`) yazdığı kayıtlarla YAKLAŞIKLIYORDU.
+Bu, finansal/operasyonel raporlama için yeterince belirleyici değildi: aynı
+kullanıcı vardiya sınırına yakın bir anda işlem yaparsa yanlış vardiyaya
+atfedilebilirdi.
+
+**Karar 1 — `payments.cash_session_id`: nullable FK, `cash_sessions`e:**
+Kart/banka/çek hiçbir zaman bir `CashMovement` ÜRETMEZ (K-094'ten değişmedi
+— kasa yalnızca nakit içindir), ama "hangi vardiyada alındığı" bilgisi hâlâ
+operasyonel olarak değerlidir. Referans bu yüzden `cash_movements` üzerinde
+DEĞİL, doğrudan `payments` üzerindedir. Nakit kanalda da AYNI kolon
+kullanılır — kasaya yazılan hareketin kendi `cash_session_id`'siyle birebir
+aynı vardiyayı gösterir (iki farklı fiziksel/mali kayıt, TEK ortak atıf).
+
+**Karar 2 — Atıf kuralı TEK ve BASİTTİR:** aktör oluşturma anında açık BİR
+vardiyayı YÖNETİYORSA (`activeSession()->opened_by === aktör`) o vardiyaya
+atanır; aksi hâlde (açık vardiya yok VEYA başkasının vardiyası açık) NULL
+kalır. Nakit kanalda bu vardiya ZORUNLUDUR (K-094'ten değişmedi —
+`requireOwnedOpenSession()` istisna fırlatır); diğer kanallarda İSTEĞE
+BAĞLIDIR (`resolveOwnedActiveSession()` sessizce NULL döner, hiçbir kasa
+açma zorlaması YAPILMAZ — Admin/Patron açık vardiya olmadan da kart/banka
+tahsilatı girebilmelidir, kullanıcı talimatı §7).
+
+**Karar 3 — Çek (`cheque`) ve "diğer" için AYRI bir kural İCAT EDİLMEDİ:**
+kullanıcı talimatı §6 açıkça "karar ver/dokümante et" diyordu. Tutarlılık
+ve gereksiz özel-durum yasağı (CLAUDE.md §18) gereği, TÜM nakit-dışı kanallar
+(kart/banka/çek/diğer/boş) AYNI tek kuralı paylaşır: atfedilebilirse atfet,
+edilemiyorsa zorlamayan NULL. Çeke yeni bir kasa etkisi eklenmedi.
+
+**Karar 4 — `cash_session_id` `IMMUTABLE_FIELDS`'a eklendi, `$fillable`'a
+EKLENMEDİ:** iki farklı koruma katmanı, iki farklı amaç. `$fillable` dışında
+tutulmak, mass-assignment (kullanıcı girdisinden `fill()`) yolunu TAMAMEN
+kapatır — `payment_method`/`amount` gibi zaten `$fillable`'da olan alanlardan
+FARKLI olarak, bu alan HİÇBİR ZAMAN kullanıcı girdisinden gelmez, yalnızca
+servis içinde doğrudan özellik atamasıyla (`$payment->cash_session_id = ...`)
+yazılır. `IMMUTABLE_FIELDS`'a eklenmesi ise modelin `updating` olay
+korumasını (son savunma, CLAUDE.md §7.1) devreye sokar: servis atlanıp
+doğrudan `$payment->cash_session_id = X; $payment->save();` çağrılsa bile
+(zaten var olan bir kayıtta) reddedilir. İptal (`cancel()`) bu alana HİÇ
+dokunmaz — kaynak işlem hangi vardiyada olduysa öyle kalır (kullanıcı
+talimatı §12); kasa tarafının GÜNCEL vardiyaya yazılan düzeltmesi (K-094) bu
+kararla ÇELİŞMEZ, çünkü o `CashMovement.cash_session_id`'dir, `Payment.
+cash_session_id` değil — iki AYRI referans, iki AYRI anlam.
+
+**Karar 5 — `shiftCollectionSummary()` zaman penceresi sorgusu TAMAMEN
+kaldırıldı, yerine `WHERE cash_session_id = ?` konuldu:** eski sorgu SADECE
+bu mimariden SONRA oluşturulan kayıtlar için doğru sonuç verirdi ve yanlış
+bir kesinlik hissi yaratırdı — kaldırılması "silme" değil, yanlış bir
+kesinliği ortadan kaldırmaktır. Eski (NULL `cash_session_id` taşıyan) kayıtlar
+hiçbir vardiya özetine sızmaz (testle kanıtlandı); bu kayıtlar hâlâ
+`totalsByMethodAndCurrencyBetween()` gibi TARİH ARALIĞI bazlı (vardiyadan
+bağımsız) raporlarda görünür durumdadır — "legacy/unassigned" için ayrı bir
+UI/rapor ekranı bu turda AÇILMADI (kullanıcı talimatı §17'nin "yeni UI
+genişlemesi yok" ilkesiyle tutarlı); gereken yalnızca "tahmin etmemek"ti,
+yeni bir görünürlük ekranı değil.
+
+**Migration:** forward-only, `payments`e nullable `cash_session_id` FK
+(`restrictOnDelete()`) + `(cash_session_id, payment_method)` bileşik index
+(vardiya kanal özeti sorgu deseniyle birebir). `migrate:fresh` kullanılmadı;
+mevcut satırlar hiç etkilenmedi, hepsi NULL ile başlar.
+
+**Etkilenen dosyalar:** yeni migration, `Payment` modeli (`cashSession()`
+ilişkisi, `IMMUTABLE_FIELDS`, cast), `PaymentService` (`create()`,
+`resolveOwnedActiveSession()`, `postCashCollection()` imzası,
+`shiftCollectionSummary()`/`collectionTotalsForSession()` yeniden yazıldı),
+`ShiftCollectionSummary` DTO docblock'u.
+
+## K-096 · v2.1.1-B: Yönetilebilir kasa kategorileri, birleşik Hızlı İşlem, Cari Tahsilat makbuzu
+
+**Bağlam:** K-094/K-095 (`470009f`, `6419f09`) ile onaylanan ödeme kanalı
+mimarisi DEĞİŞTİRİLMEDEN, dört alanda genişleme istendi: (1) admin'in kasa
+hareket TÜRLERİNİ (etiket düzeyinde) yönetebilmesi, (2) Gün 11'in rol bazlı
+iki ayrı Hızlı İşlem listesinin sadeleştirilmesi, (3) "Tahsilat ekle"
+adlandırmasının "Cari Tahsilat" olarak birleştirilmesi, (4) yazdırılabilir bir
+Tahsilat Makbuzu.
+
+**Karar 1 — Kategori, `CashMovementType`in YERİNE geçmez; ÜZERİNE bir etiket
+katmanıdır:** `cash_movement_categories.system_type` sütunu, veritabanı
+CHECK'i ile `CashMovementType::selectable()`'ın 5 değeriyle (room_income,
+extra_income, expense, cash_out, cash_in) SINIRLANIR — `opening` ve
+`company_collection` (sistem üretimli) hiçbir zaman bir kategoriye atanamaz.
+Admin yeni bir MUHASEBE DAVRANIŞI icat edemez, yalnızca var olan 5 sabit
+davranıştan birine YENİ BİR İSİM/liste sırası/teslim-alan-zorunluluğu
+tanımlayabilir (kullanıcı talimatı §2: "Admin must NOT be able to invent
+arbitrary accounting behaviour"). `system_type` yalnızca OLUŞTURURKEN
+seçilir; `UpdateCashMovementCategoryRequest` bu alanı hiç TANIMLAMAZ —
+aynı ada sonradan farklı bir davranış (önce gelir, sonra gider) bağlanıp
+geçmiş raporları sessizce yanıltmasın diye.
+
+**Karar 2 — Kategori asla hard-delete edilmez; `category_label` bir ANLIK
+GÖRÜNTÜdür:** `CashMovementCategoryController`'da `destroy()` YOKTUR, hiçbir
+route DELETE fiili taşımaz — pasifleştirme (`is_active=false`) TEK yoldur
+(§5.8'deki kasa hareketi/sayım değişmezlik ilkesiyle aynı gerekçe). Ama
+kategori adı DEĞİŞTİRİLEBİLİR olduğu için, `cash_movements.category_label`
+her yazımda kategorinin O ANKİ adının bir KOPYASINI taşır — `CashMovement::
+label()` bu snapshot'ı kullanır, `category_id` üzerinden canlı bir JOIN
+YAPMAZ. Kategori sonradan "Mini Bar"dan "Market"e yeniden adlandırılsa bile
+geçmiş hareket hâlâ "Mini Bar" yazar; bu, `docs/kararlar.md`'nin kendi
+ilkesiyle (geçmiş kayıt sessizce değişmez) birebir örtüşür ve testle
+kanıtlanmıştır (`CashMovementCategoryTest::
+kategori_yeniden_adlandirilinca_gecmis_hareketin_etiketi_degismez`).
+
+**Karar 3 — Hızlı İşlem TEK, birleşik, yetki-filtreli bir listeye indirgendi:**
+Gün 11'in personel-özel (`?type=room_income` vb. 5 kasa kısayolu) ve
+yönetici-özel (kayıt oluşturma, 5 kısayol) İKİ AYRI dalı KALDIRILDI. Gerekçe:
+kasa hareket TÜRÜ artık admin tanımlı, dinamik bir kategoridir — aynı sistem
+davranışına (`extra_income`) birden fazla aktif kategori eşlenebilir ("Mini
+Bar" ve "Market" ikisi de `extra_income`), bu yüzden tek bir kategoriye
+ÖNCEDEN bağlanan bir kısayol (`?type=extra_income`) artık BELİRSİZDİR. Yeni
+liste (`Kasa Hareketi` / `Cari Tahsilat` / `Yeni Konaklama` / `Yeni Firma` /
+`Kasa Devri`) HERKES için AYNIDIR; rol farkı yalnızca `$user->can(...)`
+filtresinden geçen satırlarla ortaya çıkar — yeni bir işlem mantığı
+YAZILMADI, her satır zaten var olan create route'una yönlendirir.
+
+**Karar 4 — Makbuz numarası, `Payment::id` üzerinden TÜRETİLİR; ayrı bir sıra
+tablosu AÇILMADI:** `TM-{Y}-{id:06d}` biçimi, MySQL'in kendi AUTO_INCREMENT'i
+kadar eşzamanlılığa karşı güvenlidir ve `MAX()+1` yarış koşulu riski TAŞIMAZ.
+Bilinen ve KABUL EDİLEN sınırlama: sayısal kısım yıl başına 1'e SIFIRLANMAZ
+(id tabanlıdır) — bu, "en küçük sağlam çözüm" tercihinin (kullanıcı talimatı
+§13) bilinçli bedelidir, ayrı bir sıra sayacı + kilitleme mantığına karşı
+tercih edilmiştir. Numara, `Payment::create()` İÇİNDE, `id` atandıktan HEMEN
+SONRA `saveQuietly()` ile yazılır — bu, modelin `updating` olay korumasını
+(IMMUTABLE_FIELDS) BİLEREK atlar, çünkü bu dışarıdan bir "düzenleme" değil,
+`create()` akışının kendi TAMAMLANMASIDIR. `receipt_no`, `IMMUTABLE_FIELDS`e
+eklendi — iptal DAHİL hiçbir işlem sonradan değiştiremez (K-095'teki
+`cash_session_id` ile AYNI iki katmanlı koruma deseni: model + servis +
+FormRequest, `$fillable`'da YOK).
+
+**Karar 5 — Tahsilat Makbuzu bir FATURA/e-Arşiv DEĞİLDİR; bu, ekranın
+KENDİSİNDE açıkça yazılıdır:** `layouts.print`'i genişletir (Vite/tema
+yüklemez, A4 sade CSS — Cari Ekstre/Devir Raporu ile AYNI desen), firma yasal
+başlığı `config('hotel.company.*')`'dan gelir — bu, gerçek bir Settings
+modülü açılana kadar GEÇİCİ bir yerleşimdir (kod içinde "GEÇİCİ YERLEŞİM"
+diye işaretlidir, kullanıcı talimatı §14'ün "en küçük merkezi çözüm, dev
+Settings modülü açma" izniyle). "Yalnız" alanı (yazıyla tutar) YALNIZCA TRY
+için üretilir (`Payment::amountInWords()`) — yabancı para birimleri için
+UYDURMA/yanlış bir çeviri üretmek yerine `null` döner, ekran bu durumda
+yalnızca sayısal tutar + ISO kodunu gösterir ("correctness over decorative
+completeness", kullanıcı talimatı §15). `TurkishNumberToWords::titleCase()`
+ayrı yazıldı: `mb_convert_case(MB_CASE_TITLE)` Türkçe küçük "i"yi ASCII "I"ya
+çevirir ("iki"→"Iki"), doğrusu noktalı "İki"dir — bu, kod incelemesinde
+kendiliğinden yakalanan bir hataydı, testle korunur.
+
+**Karar 6 — İzlenebilirlik (`Payment`↔`CashMovement`) raw DB id ile DEĞİL,
+insan-okunur metinle kurulur; CashBook Payments'ı TANIMAZ:** `CashBookService
+::postCashCollection()`'ın yazdığı `CashMovement.description`'a makbuz
+numarası EKLENİR (`Tahsilat: 09.09.2026 · Nakit · TM-2026-000123`) —
+`CashBookService`'in kendisi bu string'in ANLAMINI hâlâ bilmez, `PaymentService`
+onu HAZIRLAYIP GEÇİRİR (§4.3/3'teki tek yönlü bağımlılığın AYNISI). Kasa
+Hareketleri ekranındaki satır, `reference_type === 'payment'` olduğunda bu
+açıklamayı `payments.show` route ADINA (yalnızca string, hiçbir Payments
+sınıfı import edilmeden) bağlar — CLAUDE.md §4.3'ün "modül başka modülün
+Model'ini kullanamaz" kuralı ihlal edilmez, yalnızca Blade katmanında bir
+route-adı bağlantısı kurulur. Ters yönde, `payments::show` zaten var olan
+`Payment.cashSession` ilişkisiyle (K-095) bağlı vardiyaya link verir —
+Payments'ın CashBook'a bağımlılığı zaten K-094'ten beri TEK YÖNLÜDÜR, bu yeni
+bir bağımlılık AÇMAZ.
+
+**Karar 7 — `CashMovementCategory` da morph map'e EKLENDİ:** `Core\Concerns\
+Auditable` trait'i (denetim kaydı için) `Relation::enforceMorphMap()`'in
+kesin listesine bağımlıdır (§5.7) — model listeye eklenmeden seeder/servis
+ilk kategori yazımında `MorphMapException` fırlatır. `'cash_movement_category'
+=> CashMovementCategory::class` eklendi; bu hem seeder'ın hem canlı admin
+ekranının kategoriye audit log üretmesi için gereklidir.
+
+**Migration'lar (3, hepsi forward-only, `migrate:fresh` KULLANILMADI):**
+`cash_movement_categories` (yeni tablo, CHECK ile system_type kısıtlı),
+`cash_movements.category_id`/`category_label` (nullable, restrictOnDelete),
+`payments.receipt_no` (nullable unique varchar(20)) — mevcut satırlar
+`receipt_no = NULL` ile başlar, geriye dönük makbuz ÜRETİLMEZ (dürüst
+sınırlama, K-094/K-095'teki aynı ilke); `payments::show` ve `receipt` route'u
+bu durumu 404 ile karşılar, tahsilatın kendi detay ekranını BOZMAZ.
+
+**Yeni yetki:** `cashbook.manage_categories` — Admin (otomatik, tüm yetkiler)
+ve Patron'a (açıkça) verildi; Personel'e VERİLMEDİ. `cashbook.view_all`
+yeniden kullanılmadı: "tüm vardiyaları görmek" ile "kategori ana verisini
+yönetmek" farklı yetki anlamlarıdır.
+
+**Etkilenen dosyalar (özet):** 3 migration, `CashMovementCategory` modeli +
+factory + policy + controller + 2 FormRequest + 3 view, `CashMovementType`
+DEĞİŞMEDİ (yalnızca kullanım şekli değişti), `CashMovement` (`category_id`/
+`category_label` cast + `label()`), `CashBookService` (`recordMovement()`/
+`insertMovement()`/`reverseMovement()` imzalarına `categoryId`/`categoryLabel`
+eklendi — ters kayıt orijinal kategorinin etiketini KORUR), `Payment` modeli
+(`receipt_no`, `amountInWords()`, `receiptNumberFor()`), `PaymentService`
+(makbuz üretimi, `postCashCollection()` açıklaması), `PaymentMethod::primary()`
+(Cari Tahsilat formunda `Other` gösterilmez, raporlama hâlâ `cases()` kullanır),
+`TurkishNumberToWords` (yeni, Core), `config/hotel.php` (`company.*`, geçici),
+`AppServiceProvider` (morph map), `partials/quick-action.blade.php` (yeniden
+yazıldı), sidebar (Kasa Hareket Türleri girdisi), `movements/_row.blade.php`
+ve `payments::show` (çift yönlü izlenebilirlik bağlantıları).
+
+## K-098 · v2.1.1-B.1: "Kasa Hareketi" tam sayfa DEĞİL, native `<dialog>` modal/sheet açar
+
+**Bağlam:** K-096'nın (`7018b76`) birleşik Hızlı İşlem listesi kabul edildi,
+ama "Kasa Hareketi" hâlâ standart bir sayfaya YÖNLENDİRİYORDU — onaylanan
+kapsam bunun yerine masaüstünde modal, mobilde alt sayfa (bottom sheet)
+istiyordu. Denetim bunu doğruladı ve TAMAMLADI.
+
+**Karar 1 — Native `<dialog>`, Alpine/SPA DEĞİL:** `showModal()` odağı
+otomatik hapseder ve ÜST KATMANDA (top layer) render eder — bu yüzden alt
+gezinme çubuğu/kenar çubuğu çekmecesiyle z-index yarışına HİÇ girmez, ayrıca
+bir z-index değeri VERİLMEZ. Masaüstünde ortalanmış modal, `md` altında alt
+kenara sabitlenmiş bottom sheet — TEK `.cash-dialog` sınıfı, medya sorgusuyla
+ayrışır.
+
+**Karar 2 — Kabuk HER sayfada boştur; içerik yalnızca tıklandığında
+`fetch()` ile yüklenir:** `<dialog id="kasa-hareketi-dialog">` `layouts.app`'te
+BİR KEZ, boş olarak vardır (`partials/cash-movement-dialog.blade.php`,
+`cashbook.operate` yetkisiyle koşullu). Kategori/vardiya verisi HİÇBİR sayfa
+yüklemesinde eagerly sorgulanmaz — Lemon Bar'ın "global kasa sorgusu her
+sayfada çalışmaz" performans ilkesiyle (K-092) AYNI karardır, yalnızca
+tetikleyici (kullanıcının GERÇEKTEN tıklaması) farklıdır.
+
+**Karar 3 — Aynı controller aksiyonu, `$request->ajax()`'a göre farklı
+view:** `CashMovementController::create()` DEĞİŞMEDİ (vardiya/yetki
+kontrolleri AYNI) — yalnızca `ajax()` iken layout'suz bir fragment
+(`_dialog-fragment.blade.php`) döner. İki farklı route/form YOKTUR (kullanıcı
+talimatı §4); ikisi de AYNI `_form.blade.php` partial'ını kullanır (create.
+blade.php'den ÇIKARILDI).
+
+**Karar 4 — Form GERÇEK bir `<form>` olarak POST edilir; SPA/AJAX mimarisi
+AÇILMADI:** başarılı gönderim tam sayfa yönlendirmesiyle Kasa Defteri'ne
+döner (dialog kendiliğinden ekrandan gider — kullanıcı talimatı §6). Bu, K-096
+ile AYNI mimariyi korur.
+
+**Karar 5 — Doğrulama/servis hatası artık `back()`/Referer'a GÜVENMEZ, HER
+ZAMAN standalone "Hareket ekle" sayfasına döner:** Dialog artık HERHANGİ bir
+sayfanın (Pano, Tahsilatlar, Firmalar…) üzerinde açılabildiği için, Referer o
+sayfa olur ve o sayfa formu/hatayı hiç göstermeyeceği için varsayılan
+`back()` kullanıcıyı "hata sessizce kayboldu" hissine düşürürdü. Hem
+`StoreCashMovementRequest::failedValidation()` hem controller'ın iki
+`back()->withInput()` çağrısı `redirect()->route('cashbook.movements.
+create')`'e değiştirildi — kullanıcı talimatı §5'in "standart POST +
+yönlendirilmiş bağımsız hata ekranı" tercihidir.
+
+**Karar 6 — Odak yönetiminde YENİ bir sınıf hata AÇILMADI:** Dialog açılırken
+Hızlı İşlem paneli kapanır (`hidden`); panel kapanınca İÇİNDEKİ tetikleyici
+`<a>` görünmez bir atanın içinde kalır ve ona `.focus()` çağırmak SESSİZCE
+başarısız olur (görünmeyen bir elemana odaklanılamaz). Bu yüzden kapanışta
+odak, o Hızlı İşlem kökünün KENDİ toggle düğmesine döner (`closeQuickAction
+Panels()`'ın döndürdüğü referans), tetikleyici menü öğesine DEĞİL — aksi
+hâlde K-086/K-088'deki mobil çekmece odak hatasının AYNI SINIFI sessizce geri
+gelirdi. Gerçek Chromium'da (Playwright) doğrulandı.
+
+**Karar 7 — Masaüstü ortalaması `margin: auto`'nun AÇIKÇA yazılmasını
+gerektirir:** Tarayıcının `<dialog>` UA stili `showModal()`'da normalde
+`margin: auto` ile ortalar, ama Tailwind'in preflight sıfırlaması
+(`*, ::before, ::after { margin: 0 }`, author katmanı) UA stilinden HER ZAMAN
+önceliklidir (kaynak önceliği, katman sırası değil). `margin` belirtmeden
+bırakmak dialogu masaüstünde sol üst köşeye yapıştırır — GERÇEK tarayıcıda
+QA sırasında yakalanan, ekran görüntüsüyle kanıtlanmış bir hataydı; `.cash-
+dialog`'a açık `margin: auto` eklenerek düzeltildi.
+
+**Migration:** YOK — bu paket saf UI/controller/JS değişikliğidir, şema
+etkilenmedi.
+
+**Etkilenen dosyalar:** `CashMovementController` (`create()` ajax dalı,
+`backToCreate()`), `StoreCashMovementRequest` (`failedValidation()`), yeni
+`movements/_form.blade.php` + `_dialog-fragment.blade.php`, `create.blade.php`
+(partial'a indirgendi), yeni `partials/cash-movement-dialog.blade.php`,
+`layouts/app.blade.php` (bir `@include`), `partials/quick-action.blade.php`
+(`data-cash-movement-trigger`), `app.js` (`initRecipientToggle()` adlandırılmış
+fonksiyona taşındı, `initCashMovementDialog()` yeni), `app.css` (`.cash-dialog`
+bileşeni).
+
+## K-099 · v2.1.1 yayın sertleştirmesi: yetki seed'i deploy sırasına bağlayıcı olarak eklendi
+
+**Bağlam:** v2.1.1 (A/A.1/B/B.1, `470009f`→`0185b15`) production'a taşınmadan
+önce genel bir sertleştirme turu istendi — yeni özellik YOK, yalnızca yayın
+güvenliği. Denetim 5 alanı kapsadı: migration'lar, yetki senkronizasyonu,
+saat dilimi, production config güvenliği, makbuz config güvenliği.
+
+**Bulgu 1 (KÖK NEDEN, düzeltildi) — yetki seed'i deploy dokümantasyonunda
+HİÇ YOKTU:** `CLAUDE.md §15`, `docs/deploy-lemon.md`, `docs/deploy-cpanel.md`
+ve `docs/deploy-github-actions.md`'nin belgelediği "deploy sonrası" komut
+sırası yalnızca `migrate --force` + cache komutlarını içeriyordu —
+`php artisan db:seed --class=RolePermissionSeeder --force` HİÇBİR YERDE
+YAZILI DEĞİLDİ. Bu, gerçek üretimde görülen "There is no permission named
+cashbook.operate for guard web" hatasının BİREBİR kök nedenidir: kodda yeni
+bir `Permission` case'i deploy edilir ama veritabanının `permissions`
+tablosu hiç senkronlanmaz. Kod tarafı zaten SAĞLAMDIR (her yetki kontrolü
+`Permission::X->value` üzerinden gider, hiçbir ham string YOKTUR — grep ile
+doğrulandı, PHPStan da yakalardı); açık olan yalnızca DEPLOY SÜRECİYDİ.
+Düzeltme: dört dokümanın hepsine bu adım migrate'ten HEMEN SONRA, cache'ten
+ÖNCE, atlanamaz olarak eklendi; ayrıca tek kaynak olarak
+`docs/release-checklist-v2.1.1.md` oluşturuldu. `RolePermissionSeeder`
+idempotenttir (`findOrCreate`+`syncPermissions`) — kullanıcı rol atamalarını
+BOZMADAN her deploy'da güvenle tekrar çalıştırılabilir.
+
+**Bulgu 2 — migration'ların hepsi zaten production-güvenliydi, kod değişikliği
+GEREKMEDİ:** 19 modül migration'ı tek tek incelendi (CashBook 9, Payments 4,
+Companies/Ledger/Stays/AuditLog/Authorization 6). Hiçbiri `migrate:fresh`e
+bağımlı değil; mevcut satıra eklenen HER kolon `nullable()`dır (varsayılan
+NULL, backfill gerekmez); CHECK kısıtları DROP+CREATE deseniyle yalnızca
+GENİŞLETİLİR (mevcut değerler her zaman yeni kısıtta da geçerlidir);
+`down()` metotları veri varsa BİLEREK başarısız olur (sessiz veri kaybı
+yerine). Production bugün BOŞTUR (`docs/deploy-lemon.md` §5) — bu ilk gerçek
+deploy, "mevcut satır" riski bu turda fiilen yoktur, ama disiplin gelecekteki
+deploy'lar için doğrulandı.
+
+**Bulgu 3 — saat dilimi: kod değişikliği GEREKMEDİ, yalnızca doğrulama
+adımı belgelendi.** `APP_TIMEZONE=Europe/Istanbul` tüm PHP/Eloquent
+zaman damgalarını yönetir (`Carbon::now()`, `date_default_timezone_set()`
+üzerinden). `config/database.php`'nin mysql bağlantısında AÇIK bir
+`'timezone'` anahtarı YOKTUR — ama uygulama kodunda HİÇBİR yerde (grep ile
+doğrulandı: tüm `selectRaw`/`whereRaw` yalnızca `SUM`/`CAST`/`LIKE`
+içerir) MySQL'in kendi `NOW()`/`CURDATE()`/`CURRENT_TIMESTAMP()` fonksiyonu
+kullanılmaz — her "şimdi"/"bugün" karşılaştırması PHP'de hesaplanıp SQL'e
+literal değer olarak geçirilir. `useCurrent()` DB varsayılanları (bazı
+append-only tablolarda) yalnızca Eloquent'i BAYPAS EDEN ham SQL için bir
+güvenlik ağıdır ve normal uygulama akışında hiç TETİKLENMEZ (Eloquent
+`created_at`'i her zaman PHP'de açıkça yazar). Sonuç: veritabanı sunucusunun
+KENDİ saat dilimi ayarı bu uygulamada doğruluğu ETKİLEMEZ; `+03:00`'a
+KÖRLEMESİNE zorlama yapılmadı (istenmediği gibi). Production doğrulama
+sorgusu `docs/release-checklist-v2.1.1.md`'ye eklenmedi çünkü kod
+değişikliği gerektirmiyor — gerekirse `SELECT @@session.time_zone, NOW();`
+ile tek seferlik kontrol yeterlidir.
+
+**Bulgu 4 — production config/makbuz güvenliği: mevcut durum ZATEN
+sağlamdı, ek düzeltme gerekmedi.** `.gitignore` `.env`/`vendor`/
+`node_modules`/`public/build`'i kapsıyor; git'te başka hiçbir `.env*`
+dosyası izlenmiyor; `docs/deploy-lemon.md` §5 zaten `SESSION_SECURE_COOKIE=
+true`, `APP_DEBUG=false`, `LOG_LEVEL=error` içeriyor; `DatabaseSeeder::
+guardProductionCredentials()` varsayılan/boş admin kimlik bilgisiyle
+production seed'ini zaten reddediyor; FTP deploy workflow'u `storage/` ve
+`bootstrap/cache/`'i hem build artifact'ından hem transfer listesinden
+ÇIKARIYOR ve bunu CI'da bir guard ile doğruluyor. Makbuz ekranındaki firma
+başlık bilgisi zaten `config('hotel.company.*')` üzerinden gelir, HİÇBİR
+Blade dosyasında hardcoded değer YOKTUR (grep ile doğrulandı) ve her alan
+`@if` ile korunur — eksik config sayfayı ÇÖKERTMEZ.
+
+**Etkilenen dosyalar:** `CLAUDE.md` §15, `docs/deploy-lemon.md`,
+`docs/deploy-cpanel.md`, `docs/deploy-github-actions.md` (dördü de seed
+adımı eklendi), yeni `docs/release-checklist-v2.1.1.md` (tek kaynak
+kontrol listesi + 12 maddelik finansal duman testi). Hiçbir uygulama kodu
+DEĞİŞMEDİ — bu tamamen bir dokümantasyon/süreç düzeltmesidir.
+
+---
+
+## K-100 · Room Registry: CLAUDE.md §3.2'nin "şimdi yapılmayacak" istisnası, kullanıcı onayıyla açıldı
+
+**Bağlam:** Kullanıcı "acil, çok küçük bir yama" olarak bir Oda (Room) master
+data'sı ve Konaklama formunda serbest metin yerine oda SEÇİMİ istedi. Bu, §3.2
+listesindeki "Oda yönetimi (`room_no` sadece serbest metin)" satırıyla ve
+listenin kendi bağlayıcı kuralıyla ("Bu listedeki bir şey isteniyorsa dur ve
+kullanıcıya sor") DOĞRUDAN çelişiyordu. Talep ayrıca iki ayrı mimari çelişki
+taşıyordu:
+
+1. **Otomatik migration / "finalize" HTTP ucu isteği** — `docs/deploy-
+   github-actions.md` §6'da bu desen ZATEN değerlendirilip REDDEDİLMİŞTİ
+   (token sızarsa uzaktan şema değişikliği riski). Kullanıcıya soruldu;
+   yanıt: **"Manuel terminal komutu (önerilen)"** — bu yüzden bu turda
+   HİÇBİR otomatik migration/finalize-endpoint mekanizması YAZILMADI. Room
+   migration'ı production'a `docs/release-checklist-v2.1.1.md`'deki mevcut
+   MANUEL komut sırasıyla taşınacaktır (standart Laravel migration'ı,
+   `php artisan migrate --force`).
+2. **GitHub Actions "Deploy (Lemon)" workflow'unun otomatik/gözetimsiz
+   tetiklenmesi** — production ortamı `docs/deploy-lemon.md` §5'e göre
+   HÂLÂ boştur; bu, gerçekleşecek İLK production cutover olurdu. Kullanıcıya
+   soruldu; yanıt: **"Hayır — kendim tetikleyeceğim (önerilen)"** — bu
+   yüzden bu görev develop'a push ile SONLANDI, deploy workflow'u
+   TETİKLENMEDİ.
+
+Yalnızca Room Registry sorusu için yanıt **"Evet, şimdi yap"** oldu — bu
+istisna bilerek, kayıt altına alınarak açıldı; §3.2'deki diğer kalemler
+(Rezervasyon, Housekeeping, PMS durumları, Oda Tipi lookup tablosu vb.)
+kapsam DIŞINDA kalmaya devam eder.
+
+**Karar:**
+
+1. Yeni `Rooms` modülü açıldı: `rooms` tablosu (`room_no` zorunlu+unique,
+   `room_name`/`room_type` nullable, `is_active`, `created_by`/`updated_by`).
+   Soft delete YOK (§3.3 "gereksiz soyutlama açma" ilkesi) — kullanılmış oda
+   zaten hard-delete'e karşı `StayService::roomHasHistory()` ile korunuyor,
+   ikinci bir "silindi ama görünür kalsın" mekanizmasına ihtiyaç yok.
+2. `stays.room_id` (nullable FK, `rooms`e, `restrictOnDelete`) eklendi.
+   `stays.room_no` DOKUNULMADI: hem kolonun kendisi hem içindeki veri.
+   Yeni konaklamalar SADECE `room_id` ile oda seçer; `StayRequest` artık
+   `room_no`'yu KABUL ETMEZ (form alanı da select'e çevrildi). Bu, kullanıcı
+   talimatının birebir istediği şeydir: "replace free-text room entry for
+   NEW stays with Room selection" + "do not rewrite old data blindly."
+3. `Stay::roomLabel()`: `room_id` varsa odanın kendi etiketini, yoksa eski
+   `room_no` metnini gösterir — hiçbir geçmiş kayıt sessizce kaybolmaz.
+4. Modüler monolit kuralı (§4.3/1) korundu: `Rooms` modülü `Stay` modelini
+   HİÇ KULLANMAZ; "oda kullanılmış mı" kontrolü `StayService::
+   roomHasHistory(int $roomId): bool` üzerinden, `CompanyService::delete()`
+   → `LedgerService::hasEntriesForCompany()` ile AYNI desenle yapılır. Tersi
+   yönde `Stays` modülü, Room seçenek listesi için `RoomService::
+   optionsForForm()`u çağırır (Controller'ın başka modülün Service'ini
+   çağırması — CompanyController'ın StayService/PaymentService/LedgerService
+   çağırmasıyla AYNI, zaten var olan desen). İki modül birbirinin
+   Service'ini çağırıyor ama hiçbiri diğerinin Model'ine dokunmuyor.
+5. Yeni yetki `rooms.manage` (Admin+Patron) — `cashbook.manage_categories`
+   ile AYNI desen: ayrı bir "görüntüleme" yetkisi AÇILMADI, tek yetki
+   yönetimin tamamını kapsar. Konaklama formundaki oda SEÇİMİ bu yetkiyi
+   GEREKTİRMEZ (`stays.create`/`stays.update` yeterlidir) — Personel de oda
+   seçebilir, yalnızca oda TANIMLARINI yönetemez.
+6. UI: Yönetim → Odalar (kullanıcı talimatının "Tanımlar Merkezi çok
+   genişse sadece Odalar'ı ekle" seçeneği izlendi — ayrı bir Settings alt
+   sistemi AÇILMADI).
+7. CashBook "Oda Geliri" hareketine oda referansı eklenmedi (kullanıcı
+   talimatının kendi "do NOT force a large CashBook redesign" istisnası +
+   görevin üst düzey "DO NOT TOUCH ... CASHBOOK" kısıtı) — bilerek kapsam
+   dışı bırakıldı, istenirse ayrı bir onayla ele alınır.
+8. Test kapsamı: oda oluşturma, `room_no` benzersizliği, pasif odanın YENİ
+   kayıt için seçilememesi (ama düzenlemede kendi odasının kaybolmaması),
+   eski `room_no` metninin okunabilir kalması, yeni konaklamanın `room_id`
+   ile bağlanması, kullanım geçmişi olan odanın silinememesi, yetki
+   matrisi (`RoomCrudTest`, `RoomStayIntegrationTest`, 14 test). Otomatik
+   migration/eşzamanlılık testleri YAZILMADI çünkü o mekanizmanın kendisi
+   (madde 1) bu turda inşa EDİLMEDİ.
+
+**Etkilenen dosyalar:** yeni `app/Modules/Rooms/*` (migration, model,
+policy, service, request, controller, route, view), `app/Modules/Stays/*`
+(migration, model, service, request, controller, filter, factory, view),
+`app/Modules/Authorization/Enums/Permission.php` + `RoleName.php`,
+`app/Providers/AppServiceProvider.php` (morph map), `bootstrap/providers.php`,
+`resources/views/partials/sidebar.blade.php`, `CLAUDE.md` (§3.1, §3.2, §4,
+§5.9, §7.2, §7.3, §8, Basic Audit Log), test güncellemeleri
+(`StayCrudTest`, `RolePermissionMatrixTest`) + yeni `tests/Feature/Rooms/*`.
+
+---
+
+## K-101 · Production migration hatası: `stays_room_id_foreign` errno 150 — kurtarma güvenli hâle getirildi
+
+**Bulgu:** `2026_09_16_060100_add_room_id_to_stays_table` production'da FK
+ekleme adımında `SQLSTATE[HY000]: General error: 1005 ... errno: 150
+"Foreign key constraint is incorrectly formed"` ile başarısız oldu. Aynı iki
+migration yerelde (aynı MariaDB 10.11 motoruyla) hatasız çalıştı — sorun
+migration'ın SQL sözdizimi DEĞİL, production'a ÖZGÜ bir durumdur.
+
+**Kök neden analizi:** Laravel'in MySQL grammar'ı `Schema::table()` içindeki
+"kolon ekle" ve "FK kısıtı ekle" adımlarını AYRI ALTER TABLE ifadeleri olarak
+gönderir. Hata mesajının gösterdiği başarısız ifade YALNIZCA FK ekleme
+adımıdır — bu, `stays.room_id` kolonunun (ve örtük index'inin) bu denemede
+ZATEN eklenmiş olduğu, yalnızca FK kısıtının reddedildiği anlamına gelir.
+Migration `up()` metodu exception fırlattığı için Laravel bunu "çalıştı"
+olarak işaretlemedi; bir sonraki `migrate` denemesi dosyayı BAŞTAN çalıştırıp
+`room_id` kolonunu tekrar eklemeye çalışacak ve bu kez "Duplicate column
+name" ile başarısız olacaktı. FK'nin kendisinin errno 150 ile reddedilmesinin
+kesin sunucu tarafı nedeni (`rooms` tablosunun oluşturulduğu ANDA motor
+açıkça `InnoDB` olarak belirtilmemişti — sunucunun varsayılan depolama
+motoruna sessizce güvenilmişti) production veritabanına doğrudan erişim
+olmadan kesin doğrulanamadı; bu yüzden düzeltme HEM en olası nedeni ortadan
+kaldırır HEM de kısmi/tekrarlanan denemeye karşı güvenli hâle getirir.
+
+**Düzeltme:**
+1. `create_rooms_table`: `$table->engine = 'InnoDB';` açıkça eklendi; tablo
+   zaten varsa (`Schema::hasTable`) oluşturma adımı atlanır.
+2. `add_room_id_to_stays_table`: kolon ekleme ve FK ekleme artık BİRBİRİNDEN
+   BAĞIMSIZ olarak `Schema::hasColumn()`/`Schema::hasForeignKey()` ile
+   korunur — hangisi zaten uygulanmışsa o adım atlanır. `down()` de aynı
+   şekilde korunur. Gereksiz/yinelenen `$table->index('room_id')` çağrısı
+   kaldırıldı — FK kısıtı zaten kendi index'ini oluşturur.
+3. Yerelde tam kurtarma senaryosu simüle edilerek doğrulandı: FK elle
+   düşürülüp migration kaydı silindi (kolon production'daki gibi yerinde
+   bırakıldı), `php artisan migrate` yeniden çalıştırıldı — kolonu tekrar
+   eklemeye ÇALIŞMADI, yalnızca eksik FK'yi ekledi ve başarıyla tamamlandı.
+   Ayrıca tertemiz bir `migrate:fresh` ve bir `migrate:rollback` ile de
+   doğrulandı.
+
+**Kapsam:** Bu bir üretim düzeltmesidir, yeni bir özellik DEĞİLDİR. Yalnızca
+iki migration dosyası değişti; Room modülünün model/servis/controller/view
+katmanlarına dokunulmadı. Production migration'ı bu turda ÇALIŞTIRILMADI —
+kullanıcı ayrı bir adımda kendisi tetikleyecektir.
+
+---
+
+## K-102 · GERÇEK kök neden bulundu: K-101'in motor varsayımı YANLIŞTI — asıl sebep bayat provider cache'i
+
+**K-101'in düzeltmesi (idempotent migration + `rooms` için açık `InnoDB`)
+GEÇERLİ ve GEREKLİ kalır** — ama o kaydın "en olası neden" olarak öne
+sürdüğü motor uyuşmazlığı hipotezi **kanıtlanamadı ve YANLIŞ çıktı.** Yeni
+production kanıtı bunu netleştirdi:
+
+```sql
+SHOW CREATE TABLE rooms;                          -- #1146 Table doesn't exist
+SELECT migration, batch FROM migrations
+  WHERE migration LIKE '%room%';                  -- SIFIR SATIR
+```
+
+`rooms` tablosu **hiç oluşturulmamış** ve `create_rooms_table` migration'ı
+`migrations` tablosunda **hiç görünmüyor** — yani bu migration çalıştırılıp
+başarısız olmadı, migrator ona **hiç rastlamadı**. Buna karşın AYNI
+deploy'daki `add_room_id_to_stays_table` çalıştı (kısmen — `stays.room_id`
+kolonu eklendi, FK'de patladı).
+
+**Kök neden — yerelde BİREBİR aynı hata mesajıyla yeniden üretildi:**
+
+1. `Illuminate\Foundation\Application::registerConfiguredProviders()`,
+   provider listesini `bootstrap/providers.php`'den DEĞİL,
+   `config('app.providers')`'dan okur. Bu config değeri, `php artisan
+   config:cache` çalıştırılmışsa `bootstrap/cache/config.php`'den gelir —
+   ve bu dosya `bootstrap/cache/` altında olduğu için deploy tarafından
+   **HİÇ dokunulmaz** (`docs/deploy-github-actions.md` §3'te FTP transfer
+   dışlama listesinde, sunucuda kalıcıdır).
+2. Production'da, Room Registry'den ÖNCEKİ bir deploy'da `config:cache`
+   çalıştırılmıştı. O cache, `RoomsServiceProvider::class`'ı İÇERMEZ
+   (henüz `bootstrap/providers.php`'ye eklenmemişti).
+3. Room Registry deploy edildi: yeni kod (`RoomsServiceProvider.php`,
+   `bootstrap/providers.php`'nin yeni hâli, migration dosyaları) sunucuya
+   yüklendi — ama `bootstrap/cache/config.php` deploy tarafından
+   SİLİNMEDİ/GÜNCELLENMEDİ (1. maddedeki gerekçeyle).
+4. `php artisan migrate --force` çalıştırıldığında, Laravel HÂLÂ bayat
+   cache'i okudu → `RoomsServiceProvider` hiç `register()`/`boot()`
+   edilmedi → `loadMigrationsFrom()` hiç çağrılmadı → migrator'a Rooms
+   modülünün migration dizini hiç KAYDEDİLMEDİ → `create_rooms_table`
+   migrator'a **görünmez** oldu (hata bile vermeden, sessizce).
+5. `StaysServiceProvider` ZATEN eski cache'teydi (Stays modülü aylardır
+   deploy ediliyor) — bu yüzden AYNI deploy'daki YENİ migration dosyası
+   (`add_room_id_to_stays_table`, Stays'in ZATEN kayıtlı dizinine eklenen
+   yeni bir dosya) normal şekilde keşfedildi ve çalıştı — `stays.room_id`
+   kolonunu ekledi, sonra `rooms` tablosuna FK eklemeye çalıştı, `rooms`
+   HİÇ VAR OLMADIĞI için **errno 150 "Foreign key constraint is
+   incorrectly formed"** ile patladı — K-101'in ilk raporundaki hata
+   mesajının **birebir aynısı.**
+
+**Doğrulama (yerelde, gerçek MariaDB ile):** `bootstrap/providers.php`'den
+`RoomsServiceProvider` satırı geçici olarak kaldırılıp `config:cache`
+çalıştırıldı, satır geri eklendi (yeni kod + bayat cache durumu simüle
+edildi), sonra `php artisan migrate` çalıştırıldı:
+```
+SQLSTATE[HY000]: General error: 1005 Can't create table `hotel_account`.`stays`
+(errno: 150 "Foreign key constraint is incorrectly formed") ...
+alter table `stays` add constraint `stays_room_id_foreign` ...
+```
+**Production hatasıyla harfiyen aynı.** `rooms` tablosu bu adımda yoktu;
+`stays.room_id` kolonu vardı. Ardından `php artisan config:clear` çalıştırıldı
+ve `php artisan migrate` tekrar koşturuldu: `create_rooms_table` VE
+`add_room_id_to_stays_table` ikisi de doğru sırada, hatasız tamamlandı —
+`rooms` oluştu, `stays_room_id_foreign` eklendi. K-101'in idempotent
+migration'ı bu ikinci koşuda `stays.room_id`'yi tekrar eklemeye ÇALIŞMADI
+(zaten vardı), yalnızca eksik FK'yi ekledi — kurtarma davranışı da
+doğrulandı.
+
+**Bunun bir Laravel/registration KOD hatası OLMADIĞININ kanıtı:** aynı
+`ModuleServiceProvider` taban sınıfı, aynı `path()` hesaplaması, TÜM diğer
+modüllerde (Payments, CashBook, Companies, …) production'da zaten sorunsuz
+çalışıyor — `RoomsServiceProvider` de birebir aynı deseni izliyor ve
+yerelde defalarca (`migrate:fresh` dahil) hatasız çalıştı. Sorun kod
+DEĞİL, **deploy sırasında çalıştırılan `migrate --force`'un HANGİ provider
+listesini gördüğü** — ki bu da `bootstrap/cache/config.php`'nin GÜNCEL
+mi yoksa BAYAT mı olduğuna bağlı.
+
+**Düzeltme — süreç/dokümantasyon, kod DEĞİL:** `config:clear` (dört
+komutun hepsi) artık her deploy sırasında **MIGRATE'TEN ÖNCE** çalışır,
+SONRA değil. Bu, `RolePermissionSeeder`'ın migrate'ten SONRA çalışması
+gerekliliğiyle (K-099) ÇELİŞMEZ — ikisi de aynı anda doğrudur: sıra artık
+`cache TEMİZLE → migrate → seed → cache KUR`. Değişen dosyalar:
+`docs/release-checklist-v2.1.1.md` (§1/§2/§3), `docs/deploy-cpanel.md`,
+`docs/deploy-lemon.md`, `docs/deploy-github-actions.md` §6, `CLAUDE.md`
+§15. Uygulama kodunda **hiçbir değişiklik yoktur** — `RoomsServiceProvider`,
+`ModuleServiceProvider`, `bootstrap/providers.php` zaten doğruydu ve
+değiştirilmedi.
+
+**Otomatik test yerine neden manuel doğrulama:** bu senaryo
+`bootstrap/providers.php`'yi diskte değiştirmeyi ve gerçek bir `config:cache`
+çalıştırmayı gerektiriyor — CI'da otomatik bir teste dönüştürmek deploy'a
+kritik dosyaları mutasyona uğratacağı için uygun değil. Bunun yerine iki
+GÜVENLİ otomatik test eklendi (`RoomMigrationDiscoveryTest`): (1) normal
+koşullarda migrator'un `rooms`'u `stays`'ten ÖNCE keşfettiğini ve FK'yi
+doğru kurduğunu doğrulayan bir regresyon testi, (2) production'daki kısmi
+durumu (kolon var, FK yok, migration kaydı silinmiş) simüle edip
+`Artisan::call('migrate')`'in güvenle kurtardığını doğrulayan bir test.
+
+---
+
+## K-103 · Mobil PWA + mobil üst çubuk temizliği
+
+**Bağlam:** Kullanıcı iki sıkı kapsamlı hedef verdi: (1) Lemon'u gerçek
+kurulabilir bir PWA yapmak, (2) mobil üst çubuktaki hamburger + "+" ile alt
+çubuğun oluşturduğu gezinme tekrarını temizlemek. Veritabanı/migration/
+Rooms/CashBook/Payments/Companies/Stays iş mantığı/yetki/finansal hesap
+KESİNLİKLE dokunulmayacak alanlar olarak sıralandı — bu tur tamamen
+frontend/PWA'dır.
+
+**Karar 1 — mobil üst çubuk sadeleştirildi:** hamburger (`data-sidebar-
+toggle`) ve "+" (Hızlı İşlem) `layouts/app.blade.php`'nin mobil `<header>`'ından
+KALDIRILDI. Gerekçe: birincil gezinme zaten alt çubuktur (Gün 9.6); "Daha
+Fazla" zaten AYNI çekmeceyi ikinci bir tetikleyiciyle açıyordu — üstteki
+hamburger TAM BİR TEKRARDI. "+" kaldırılınca hiçbir yetenek kaybolmadı:
+Hızlı İşlem'in her kısayolu (Kasa Hareketi, Cari Tahsilat, Yeni Konaklama,
+Yeni Firma, Kasa Devri) zaten kendi index sayfasında birebir aynı "oluştur"
+butonuna sahip, o sayfalara da alt çubuktan (Ana Sayfa/Kasa/Firmalar/
+Tahsilatlar) veya "Daha Fazla" (Konaklamalar) üzerinden ulaşılıyor. Masaüstü
+Lemon Bar'daki Hızlı İşlem'e DOKUNULMADI (`hidden md:flex`, ayrı DOM kökü).
+Mobil üst çubuk artık yalnızca marka taşır, `h-14`'ten `h-12`'ye indi ve iki
+buton kalktı — belirgin şekilde daha kısa/hafif. Ölü bir `@yield
+('lemon-bar-status-icon')` (hiçbir view onu doldurmuyordu) bu sırada
+kaldırıldı.
+
+**Karar 2 — PWA gerçek anlamda kuruldu (önceden CLAUDE.md §11.8'de
+YAZILI ama hiç İNŞA EDİLMEMİŞTİ):** `public/manifest.json` (statik dosya —
+yeni bir route/controller AÇILMADI, gereksiz soyutlama önlendi), `public/
+sw.js`, dört PNG ikon (`public/icons/*.png`, PHP GD ile üretildi — `partials/
+brand.blade.php`'nin monogram fallback'ıyla AYNI görsel dil: altın zemin,
+koyu "L"), `public/offline.html` (Vite'a bağımsız, `layouts/print` ile AYNI
+"kendi kendine yeten sade CSS" ilkesi). Yeni `partials/pwa-head.blade.php`
+her iki layout'a (`app`/`guest`) `@include` edilir — kopyalanmaz.
+
+- Service worker kapsamı BİLEREK dar: yalnızca Vite `build/` çıktısı
+  (içerik-hash'li, cache-first güvenli), ikonlar, manifest, `offline.html`
+  cache'lenir. Sayfa navigasyonu HER ZAMAN ağdan istenir — kimlik doğrulanmış/
+  finansal HTML ASLA cache'lenmez; yalnızca ağ tamamen başarısız olursa
+  statik çevrimdışı sayfasına düşülür. GET DIŞINDAKİ hiçbir istek (POST/PUT/
+  PATCH/DELETE) yakalanmaz — çevrimdışı finansal mutasyon kuyruğa alma/tekrar
+  oynatma KESİNLİKLE yoktur (kullanıcı talimatının en kesin çizgisi).
+- Kurulum eylemi ("Daha Fazla" çekmecesi, `[data-pwa-install]`, `md:hidden`):
+  yalnızca `beforeinstallprompt` gerçekten ateşlenirse görünür; uygulama
+  ZATEN standalone modda kuruluysa (`display-mode: standalone` / iOS
+  `navigator.standalone`) hiç görünmez. Masaüstü kenar çubuğu bu blok
+  `md:hidden` olduğu için HİÇ ETKİLENMEZ (kullanıcı talimatı: "Desktop
+  sidebar/navigation must remain unchanged"). iOS/iPadOS Safari
+  `beforeinstallprompt`'u hiç ateşlemediği için orada ayrı bir bağlamsal
+  ipucu (`[data-pwa-ios-hint]`, "Paylaş → Ana Ekrana Ekle") gösterilir.
+- `viewport-fit=cover` her iki layout'a eklendi — bu OLMADAN `env(safe-area-
+  inset-*)` her zaman sıfır döner (bottom-nav'ın ZATEN kullandığı
+  `env(safe-area-inset-bottom)` bile bu meta olmadan etkisizdi — gerçek bir
+  ön-koşul boşluğuydu, bu turda kapatıldı). `.pwa-safe-top` yalnızca
+  `@media (display-mode: standalone)` içinde üst boşluk ekler — normal
+  tarayıcı sekmesinde mobil üst çubuğu gereksiz büyütmez.
+
+**Doğrulama:** Playwright ile 360/375/390/430 genişliklerinde gerçek
+Chromium üzerinden test edildi — hamburger/`+` mobilde YOK, alt çubuk ve
+"Daha Fazla" çalışıyor, yatay kaydırma YOK, service worker gerçekten kayıt
+oluyor ve `activated` durumuna geçiyor, `manifest.json`/`sw.js`/ikonlar/
+`offline.html` 200 dönüyor. 1366px masaüstünde install bloğu (elle
+`hidden=false` yapılsa bile) `md:hidden` sayesinde GÖRÜNMEZ kaldı — desktop
+sidebar/Lemon Bar birebir aynı, hamburger orada da hiç YOKTU (zaten
+gerekmiyordu). `DesignSystemTest`'e hamburger'in KALDIRILDIĞINI doğrulayan
+yeni bir test eklendi; eski `aria-label="Menüyü aç"` beklentisi kaldırıldı.
+
+**Kapsam:** Hiçbir migration/veritabanı komutu ÇALIŞTIRILMADI/YAZILMADI.
+Rooms/CashBook/Payments/Companies/Stays iş mantığı, yetki matrisi ve
+finansal hesaplara HİÇ DOKUNULMADI — değişen her dosya `resources/`, `public/`
+veya `tests/Feature/Ui/` altındadır.
+
+**Etkilenen dosyalar:** `resources/views/layouts/{app,guest}.blade.php`,
+`resources/views/partials/{sidebar,pwa-head}.blade.php`, `resources/js/
+app.js`, `resources/css/app.css`, `public/manifest.json`, `public/sw.js`,
+`public/offline.html`, `public/icons/*.png`, `tests/Feature/Ui/
+DesignSystemTest.php`, `CLAUDE.md` (§11.4, §11.7 çevresi, "PWA (temel)").
+
+## K-104 · v2.1.1-C: Döviz kuru anlık görüntüsü, Geçmiş Döviz Düzeltme, Tahsilat Makbuzu Defteri
+
+**Bağlam:** Kullanıcı geri bildirim paketi üç ana istekten oluştu ve
+ikisi CLAUDE.md'nin bağlayıcı "dur ve sor" kurallarıyla DOĞRUDAN çelişiyordu.
+`AskUserQuestion` ile açıkça soruldu, kullanıcı her ikisini de ONAYLADI (Room
+Registry/K-100 ile AYNI istisna deseni):
+
+1. **§3.2 istisnası:** "Kur servisi, TCMB entegrasyonu, döviz çevrimi" kesin
+   yasaklı listededir. Kullanıcı, CANLI/otomatik bir kur servisi DEĞİL, yalnızca
+   işlem ANINDA elle girilen bir kur anlık görüntüsü istedi — kapsam bilerek
+   dar tutuldu: TCMB entegrasyonu, otomatik güncelleme, kur servisi HÂLÂ
+   kapsam dışıdır.
+2. **§4.3 kural 5 istisnası:** yeni modül kullanıcı onayı gerektirir. "Tahsilat
+   Makbuzları" gerçek muhasebe `Payments` modülüyle isim çakışması riski
+   taşıyordu (K-096'nın "Tahsilat Makbuzu" belgesiyle); kullanıcıya bu risk
+   açıkça anlatıldı, "yap ama isimlendirmeyi netleştir" onayı alındı — yeni
+   modül **"Tahsilat Makbuzu Defteri"** (`ReceiptBook`) adıyla, gerçek
+   muhasebe belgesinden görsel/metinsel olarak AYRIŞTIRILARAK açıldı.
+
+### Karar 1 — Kur anlık görüntüsü (`exchange_rate_to_try` / `try_equivalent`)
+
+`stays` ve `payments` tablolarına iki nullable kolon eklendi:
+`exchange_rate_to_try DECIMAL(10,4)`, `try_equivalent DECIMAL(15,2)`.
+Üç CHECK kısıtı (TRY hiç taşımaz / çift ya birlikte dolu ya birlikte boş /
+her ikisi de pozitif) hem `stays` hem `payments`'ta BİREBİR AYNIDIR.
+
+- **Bir kez hesaplanan, BİR DAHA YENİDEN HESAPLANMAYAN bir anlık
+  görüntüdür** (kullanıcı talimatı: "never use a live FX rate later to
+  recalculate historical records"). Hesap `Money::multiplyByRate()` ile
+  TAMSAYI aritmetiğiyle yapılır — oran 10.000 ile ölçeklenip tam sayı
+  çarpılır, sonuç en yakın kuruşa YARIM YUKARI yuvarlanır; `bcmath` veya
+  kayan nokta KULLANILMAZ (CLAUDE.md §13). Örnek: 500 EUR × 51,20 = 25.600,00
+  TL — kullanıcı talimatındaki örnekle BİREBİR eşleşir (birim testle
+  doğrulandı).
+- **`LedgerService`'e HİÇBİR ZAMAN geçirilmez:** `StayService::postDebit()`/
+  `PaymentService::postCredit()` hâlâ yalnızca orijinal para birimi ve
+  tutarla çağrılır. `try_equivalent` salt bilgi/raporlama amaçlıdır; §6/L5
+  ("para birimleri asla birleştirilmez") bu yüzden İHLAL EDİLMEZ.
+- **Yalnızca OLUŞTURMADA yakalanır, düzenlemede HİÇ SORULMAZ:**
+  `StayRequest`/`StorePaymentRequest` bu alanı yalnızca YENİ kayıtta
+  tanımlar (`StayRequest::rules()` düzenlemede bu kuralı hiç EKLEMEZ,
+  `UpdatePaymentRequest` zaten hiç bilmiyordu). Stay'de finansal alan
+  değişince (§6/L7 reversal akışı) kur MEVCUT değerini KORUYARAK karşılığı
+  yeniden hesaplar — bu YENİ bir CANLI kur DEĞİL, aynı işlemin aynı
+  anlık görüntüsünün tutarla tutarlı KALMASIDIR.
+- **Gerçek tarayıcı formu böcek:** `hidden` HTML özniteliği alanı DOM'dan
+  kaldırmaz, tarayıcı yine de BOŞ DEĞERLE gönderir (`disabled` değil).
+  `ConvertEmptyStringsToNull` bunu `null`'a çevirir ama `nullable` kural
+  olmadan `numeric`/`gt`/`decimal` yine de null üzerinde ÇALIŞIR ve
+  reddeder — TRY seçiliyken form hiç gönderilemez hâle gelirdi. Üç
+  FormRequest'e de (`StayRequest`, `StorePaymentRequest`,
+  `StoreReceiptBookEntryRequest`) `'nullable'` eklendi; `required_unless`
+  YİNE de zorunluluğu doğru uygular (Laravel önce "zorunlu mu" sorusunu
+  çözer, `nullable` bunu bastırmaz) — gerçek Playwright QA'sında
+  YAKALANDI, HTTP test client'ı bu böceği görmüyordu (dizi anahtarı hiç
+  yoksa gerçekten "yok" sayılıyor, boş string DEĞİL).
+- **Gösterim:** `<x-ui.fx-note>` bileşeni ("≈ 25.600,00 TL · Kur: 51,20")
+  yalnızca kur KAYITLIYSA render edilir, tabloları KALABALIKLAŞTIRMAZ —
+  Stay/Payment show+index+receipt ekranlarına eklendi (Ledger ekstresi/
+  Dashboard bu turun kapsamı DIŞINDA bırakıldı — dürüst sınırlama).
+
+### Karar 2 — Geçmiş Döviz Düzeltme (`FxCorrection` modülü)
+
+Yeni, kendi migration/model'i OLMAYAN ince bir modül: `Stays`/`Payments`
+Service'lerini çağırır (§4.3/1), Ledger ekstresinin Companies'te barınma
+gerekçesiyle AYNI desen (§4.3/3) — iki modülün verisini TEK ekranda
+birleştirdiği için kendi modülüne sahiptir.
+
+- `StayService::missingExchangeRate()` / `PaymentService::missingExchangeRate()`
+  — TRY DIŞI ve kuru NULL olan kayıtları listeler.
+- `StayService::correctHistoricalExchangeRate()` /
+  `PaymentService::correctHistoricalExchangeRate()` — **yalnızca EKSİK**
+  kaydı doldurur: zaten kayıtlıysa `ExchangeRateAlreadyRecorded` fırlatır
+  (§3: "do not allow casual editing of completed historical FX values").
+  Orijinal tutar/para birimi hiç DOKUNULMAZ, ikinci bir finansal işlem
+  OLUŞTURULMAZ, cari hareketi ASLA ters kaydedilmez/yeniden işlenmez —
+  yeni `AuditEvent::ExchangeRateCorrected` ile kim/ne zaman AYRICA loglanır.
+- Yeni yetki `fx.correct_historical` — Admin/Patron'da, Personel'de YOKTUR
+  (kullanıcı talimatı §9 birebir).
+- Ekran: Yönetim → Geçmiş Döviz Düzeltme (`fx-correction.index`), her satırda
+  tek alanlı bir düzeltme formu.
+
+### Karar 3 — Tahsilat Makbuzu Defteri (`ReceiptBook` modülü)
+
+Tamamen yeni, izole modül — gerçek muhasebe `Payments`/`Tahsilat Makbuzu`
+(K-096) ile **HİÇBİR ilişkisi YOKTUR**:
+
+- Kendi tablosu (`receipt_book_entries`), kendi numaralandırması
+  (`MKB-{yıl}-{id:06d}` — gerçek `TM-{yıl}-{id:06d}` ile KARIŞTIRILMASIN
+  diye bilerek FARKLI önek), kendi enum'u (`ReceiptPaymentMethod` —
+  `Payments\PaymentMethod`in `Cash` değeri `CashBookService`'i TETİKLEDİĞİ
+  için PAYLAŞILMADI).
+- `ReceiptBookService` `LedgerService`/`PaymentService`/`CashBookService`'i
+  HİÇ import ETMEZ/ÇAĞIRMAZ — bir makbuzun kaydı firma bakiyesini, fiziksel
+  kasayı, herhangi bir cari hareketi KESİNLİKLE ETKİLEMEZ (test: her üçünün
+  de sayısı 0 kalır).
+- Silme/iptal UCU YOKTUR (route/policy/servis hiçbiri tanımlamaz) —
+  "do not hard-delete issued receipts" kuralı, silme YETENEĞİNİN kendisini
+  hiç AÇMAYARAK trivially sağlanır (§3.2 ilkesi: kullanılmayan kolon/uç
+  açılmaz).
+- Giriş UX'i Kasa Hareketi dialog'unun (K-098) AYNI deseni: "Yeni Makbuz"
+  native `<dialog>` açar, içerik `$request->ajax()` ile fragment olarak
+  gelir, doğrulama hatası HER ZAMAN standalone `receipt-book.create`
+  sayfasına yönlendirilir (Referer'a güvenilmez).
+  Yazdırma (`receipt-book::print`) `layouts.print`i genişletir, iki sütunlu
+  başlık (şirket bilgisi sol / "TAHSİLAT MAKBUZU" sağ) — verilen referans
+  görsele yakın, `config('hotel.company.*')`'ı (K-096 ile AYNI kaynak)
+  kullanır, Blade'e hardcode EDİLMEZ.
+- Yetkiler: `receipt_book.view` (liste + görüntüle/yazdır — `payments.view`
+  ile AYNI birleşik desen), `receipt_book.create`. Personel de ikisine de
+  sahiptir — `payments.create` ile AYNI operasyonel seviye (§9).
+- Sidebar: "Cari" grubunda **"TAHSİLAT MAKBUZLARI"**, "Tahsilatlar"dan
+  hemen sonra ama görsel/metinsel olarak AÇIKÇA AYRI bir satır.
+
+**Test:** `tests/Unit/MoneyTest.php` (kur çarpımı: örnek değer, yuvarlama,
+sınır durumları), `tests/Feature/Core/ExchangeRateTest.php` (TRY/yabancı
+zorunluluk, hesap doğruluğu, ledger orijinal para biriminde kalır, kur
+zamanla değişmez), `tests/Feature/Core/HistoricalFxCorrectionTest.php`
+(kuyruk, tek seferlik düzeltme, ikinci düzeltme reddi, yetki matrisi),
+`tests/Feature/ReceiptBook/ReceiptBookTest.php` (muhasebe yan etkisi YOK,
+numaralandırma, yazdırma, yetki). `RolePermissionMatrixTest` yeni yetkilerle
+güncellendi. Gerçek Playwright QA'sı ile de doğrulandı — yukarıdaki
+"nullable" böceği TAM OLARAK bu turda, gerçek tarayıcı gönderimiyle
+YAKALANDI.
+
+**Kapsam:** `bcmath`/canlı kur servisi/otomatik güncelleme YOK. Mevcut
+`ledger_entries`/`Payment.IMMUTABLE_FIELDS` mimarisine HİÇ DOKUNULMADI.
+Migration'lar artımlı ve production-güvenlidir (`down()` yazılı, yeni
+tablolar/kolonlar nullable, mevcut veriyi ETKİLEMEZ).
+
+**Etkilenen dosyalar:** `app/Modules/Core/Support/Money.php`
+(`multiplyByRate()`), `app/Modules/Stays/*`, `app/Modules/Payments/*`
+(Model/Service/Request/view'lar), yeni `app/Modules/FxCorrection/*`, yeni
+`app/Modules/ReceiptBook/*`, `app/Modules/Authorization/Enums/{Permission,
+RoleName}.php`, `app/Modules/AuditLog/Enums/AuditEvent.php`,
+`app/Providers/AppServiceProvider.php` (morph map), `bootstrap/providers.php`,
+`resources/views/components/ui/fx-note.blade.php`, `resources/views/
+partials/sidebar.blade.php`, `resources/js/app.js`, ilgili testler,
+`CLAUDE.md`.
+
+## K-105 · v2.1.1-D: Finans varsayılan pano görünümü, kenar çubuğu grupları, döviz TL karşılığı her yerde
+
+**Bağlam:** Kullanıcı kullanımda üç somut sorun/istek bildirdi:
+
+1. Ana sayfa varsayılan olarak Operasyon görünümünü açıyordu; kullanıcı
+   Finans'ın önce gelmesini istedi.
+2. Kenar çubuğundaki Kasa/Cari/Yönetim grupları her zaman açık ve düzsüz
+   duruyordu; kullanıcı koyu renk, tıklanabilir, VARSAYILAN KAPALI başlıklar
+   istedi — aktif sayfanın grubu açık kalmalı, başka gruba geçilene kadar
+   kapanmamalı. Ayrıca gerçek bir bug bildirildi: Kasa Hareketleri veya Devir
+   Geçmişi sayfasındayken kenar çubuğunda hâlâ "Kasa Defteri" seçili
+   görünüyordu.
+3. Cari ekstrede yabancı para birimli bakiyenin altında küçük yazıyla TL
+   karşılığının görünmesini, bunun sistemin HER YERİNDE (döviz cinsi
+   gösterilen her alanda) uygulanmasını istedi.
+
+Hiçbiri §3.2'nin yasaklı listesiyle çelişmiyordu (kur servisi/otomatik
+güncelleme DEĞİL, yalnızca ZATEN v2.1.1-C'de saklanan `try_equivalent`
+anlık görüntüsünün EKRANDA daha çok yerde gösterilmesi) — bu yüzden onay
+sorulmadan doğrudan uygulandı.
+
+### Karar 1 — Pano varsayılanı Finans
+
+`DashboardController`'daki dal seçimi tersine çevrildi:
+`?view=operations` AÇIKÇA istenmedikçe `finance` gösterilir (önceki
+davranışın TAM TERSİ). CLAUDE.md §8/Dashboard güncellendi. Tüm ilgili
+testler (`DashboardTest`, `CashBookScreenTest`) `route('home', ['view' =>
+'operations'])` kullanacak şekilde güncellendi; yeni bir test
+(`admin_ve_patron_operasyon_gorunumunu_view_parametresiyle_gorur`) eklendi.
+
+### Karar 2 — Kenar çubuğu: koyu, tıklanabilir, varsayılan kapalı gruplar + bug düzeltmesi
+
+**Bug'un kök nedeni:** `sidebar-link.blade.php` her linkin kendi `$patterns`
+dizisini taşıyordu ve `cashbook.index` (Kasa Defteri) girdisi yanlışlıkla
+kardeş rotaların (`cashbook.movements.*`, `cashbook.transfers.*`) desenlerini
+de içeriyordu — bu yüzden Kasa Hareketleri/Devir Geçmişi sayfaları da Kasa
+Defteri'nin kendi `aria-current` kontrolünü tetikliyordu. Düzeltme: desen
+haritası `sidebar.blade.php`'ye TAŞINDI ve merkezileştirildi (Blade
+`@include` içinde tanımlanan değişken üst kapsama sızmaz, bu yüzden
+merkezileştirme kopyalamayı da önledi), her rotaya KENDİ, ÇAKIŞMAYAN deseni
+verildi; eksik olan `receipt-book.index`, `rooms.index`,
+`cashbook.categories.index`, `fx-correction.index` desenleri de eklendi.
+
+**Gruplar:** Alpine.js KURULU DEĞİLDİR (CLAUDE.md §11.7) — bu yüzden native
+`<details>`/`<summary>` kullanıldı, `open` durumu SUNUCU tarafında
+(`$groupActive = collect($group['items'])->contains(...)`) hesaplanıyor.
+Bu, ayrı bir istemci-taraflı durum makinesi olmadan "aktif sayfanın grubu
+açık kalır, başka gruba geçilene kadar kapanmaz" davranışını BEDAVA verir —
+her sayfa yüklemesi kendi doğru `open` durumunu sunucudan getirir. CSS'e
+(`app.css`) `.nav-group`/`.nav-group-chevron` eklendi (dönen ok ikonu).
+
+**Testler:** `DesignSystemTest`'e dört yeni test eklendi:
+`kasa_hareketlerinde_yalniz_kendi_menu_ogesi_aktif_olur`,
+`devir_gecmisinde_yalniz_kendi_menu_ogesi_aktif_olur` (regex tabanlı
+`aria-current` doğrulaması), `aktif_sayfanin_grubu_acik_baslar_digerleri_kapali_kalir`,
+`baska_gruba_gecince_onceki_grup_kapanir`. Gerçek Playwright QA'sı ile de
+görsel olarak doğrulandı.
+
+### Karar 3 — Döviz TL karşılığı: tekil kayıt vs. TOPLAM/bakiye ayrımı
+
+`fx-note` bileşeni v2.1.1-C'de yalnızca TEK bir Stay/Payment kaydının
+(`rate` + `equivalent`) altında kullanılıyordu. Bu turda kullanıcı **bir
+BAKİYENİN** (birden çok kaydın NET toplamı) altında da TL karşılığı istedi
+— ama bir bakiyenin TEK bir kuru YOKTUR (her katkı sağlayan kayıt kendi
+anlık görüntüsünü taşır). İki teknik ayrı senaryolar için seçildi:
+
+1. **Zincir tekniği** (tek firma, satır + yürüyen bakiye detayı gerekir):
+   `StatementController::tlEquivalents()` firmanın TAM, FİLTRESİZ ekstresini
+   (`LedgerStatementService::forCompany($id, new StatementCriteria)`) İKİNCİ
+   kez, kronolojik sırada çeker — tıpkı `runningBalance`'ın kendisi gibi
+   kullanıcının tarih/tür/arama filtrelerinden TAMAMEN BAĞIMSIZDIR. Her
+   satırın kaynak Stay/Payment'ının GÜNCEL `try_equivalent`i toplu sorguyla
+   (`exchangeRateSnapshotsFor()`) çekilir, işaretli (`isDebit()`) olarak
+   biriktirilir.
+
+   **Matematik ispatı:** bir ters kayıt AYNI `source_id`yi taşır ve yönü
+   ters çevrilir (§6/L8) — bu yüzden eski bir borç + onun ters kaydı, HANGİ
+   `try_equivalent` değeri kullanılırsa kullanılsın her zaman TAM SIFIRA
+   iner (ikisi de AYNI kaynağın AYNI güncel değerini okur, yalnızca işaret
+   ters). Bu yüzden `ledger_entries`'e YENİ bir kur sütunu eklemeye HİÇ
+   gerek yoktur — kaynağın GÜNCEL `try_equivalent`i her zaman doğru sonucu
+   verir.
+
+2. **Doğrudan toplu-toplam tekniği** (çok firma / sistem çapında, yalnızca
+   toplam gerekir, satır detayı GEREKMEZ): `SUM(try_equivalent) FROM stays
+   WHERE status='active' AND currency<>'TRY' GROUP BY company_id, currency`
+   eksi `payments`'ın aynısı. AYNI iptal-çifti-sıfıra-iner özelliği sayesinde
+   zincir tekniğiyle MATEMATİKSEL OLARAK ÖZDEŞ sonuç verir ama çok daha
+   ucuzdur (N firma için N ledger-yürüyüşü yerine 2 toplu sorgu). Firma
+   Bakiye Listesi (`StatementController::companyFxTotals()`), Dashboard'ın
+   "Açık alacak" kartı (`StayService::systemWideExchangeRateDebitTotalsByCurrency()`
+   + `PaymentService`'in eşleniği) ve "En yüksek bakiyeli firmalar" paneli
+   bu tekniği kullanır.
+
+**Dürüstlük ilkesi** (K-104'teki `Payment::amountInWords()` kararıyla AYNI):
+katkı sağlayan HERHANGİ bir kaynağın kuru eksikse (bu turdan önceki,
+düzeltilmemiş kayıt), o para biriminin TL rakamı YA hiç gösterilmez YA DA
+"eksik veri" notuyla işaretlenir — sessizce yanlış bir toplam ÜRETİLMEZ.
+
+**Kapsanan ekranlar:** Cari Ekstre (tablo + mobil kart + özet kartı +
+devreden bakiye + yazdırma), Firma Bakiye Listesi, Firma Kartı'nın "Cari
+bakiye" widget'ı VE "Konaklamalar"/"Tahsilatlar" mini listeleri, Dashboard
+Finans görünümünün "Net bakiye" kartı + "En yüksek bakiyeli firmalar" +
+"Son tahsilatlar" + "Yaklaşan konaklamalar" panelleri. Kapsam dışı
+BIRAKILAN (bilerek): Kasa Defteri (fiziksel kasa TRY-yalnızca bir kavram
+değildir ama kasa hareketleri zaten kendi para biriminde tutuluyor ve yeni
+şema/migration istemeyen bir tur için kapsam dışı tutuldu).
+
+**Bulunan ve düzeltilen regresyon:** `fx-note.blade.php`'nin üst açıklama
+yorumu İÇİNDE (`{{-- ... --}}`) ikinci bir `{{-- toplam/bakiye --}}` yorumu
+AÇILMIŞTI. Blade yorumları İÇ İÇE geçemez — normal ifadesi non-greedy
+olduğu için İLK `--}}`'de kapanır, bu da dosyanın GERÇEK kapanışının
+(15. satır) HTML'e DÜZ METİN olarak sızmasına yol açtı. Bu, `fx-note`
+bileşeninin KULLANILDIĞI HER EKRANDA (Payments, Stays, ReceiptBook dahil)
+"--}}" metninin görünmesine neden olacaktı — gerçek tarayıcı QA'sında
+(Playwright ekran görüntüsü) YAKALANDI, otomatik testler (assertSee alt
+dize eşleşmesi) bunu KAÇIRDI çünkü aranan TL rakamı metni yine de sayfada
+mevcuttu. Ders: yorum metnini iç içe AÇMA, parantez içi örnek kullanımları
+düz metinle yaz.
+
+**Sorgu bütçesi güncellemesi:** Dashboard Finans görünümünün sorgu üst
+sınırı 15'ten 17'ye çıkarıldı (2 sistem çapında TL toplamı + 2 en yüksek
+bakiyeli firma TL toplamı, kayıt sayısıyla BÜYÜMEYEN sabit ek). CLAUDE.md
+§8/Dashboard ve `DashboardTest::finans_gorunumu_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez`
+güncellendi.
+
+**Yeni testler:** `tests/Feature/Statements/StatementFxDisplayTest.php` (9
+test — tekil hareket TL karşılığı, kapanış bakiyesi net hesabı, iptalin
+sıfıra inişi, devreden bakiye, eksik kur uyarısı, firma bakiye listesi,
+firma detayı, dashboard net bakiye, TRY'de hiç TL notu gösterilmemesi).
+
+**Kapsam:** Yeni tablo/kolon/migration YOK — yalnızca v2.1.1-C'de zaten
+saklanan `try_equivalent` alanının okunduğu yer/biçim genişledi. Kur
+servisi, TCMB entegrasyonu, otomatik güncelleme HÂLÂ kapsam dışıdır (§3.2).
+
+**Etkilenen dosyalar:** `app/Modules/Dashboard/Http/Controllers/
+DashboardController.php`, `app/Modules/Dashboard/Services/
+DashboardService.php`, `app/Modules/Dashboard/Support/{CurrencyTotals,
+CompanyBalanceRow}.php`, `app/Modules/Dashboard/Resources/views/
+finance.blade.php`, `app/Modules/Stays/Services/StayService.php`,
+`app/Modules/Payments/Services/PaymentService.php`, `app/Modules/
+Companies/Http/Controllers/{StatementController,CompanyController}.php`,
+`app/Modules/Companies/Resources/views/{show,statements/*}.blade.php`,
+`resources/views/components/ui/fx-note.blade.php`, `resources/views/
+layouts/print.blade.php`, `resources/views/partials/{sidebar,
+sidebar-link}.blade.php`, `resources/css/app.css`, ilgili testler,
+`CLAUDE.md`.

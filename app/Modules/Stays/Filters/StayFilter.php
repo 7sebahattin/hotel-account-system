@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Stays\Filters;
+
+use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Stays\Enums\StayStatus;
+use Illuminate\Database\Eloquent\Builder;
+
+class StayFilter extends QueryFilter
+{
+    /**
+     * @return array<int, string>
+     */
+    protected function searchable(): array
+    {
+        return ['guest_name', 'room_no'];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function sortable(): array
+    {
+        return ['check_in_date', 'check_out_date', 'guest_name', 'amount', 'nights', 'created_at'];
+    }
+
+    protected function defaultSort(): string
+    {
+        return 'check_in_date';
+    }
+
+    /**
+     * Temel arama `stays` kolonlarıyla sınırlıdır; firma adı ayrı bir
+     * tablodadır (kullanıcı talimatı Gün 12 §4). Aynı Türkçe katlama
+     * mantığı (`turkishFoldColumnExpression()`) `whereHas` içinde de
+     * kullanılır — SQL metni tekrar yazılmaz.
+     */
+    protected function applySearch(Builder $query): void
+    {
+        $term = trim((string) $this->request->query('q', ''));
+
+        if ($term === '') {
+            return;
+        }
+
+        $pattern = $this->searchPattern();
+
+        $query->where(function (Builder $inner) use ($pattern): void {
+            foreach ($this->searchable() as $column) {
+                $inner->orWhereRaw($this->turkishFoldColumnExpression($column).' LIKE ?', [$pattern]);
+            }
+
+            $inner->orWhereHas('company', function (Builder $companyQuery) use ($pattern): void {
+                $companyQuery->whereRaw($this->turkishFoldColumnExpression('name').' LIKE ?', [$pattern]);
+            });
+
+            // Oda Registry (K-100): yeni kayıtlarda `room_no` boş kalır, oda
+            // bilgisi `rooms.room_no` üzerindendir — arama bunu da kapsar.
+            $inner->orWhereHas('room', function (Builder $roomQuery) use ($pattern): void {
+                $roomQuery->whereRaw($this->turkishFoldColumnExpression('room_no').' LIKE ?', [$pattern]);
+            });
+        });
+    }
+
+    /** Liste varsayılanı en yeni konaklama üstte. */
+    public function currentDirection(): string
+    {
+        return strtolower((string) $this->request->query('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+    }
+
+    protected function applySort(Builder $query): void
+    {
+        $sort = (string) $this->request->query('sort', $this->defaultSort());
+
+        if (! in_array($sort, $this->sortable(), true)) {
+            $sort = $this->defaultSort();
+        }
+
+        $query->orderBy($sort, $this->currentDirection())->orderByDesc('id');
+    }
+
+    protected function applyFilters(Builder $query): void
+    {
+        if ($this->request->filled('company_id')) {
+            $query->where('company_id', $this->request->integer('company_id'));
+        }
+
+        // Tarih aralığı giriş tarihi üzerinden uygulanır.
+        if ($this->request->filled('date_from')) {
+            $query->whereDate('check_in_date', '>=', $this->request->date('date_from'));
+        }
+
+        if ($this->request->filled('date_to')) {
+            $query->whereDate('check_in_date', '<=', $this->request->date('date_to'));
+        }
+
+        $currency = (string) $this->request->query('currency', '');
+
+        if (Currency::tryFrom($currency) !== null) {
+            $query->where('currency', $currency);
+        }
+
+        $status = (string) $this->request->query('status', '');
+
+        if (StayStatus::tryFrom($status) !== null) {
+            $query->where('status', $status);
+        }
+    }
+}

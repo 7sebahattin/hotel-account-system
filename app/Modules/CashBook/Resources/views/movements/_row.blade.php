@@ -1,0 +1,77 @@
+{{--
+    Tek kasa hareketi satırı — mobilde de okunaklı olsun diye tablo değil liste.
+
+    Yön yalnızca RENKLE anlatılmaz: tutarın önünde + / − işareti ve tür etiketi
+    her zaman metin olarak vardır (CLAUDE.md §11.6, renk körlüğü).
+--}}
+<div @class(['px-4 py-3', 'border-t border-line' => ! $loop->first])>
+    <div class="flex items-baseline justify-between gap-3">
+        <span class="min-w-0 truncate text-sm text-tx">{{ $movement->label() }}</span>
+
+        <span @class([
+            'shrink-0 text-sm font-medium tabular-nums',
+            'text-credit' => $movement->isIn(),
+            'text-debit' => ! $movement->isIn(),
+        ])>
+            {{ $movement->isIn() ? '+' : '−' }}{{ $movement->amountMoney()->format($movement->currency) }}
+        </span>
+    </div>
+
+    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mut">
+        {{-- Tarih yalnızca çapraz-vardiya listelerinde gösterilir; tek vardiya
+             ekranında zaten bağlamdan bellidir (yalnızca saat yeterlidir). --}}
+        <span class="tabular-nums">{{ $movement->entry_at->format(($showOwner ?? false) ? 'd.m.Y H:i' : 'H:i') }}</span>
+
+        {{-- Çapraz-vardiya listelerinde (Gün 12) kimin hareketi olduğu görünür. --}}
+        @if (($showOwner ?? false) && $movement->creator)
+            <span aria-hidden="true">·</span>
+            <span class="truncate">{{ $movement->creator->name }}</span>
+        @endif
+
+        @if ($movement->is_reversal)
+            <x-ui.badge tone="danger">Ters kayıt</x-ui.badge>
+        @endif
+
+        @if ($movement->counterparty)
+            <span aria-hidden="true">·</span>
+            <span class="truncate">{{ $movement->counterparty }}</span>
+        @endif
+
+        @if ($movement->description)
+            <span aria-hidden="true">·</span>
+            {{--
+                Kaynağa bağlı hareket (v2.1.1-B §17): CashBook, Payments'ı
+                TANIMAZ (CLAUDE.md §4.3/3) — `reference_type === 'payment'`
+                iken bağlantı yalnızca route ADI ile kurulur, hiçbir Payments
+                sınıfı import edilmez/sorgulanmaz. Görünen metin ham DB id
+                değil, açıklamadır (makbuz no zaten içinde geçer).
+            --}}
+            @if ($movement->reference_type === 'payment')
+                <a href="{{ route('payments.show', $movement->reference_id) }}"
+                   class="truncate text-acc-tx underline underline-offset-2 hover:text-tx">
+                    → {{ $movement->description }}
+                </a>
+            @else
+                <span class="truncate">{{ $movement->description }}</span>
+            @endif
+        @endif
+
+        @if (($canReverse ?? false) && ! $movement->is_reversal)
+            @can('reverse', $movement)
+                <form method="POST" action="{{ route('cashbook.movements.reverse', $movement) }}" class="ml-auto">
+                    @csrf
+                    @method('PATCH')
+                    {{--
+                        Silme değil, TERS KAYIT: onay metni bunu açıkça söyler ki
+                        kullanıcı "kayıt kaybolacak" sanmasın.
+                    --}}
+                    <button type="submit"
+                            class="inline-flex min-h-11 items-center rounded px-2 text-xs text-acc-tx underline underline-offset-2 hover:text-tx"
+                            onclick="return confirm('Bu hareket ters kayıtla iptal edilsin mi? Orijinal kayıt defterde kalır.')">
+                        İptal et
+                    </button>
+                </form>
+            @endcan
+        @endif
+    </div>
+</div>

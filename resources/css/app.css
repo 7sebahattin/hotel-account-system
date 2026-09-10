@@ -1,0 +1,260 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../../app/Modules/**/Resources/views/**/*.blade.php';
+
+/*
+|--------------------------------------------------------------------------
+| Tasarım token'ları — tek kaynak
+|--------------------------------------------------------------------------
+|
+| Bu uygulamanın TEK teması açık temadır: koyu tema, tema değiştirici veya
+| kullanıcı tema tercihi yoktur. Kenar çubuğu koyu lacivert bir yüzeydir;
+| bu bir "koyu tema" değil, tek bir bileşenin kendi paletidir.
+|
+| Buradaki her değer Tailwind yardımcı sınıfı üretir: bg-bg, bg-card,
+| border-line, text-tx, text-mut, bg-acc, text-success, bg-nav ...
+|
+| Blade içinde HAM HEX YAZILMAZ. Bir renge ihtiyaç varsa önce buraya token
+| eklenir. Aşağıdaki kontrast ölçümleri WCAG 2.1 formülüyle hesaplanmıştır.
+*/
+@theme {
+    /* --- Yüzeyler ------------------------------------------------------ */
+    --color-bg: #f7f7f5; /* sayfa zemini */
+    --color-card: #ffffff; /* kart / tablo zemini */
+    --color-line: #e5e4e0; /* ayraç ve kart sınırı (dekoratif, 1.4.11 muaf) */
+
+    /*
+        Çukur alan: tablo başlık şeridi, ikincil buton zemini, salt okunur kutu.
+
+        KULLANIM KURALI: bu zemin üzerine `text-mut` YAZILMAZ — #6B7280 ile
+        oranı 4.24 kalır ve 4.5 eşiğini geçmez. Çukur alanlarda `text-tx`
+        kullanılır (12.87). Ölçüldü.
+    */
+    --color-well: #f1f0ec;
+
+    /* --- Metin --------------------------------------------------------- */
+    --color-tx: #1f2937; /* kart 14.68 · sayfa 13.68 */
+    --color-mut: #6b7280; /* kart  4.83 · sayfa  4.51 */
+
+    /* --- Vurgu (sıcak altın) ------------------------------------------- */
+    /*
+        Altın DOLGU rengidir, metin rengi değildir: #C8A96B beyaz üzerinde
+        yalnızca 2.25 verir. Bu yüzden üç ayrı token vardır ve hangisinin
+        nerede kullanılacağı bağlayıcıdır.
+    */
+    --color-acc: #c8a96b; /* dolgu: birincil buton, aktif şerit */
+    --color-acc-strong: #b08f52; /* dolgunun hover/active hâli */
+    --color-acc-tx: #8a6a2f; /* METİN ve odak halkası olarak altın (kart 5.02) */
+    --color-acc-bg: #faf6ee; /* altın rozet/işaret zemini */
+    --color-on-acc: #1f2937; /* altın dolgu ÜZERİNDEKİ metin (6.53) */
+
+    /* --- Kenar çubuğu (kendi paleti olan koyu yüzey) -------------------- */
+    --color-nav: #172033;
+    --color-nav-well: #22304a; /* aktif menü zemini */
+    --color-nav-line: #2b3752;
+    --color-nav-tx: #e8e6e1; /* nav üzerinde 13.04 */
+    --color-nav-mut: #9aa3b2; /* nav üzerinde  6.40 */
+
+    /*
+        Form kontrolü sınırı — YALNIZCA input/select/textarea ve ikincil buton.
+
+        WCAG 1.4.11 arayüz bileşeni sınırları için 3:1 ister. --line (#E5E4E0)
+        kart üzerinde 1.27 kalır: ayraç olarak doğru, kontrol sınırı olarak
+        yetersiz. Bu token kart üzerinde 3.47, sayfa üzerinde 3.23 verir.
+    */
+    --color-field: #8a8a85;
+
+    /* --- Durum renkleri ------------------------------------------------- */
+    --color-success: #15803d; /* kart 5.02 */
+    --color-danger: #b91c1c; /* kart 6.47 */
+    --color-success-bg: #ecfdf5; /* metinle 4.76 */
+    --color-danger-bg: #fef2f2; /* metinle 5.91 */
+    --color-info-bg: #eff6ff;
+
+    /*
+        Cari yön renkleri. Kırmızı BİLEREK kullanılmaz: kırmızı bu uygulamada
+        "iptal / tehlike" demektir; borç hatalı bir durum değildir.
+        Renk tek başına anlam taşımaz — her tutar ayrıca "Borç"/"Alacak"
+        etiketiyle veya kendi kolonunda gösterilir (CLAUDE.md §11.6).
+    */
+    --color-debit: #b45309; /* Borç — kart 5.02 */
+    --color-credit: #15803d; /* Alacak — kart 5.02 */
+
+    /*
+        Sistem font yığını: derleme anında veya tarayıcıda hiçbir dış servise
+        (Google/Bunny Fonts) istek atılmaz. CI ve cPanel deploy'u ağdan bağımsız kalır.
+    */
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+        Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
+}
+
+/* Spesifikasyondaki kısa adlar; ham CSS'te kullanmak için Tailwind token'larına bağlı. */
+:root {
+    --bg: var(--color-bg);
+    --card: var(--color-card);
+    --line: var(--color-line);
+    --tx: var(--color-tx);
+    --mut: var(--color-mut);
+    --acc: var(--color-acc);
+    --acc-tx: var(--color-acc-tx);
+    --well: var(--color-well);
+    --field: var(--color-field);
+    --nav: var(--color-nav);
+    --success: var(--color-success);
+    --danger: var(--color-danger);
+    --success-bg: var(--color-success-bg);
+    --danger-bg: var(--color-danger-bg);
+    --debit: var(--color-debit);
+    --credit: var(--color-credit);
+}
+
+@layer base {
+    html {
+        /* Tarayıcı kaydırma çubuğu ve form kontrolleri de açık tema kullansın. */
+        color-scheme: light;
+    }
+
+    body {
+        background-color: var(--color-bg);
+        color: var(--color-tx);
+        font-size: 15px;
+        line-height: 1.5;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    /*
+        Form kontrollerinde en az 16px: iOS Safari 16px altındaki alanlara
+        odaklanınca sayfayı otomatik yakınlaştırır.
+    */
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
+
+    /*
+        Klavye ile gezinmede odak her zaman görünür olmalı. Halka rengi
+        --acc değil --acc-tx: açık zeminde altın dolgu 1.4.11'in 3:1
+        eşiğini geçmez, koyu altın 4.68 verir.
+    */
+    :focus-visible {
+        outline: 2px solid var(--color-acc-tx);
+        outline-offset: 2px;
+    }
+
+    ::placeholder {
+        color: var(--color-mut);
+    }
+}
+
+@layer components {
+    /*
+        Kenar çubuğu koyu bir ada olduğu için odak halkası orada altın dolgu
+        rengini kullanır (nav üzerinde 7.24); koyu altın koyu zeminde kaybolurdu.
+    */
+    .nav-surface :focus-visible {
+        outline-color: var(--color-acc);
+    }
+
+    /*
+        Kasa Hareketi modal/sheet'i (v2.1.1-B.1 §2/§3).
+
+        Native <dialog>, `showModal()` ile açıldığında tarayıcının ÜST
+        KATMANINDA (top layer) render edilir — bu yüzden z-index yarışına
+        girmesi gerekmez; alt gezinme çubuğunun (`z-20`) ya da kenar çubuğu
+        çekmecesinin (`z-40`) HER ZAMAN üzerinde kalır, ayrıca bir z-index
+        değeri VERİLMEZ.
+
+        Masaüstü: ortalanmış, sınırlı genişlikte bir modal. Mobil (`md`
+        altı): alt kenara sabitlenmiş, yalnızca üst köşeleri yuvarlak bir
+        sayfa (bottom sheet) — masaüstü boyutundaki bir modal telefon
+        ekranına SIKIŞTIRILMAZ (kullanıcı talimatı §3).
+    */
+    .cash-dialog {
+        /*
+            `margin: auto` BURADA AÇIKÇA yazılmalıdır. Tarayıcının kendi
+            `<dialog>` UA stili normalde `showModal()` açıldığında
+            `margin: auto` ile ortalar — AMA Tailwind'in preflight sıfırlaması
+            (`@layer base`) `*, ::before, ::after { margin: 0 }` uygular ve
+            AUTHOR katmanı UA stilinden her zaman önceliklidir (katman sırası
+            değil, KAYNAK önceliği: author > user-agent). Sonuç: `margin`i
+            burada belirtmeden bırakmak dialogu masaüstünde sol üst köşeye
+            yapıştırır — bu, ilk QA turunda GERÇEK tarayıcıda yakalanan bir
+            hataydı. Mobil kural (aşağıda) `margin: 0`'ı KASITLI olarak alt
+            kenara sabitlemek için ayrıca tanımlar.
+        */
+        margin: auto;
+        padding: 0;
+        border: none;
+        border-radius: 0.75rem;
+        width: min(28rem, calc(100vw - 2rem));
+        max-height: min(34rem, calc(100vh - 4rem));
+        background: var(--color-card);
+        color: var(--color-tx);
+        overflow-y: auto;
+    }
+
+    .cash-dialog::backdrop {
+        background: var(--color-nav);
+        opacity: 0.6;
+    }
+
+    @media (max-width: 767px) {
+        .cash-dialog {
+            position: fixed;
+            inset: auto 0 0 0;
+            margin: 0;
+            width: 100%;
+            max-width: none;
+            max-height: min(88vh, calc(100vh - 2rem));
+            border-radius: 1rem 1rem 0 0;
+            /* iPhone alt çentiği — bottom-nav ile AYNI desen. */
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    }
+
+    /*
+        PWA standalone modu (kurulu uygulama, mobil temizlik turu): sayfa
+        artık tarayıcı çubuğu OLMADAN tam ekran render edilir, bu yüzden
+        cihazın durum çubuğu/çentik alanı BAŞKA hiçbir şey tarafından telafi
+        edilmez. Normal sekme modunda (`browser`) tarayıcının kendi arayüzü
+        bu alanı zaten ayırdığı için `env(safe-area-inset-top)` orada 0
+        döner — bu yüzden kural yalnızca `standalone` modda uygulanır,
+        normal tarayıcıda mobil üst çubuğu gereksiz yere büyütmez.
+    */
+    @media (display-mode: standalone) {
+        .pwa-safe-top {
+            padding-top: env(safe-area-inset-top);
+            height: calc(3rem + env(safe-area-inset-top));
+        }
+    }
+
+    /*
+        Kenar çubuğu Kasa/Cari/Yönetim başlıkları — native <details>/<summary>
+        (Alpine.js kurulu DEĞİLDİR, CLAUDE.md §11.7). Tarayıcının kendi
+        açma/kapama üçgeni (Chrome'da ::-webkit-details-marker, Firefox'ta
+        list-style marker) yerine kendi ok ikonumuzu kullanıyoruz; bu yüzden
+        ikisi de bilerek gizlenir. Ok ikonu `<details open>` durumunda CSS
+        ile döner — sunucu her sayfa yüklemesinde `open` özniteliğini doğru
+        hesapladığı için (aktif grup açık başlar), JS'e gerek yoktur; kullanıcı
+        elle açıp kapadığında da tarayıcının kendi native durumu ile senkron
+        kalır.
+    */
+    .nav-group > summary {
+        list-style: none;
+    }
+
+    .nav-group > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .nav-group-chevron {
+        transition: transform 150ms ease;
+    }
+
+    .nav-group[open] > summary .nav-group-chevron {
+        transform: rotate(180deg);
+    }
+}

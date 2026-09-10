@@ -1,0 +1,79 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Core\Providers;
+
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ServiceProvider;
+use ReflectionClass;
+
+/**
+ * Tüm modül ServiceProvider'larının ortak tabanı.
+ *
+ * Modül klasöründe hangi dizinler varsa onları otomatik kaydeder; olmayan
+ * dizin için hiçbir şey yapmaz. Böylece her modül yalnızca gerçekten
+ * ihtiyaç duyduğu klasörü açar (CLAUDE.md §4.1).
+ *
+ * Beklenen modül düzeni:
+ *   Config/<namespace>.php      -> config('<namespace>.*')
+ *   Database/Migrations/        -> otomatik yüklenir
+ *   Resources/views/            -> view('<namespace>::...')
+ *   Resources/lang/             -> __('<namespace>::...')
+ *   Routes/web.php              -> 'web' middleware grubu içinde
+ */
+abstract class ModuleServiceProvider extends ServiceProvider
+{
+    /** Modülün view / çeviri / config namespace'i. Örn: 'auth' */
+    protected string $namespace;
+
+    /**
+     * Model => Policy eşlemesi (CLAUDE.md §7.1: yetki kararı yalnızca Policy'de).
+     *
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [];
+
+    private ?string $modulePath = null;
+
+    public function register(): void
+    {
+        $config = $this->path('Config/'.$this->namespace.'.php');
+
+        if (is_file($config)) {
+            $this->mergeConfigFrom($config, $this->namespace);
+        }
+    }
+
+    public function boot(): void
+    {
+        if (is_dir($views = $this->path('Resources/views'))) {
+            $this->loadViewsFrom($views, $this->namespace);
+        }
+
+        if (is_dir($lang = $this->path('Resources/lang'))) {
+            $this->loadTranslationsFrom($lang, $this->namespace);
+        }
+
+        if (is_dir($migrations = $this->path('Database/Migrations'))) {
+            $this->loadMigrationsFrom($migrations);
+        }
+
+        foreach ($this->policies as $model => $policy) {
+            Gate::policy($model, $policy);
+        }
+
+        if (is_file($routes = $this->path('Routes/web.php'))) {
+            Route::middleware('web')->group($routes);
+        }
+    }
+
+    /** Modül kökünden göreli yol. Provider Providers/ altında olduğu için iki seviye yukarı. */
+    protected function path(string $relative = ''): string
+    {
+        $this->modulePath ??= dirname((new ReflectionClass($this))->getFileName(), 2);
+
+        return $relative === '' ? $this->modulePath : $this->modulePath.'/'.$relative;
+    }
+}

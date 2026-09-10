@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pint + Testler
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        # Testler SQLite'ta değil gerçek MySQL'de koşar (bkz. phpunit.xml).
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: hotel_account_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Üretim runtime'ı PHP 8.3'tür (CLAUDE.md §2). Testler hedef sürümde koşar;
+      # daha yeni bir sürümde test etmek, sunucuda çalışmayan kodu yeşil gösterir.
+      - name: PHP kurulumu
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_mysql, intl, zip, gd, xml, ctype, fileinfo
+          coverage: none
+
+      - name: Composer bağımlılıkları
+        uses: ramsey/composer-install@v3
+
+      # Kilitlenen bağımlılıkların tamamı hedef PHP sürümünde çalışabiliyor mu?
+      - name: Hedef PHP sürümü uyumluluğu
+        run: composer check-platform-reqs
+
+      - name: Node kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: npm bağımlılıkları
+        run: npm ci
+
+      - name: Frontend derlemesi
+        run: npm run build
+
+      - name: Ortam hazırlığı
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Test veritabanı collation
+        run: |
+          mysql -h 127.0.0.1 -u root -e "
+            ALTER DATABASE hotel_account_test
+            CHARACTER SET utf8mb4 COLLATE utf8mb4_turkish_ci;"
+
+      - name: Kod formatı (Pint)
+        run: ./vendor/bin/pint --test
+
+      - name: Statik analiz (PHPStan / Larastan level 5)
+        run: ./vendor/bin/phpstan analyse --no-progress --error-format=github
+
+      - name: Testler
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: hotel_account_test
+          DB_USERNAME: root
+          DB_PASSWORD: ''
+        run: php artisan test
