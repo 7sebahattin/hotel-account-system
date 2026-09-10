@@ -65,6 +65,91 @@ class DesignSystemTest extends TestCase
             ->assertSee('aria-current="page"', false);
     }
 
+    /**
+     * Kullanıcı bildirimi: "Kasa Hareketleri"/"Devir Geçmişi"'ndeyken "Kasa
+     * Defteri" de yanlışlıkla aktif görünüyordu — `sidebar-link.blade.php`'nin
+     * eski deseni `cashbook.index`i `cashbook.movements.*`/`cashbook.
+     * transfers.*`yi de kapsayacak biçimde tanımlıyordu. Her rota artık
+     * YALNIZCA kendi sayfasında `aria-current` taşır.
+     */
+    #[Test]
+    public function kasa_hareketlerinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.movements.index'))
+            ->getContent();
+
+        $this->assertLinkActive($html, route('cashbook.movements.index'), true);
+        $this->assertLinkActive($html, route('cashbook.index'), false);
+        $this->assertLinkActive($html, route('cashbook.transfers.index'), false);
+    }
+
+    #[Test]
+    public function devir_gecmisinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.transfers.index'))
+            ->getContent();
+
+        $this->assertLinkActive($html, route('cashbook.transfers.index'), true);
+        $this->assertLinkActive($html, route('cashbook.index'), false);
+        $this->assertLinkActive($html, route('cashbook.movements.index'), false);
+    }
+
+    /** Bir <a href="…">…</a> bloğunun `aria-current="page"` taşıyıp taşımadığını doğrular. */
+    private function assertLinkActive(string $html, string $href, bool $expected): void
+    {
+        $pattern = '#<a\s+href="'.preg_quote($href, '#').'"([^>]*)>#s';
+        $this->assertMatchesRegularExpression($pattern, $html, "Bağlantı bulunamadı: {$href}");
+        preg_match($pattern, $html, $matches);
+
+        $isActive = str_contains($matches[1], 'aria-current="page"');
+
+        $this->assertSame($expected, $isActive, "'{$href}' için aria-current beklenmedik: ".($isActive ? 'aktif' : 'pasif'));
+    }
+
+    /**
+     * Kasa/Cari/Yönetim başlıkları koyu renkli, katlanabilir gruplardır;
+     * alt öğeler varsayılan olarak kapalıdır. Aktif sayfanın grubu sunucu
+     * tarafında `open` ile başlar ve başka bir gruba geçilene kadar açık
+     * kalır (her sayfa yüklemesinde rota bazında yeniden hesaplanır).
+     */
+    #[Test]
+    public function aktif_sayfanin_grubu_acik_baslar_digerleri_kapali_kalir(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('cashbook.movements.index'))
+            ->getContent();
+
+        // "Kasa" grubunun <details> bloğu 'open' taşır, "Cari"/"Yönetim" taşımaz.
+        $this->assertDetailsOpen($html, 'Kasa', true);
+        $this->assertDetailsOpen($html, 'Cari', false);
+        $this->assertDetailsOpen($html, 'Yönetim', false);
+    }
+
+    #[Test]
+    public function baska_gruba_gecince_onceki_grup_kapanir(): void
+    {
+        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('companies.index'))
+            ->getContent();
+
+        $this->assertDetailsOpen($html, 'Cari', true);
+        $this->assertDetailsOpen($html, 'Kasa', false);
+    }
+
+    /** İlgili grup başlığını taşıyan <details> bloğunun `open` özniteliği taşıyıp taşımadığını doğrular. */
+    private function assertDetailsOpen(string $html, string $groupLabel, bool $expected): void
+    {
+        $pattern = '#<details([^>]*)>\s*<summary[^>]*>\s*<span>'.preg_quote($groupLabel, '#').'</span>#s';
+        $this->assertMatchesRegularExpression($pattern, $html, "Grup bulunamadı: {$groupLabel}");
+        preg_match($pattern, $html, $matches);
+
+        $isOpen = str_contains($matches[1], 'open');
+
+        $this->assertSame($expected, $isOpen, "'{$groupLabel}' grubu için open beklenmedik: ".($isOpen ? 'açık' : 'kapalı'));
+    }
+
     #[Test]
     public function kabuk_erisilebilirlik_iskeletini_kurar(): void
     {

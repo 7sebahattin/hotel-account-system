@@ -22,7 +22,7 @@
     </x-ui.page-header>
 
     @if ($statement->hasSummaries())
-        <div class="mt-6">@include('companies::statements._summary')</div>
+        <div class="mt-6">@include('companies::statements._summary', ['fx' => $fx])</div>
     @endif
 
     <form method="GET" class="mt-6 rounded-xl border border-line bg-card p-4">
@@ -80,13 +80,22 @@
     @endif
 
     @foreach ($statement->carryForwards() as $summary)
+        @php $carryFx = $fx['carryForward'][$summary->currency->value] ?? null; @endphp
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-field bg-well px-4 py-3">
             <span class="text-sm text-tx">
                 Devreden bakiye
                 <span class="font-medium">({{ $summary->currency->value }})</span>
                 · {{ $criteria->dateFrom?->format('d.m.Y') }} öncesi
             </span>
-            <span class="font-medium tabular-nums text-tx">{{ $summary->carryForward->format($summary->currency) }}</span>
+            <span class="text-right">
+                <span class="block font-medium tabular-nums text-tx">{{ $summary->carryForward->format($summary->currency) }}</span>
+                @if ($carryFx)
+                    <x-ui.fx-note :equivalent="$carryFx['value']" class="text-right" />
+                    @if (! $carryFx['complete'])
+                        <span class="block text-xs text-mut">TL karşılığı eksik veri nedeniyle tam değil</span>
+                    @endif
+                @endif
+            </span>
         </div>
     @endforeach
 
@@ -105,6 +114,7 @@
         </thead>
         <tbody>
             @forelse ($statement->rows as $row)
+                @php $rowFx = $fx['byEntry'][$row->entry->id] ?? null; @endphp
                 <tr class="border-b border-line last:border-0 hover:bg-well">
                     <td class="px-4 py-3 whitespace-nowrap tabular-nums text-tx">
                         {{ $row->entry->entry_date->format('d.m.Y') }}
@@ -124,6 +134,9 @@
                             <span class="text-mut" aria-hidden="true">—</span>
                         @else
                             <span class="font-medium text-debit">{{ $row->entry->debitMoney()->format($row->currency()) }}</span>
+                            @if ($rowFx && $row->entry->isDebit())
+                                <x-ui.fx-note :equivalent="$rowFx['equivalent']" class="text-right" />
+                            @endif
                         @endif
                     </td>
                     <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums">
@@ -131,11 +144,20 @@
                             <span class="text-mut" aria-hidden="true">—</span>
                         @else
                             <span class="font-medium text-credit">{{ $row->entry->creditMoney()->format($row->currency()) }}</span>
+                            @if ($rowFx && ! $row->entry->isDebit())
+                                <x-ui.fx-note :equivalent="$rowFx['equivalent']" class="text-right" />
+                            @endif
                         @endif
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $row->currency()->value }}</td>
                     <td class="px-4 py-3 text-right whitespace-nowrap bg-well font-semibold tabular-nums text-tx">
                         {{ $row->runningBalance->format($row->currency()) }}
+                        @if ($rowFx)
+                            <x-ui.fx-note :equivalent="$rowFx['runningTl']" class="text-right" />
+                            @if (! $rowFx['complete'])
+                                <span class="block text-xs text-mut">eksik veri</span>
+                            @endif
+                        @endif
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-xs">
                         @include('companies::statements._source-link')
@@ -152,6 +174,7 @@
     {{-- Mobil: yatay kaydırma yok; her tutarın yanında para birimi açıkça yazar. --}}
     <div class="mt-4 space-y-3 lg:hidden">
         @forelse ($statement->rows as $row)
+            @php $rowFx = $fx['byEntry'][$row->entry->id] ?? null; @endphp
             <x-ui.card>
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -171,6 +194,9 @@
                             'text-debit' => $row->entry->isDebit(),
                             'text-credit' => ! $row->entry->isDebit(),
                         ])>{{ $row->entry->amount()->format($row->currency()) }}</span>
+                        @if ($rowFx)
+                            <x-ui.fx-note :equivalent="$rowFx['equivalent']" class="text-right" />
+                        @endif
                     </span>
                 </div>
 
@@ -178,9 +204,15 @@
 
                 <div class="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
                     <span class="text-xs">@include('companies::statements._source-link')</span>
-                    <span class="text-sm text-mut">
+                    <span class="text-right text-sm text-mut">
                         Bakiye
-                        <span class="font-semibold tabular-nums text-tx">{{ $row->runningBalance->format($row->currency()) }}</span>
+                        <span class="block font-semibold tabular-nums text-tx">{{ $row->runningBalance->format($row->currency()) }}</span>
+                        @if ($rowFx)
+                            <x-ui.fx-note :equivalent="$rowFx['runningTl']" class="text-right" />
+                            @if (! $rowFx['complete'])
+                                <span class="block text-xs text-mut">eksik veri</span>
+                            @endif
+                        @endif
                     </span>
                 </div>
             </x-ui.card>

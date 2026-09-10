@@ -64,25 +64,87 @@
         }
     }
 
+    /*
+        Aktiflik deseni TEK yerde tanımlanır (önceden sidebar-link.blade.php
+        içindeydi, burada TEKRARLANMIYOR): her rota kendi alt sayfalarını da
+        kapsayan bir joker desene sahiptir. Bu liste ayrıca hangi GRUBUN
+        açık başlayacağına karar vermek için de kullanılır — bu yüzden burada,
+        gruplama mantığının yanında durur.
+
+        BUG (kullanıcı bildirdi): önceden 'cashbook.index' deseni
+        'cashbook.movements.*'/'cashbook.transfers.*'yi de kapsıyordu, bu
+        yüzden Kasa Hareketleri/Devir Geçmişi'ndeyken "Kasa Defteri" de
+        yanlışlıkla aktif görünüyordu. Her rota artık YALNIZCA kendi alt
+        ekranlarını kapsar.
+    */
+    $patterns = [
+        'home' => ['home'],
+        'cashbook.index' => ['cashbook.index', 'cashbook.sessions.*'],
+        'cashbook.movements.index' => ['cashbook.movements.*'],
+        'cashbook.transfers.index' => ['cashbook.transfers.*'],
+        'cashbook.day' => ['cashbook.day'],
+        'companies.index' => ['companies.*'],
+        'stays.index' => ['stays.*'],
+        'payments.index' => ['payments.*'],
+        'receipt-book.index' => ['receipt-book.*'],
+        'statements.index' => ['statements.*'],
+        'users.index' => ['users.*'],
+        'roles.index' => ['roles.*'],
+        'rooms.index' => ['rooms.*'],
+        'cashbook.categories.index' => ['cashbook.categories.*'],
+        'fx-correction.index' => ['fx-correction.*'],
+        'audit.index' => ['audit.*'],
+    ];
+
+    $isActive = static fn (string $route): bool => request()->routeIs(...($patterns[$route] ?? [$route]));
+
     $roleName = $user->getRoleNames()->first();
     $roleLabel = $roleName ? (RoleName::tryFrom($roleName)?->label() ?? $roleName) : 'Rol atanmamış';
     $initials = mb_strtoupper(mb_substr($user->name, 0, 1));
 @endphp
 
 <nav class="flex-1 overflow-y-auto px-3 py-4" aria-label="Ana menü">
-    @foreach ($visibleGroups as $index => $group)
-        @if ($group['label'] !== null)
-            <p @class([
-                'px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-nav-mut',
-                'pt-5' => $index > 0,
-            ])>{{ $group['label'] }}</p>
-        @endif
+    @foreach ($visibleGroups as $group)
+        @if ($group['label'] === null)
+            {{-- Ana grup başlıksız ve HER ZAMAN açıktır — katlanabilir değildir. --}}
+            <ul class="mb-1 space-y-0.5">
+                @foreach ($group['items'] as $item)
+                    @include('partials.sidebar-link', ['item' => $item, 'active' => $isActive($item['route'])])
+                @endforeach
+            </ul>
+        @else
+            @php
+                $groupActive = collect($group['items'])->contains(fn (array $item): bool => $isActive($item['route']));
+            @endphp
 
-        <ul @class(['space-y-0.5', 'mb-1' => $group['label'] === null])>
-            @foreach ($group['items'] as $item)
-                @include('partials.sidebar-link', ['item' => $item])
-            @endforeach
-        </ul>
+            {{--
+                Kasa/Cari/Yönetim: koyu renkli, tıklanabilir üst başlık — alt
+                öğeler VARSAYILAN OLARAK KAPALI. Aktif sayfanın grubu sunucu
+                tarafında `open` ile başlar ve o grupta kaldığı sürece (her
+                sayfa yüklemesinde yeniden hesaplanan `$groupActive` sayesinde)
+                açık kalır — ayrı bir JS durum makinesi GEREKMEZ (kullanıcı
+                talimatının kabul ettiği sade desen, `_view-switch` ile AYNI
+                ilke). Native `<details>/<summary>`: Alpine.js kurulu
+                DEĞİLDİR (CLAUDE.md §11.7), tıklama/klavye/erişilebilirlik
+                tarayıcının kendi davranışıdır.
+            --}}
+            <details class="nav-group mt-5" @if ($groupActive) open @endif>
+                <summary class="flex min-h-9 cursor-pointer list-none items-center justify-between gap-2 rounded-lg bg-nav-well px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-nav-tx select-none">
+                    <span>{{ $group['label'] }}</span>
+
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+                         class="nav-group-chevron size-3.5 shrink-0 text-nav-mut" aria-hidden="true">
+                        <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </summary>
+
+                <ul class="mt-1 space-y-0.5">
+                    @foreach ($group['items'] as $item)
+                        @include('partials.sidebar-link', ['item' => $item, 'active' => $isActive($item['route'])])
+                    @endforeach
+                </ul>
+            </details>
+        @endif
     @endforeach
 </nav>
 

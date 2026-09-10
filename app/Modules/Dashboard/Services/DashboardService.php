@@ -54,7 +54,11 @@ class DashboardService
      * Sorgu bütçesi sabittir: 1 açık bakiye özeti + 1 konaklama toplamı +
      * 1 tahsilat toplamı + 1 firma sayısı + (para birimi adedi) en yüksek
      * bakiye sorgusu + 1 son tahsilat + 1 tahsilat firma adı çözümü +
-     * 1 yaklaşan konaklama + 1 konaklama firma adı çözümü. Kasa hiç sorgulanmaz.
+     * 1 yaklaşan konaklama + 1 konaklama firma adı çözümü + 2 sistem çapında
+     * TL karşılığı toplamı (Stays debit + Payments credit, v2.1.1-D §3) +
+     * 2 en yüksek bakiyeli firmaların TL karşılığı (AYNI iki servis, yalnızca
+     * o firmalarla sınırlı). Kasa hiç sorgulanmaz. Üst sınır: 17
+     * (`DashboardTest::finans_gorunumu_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez`).
      */
     public function finance(Carbon $today): FinancialSummary
     {
@@ -64,6 +68,12 @@ class DashboardService
         $balances = $this->statements->openBalanceTotalsByCurrency();
         $stayTotals = $this->stays->totalsByCurrencyBetween($monthStart, $monthEnd);
         $paymentTotals = $this->payments->totalsByCurrencyBetween($monthStart, $monthEnd);
+
+        // v2.1.1-D §3: "Açık alacak" kartının TL karşılığı — firma ayrımı
+        // olmadan, yalnızca para birimi bazında (kart zaten tüm firmaları tek
+        // toplamda gösterir).
+        $debitTl = $this->stays->systemWideExchangeRateDebitTotalsByCurrency();
+        $creditTl = $this->payments->systemWideExchangeRateCreditTotalsByCurrency();
 
         $recentPayments = $this->payments->recent(6);
         $upcomingStays = $this->stays->currentAndUpcoming($today->toDateString(), 6);
@@ -89,12 +99,25 @@ class DashboardService
         );
 
         /** @var array<int, int> $companyIds */
-        $companyNames = $this->companies->namesByIds(array_map('intval', $companyIds));
+        $companyIds = array_values(array_unique(array_map('intval', $companyIds)));
+        $companyNames = $this->companies->namesByIds($companyIds);
+
+        // "En yüksek bakiyeli firmalar" listesindeki her satır zaten bir
+        // FİRMA TOPLAMI (birden çok konaklama/tahsilatın netİ) — Firma
+        // Bakiye Listesi'ndeki AYNI per-firma sorgu tekrar kullanılır.
+        $topCompanyIds = array_values(array_unique(array_merge(
+            ...array_map(
+                static fn (array $rows): array => array_column($rows, 'company_id'),
+                array_values($topByCurrency),
+            ),
+        )));
+        $topDebitTl = $this->stays->exchangeRateDebitTotalsForCompanies($topCompanyIds);
+        $topCreditTl = $this->payments->exchangeRateCreditTotalsForCompanies($topCompanyIds);
 
         return new FinancialSummary(
-            currencies: $this->currencyTotals($balances, $stayTotals, $paymentTotals),
+            currencies: $this->currencyTotals($balances, $stayTotals, $paymentTotals, $debitTl, $creditTl),
             activeCompanyCount: $this->companies->activeCount(),
-            topCompanies: $this->decorateTopCompanies($topByCurrency, $companyNames),
+            topCompanies: $this->decorateTopCompanies($topByCurrency, $companyNames, $topDebitTl, $topCreditTl),
             recentPayments: $recentPayments,
             upcomingStays: $upcomingStays,
             companyNames: $companyNames,
@@ -233,9 +256,11 @@ class DashboardService
      * @param  array<string, array{receivable: Money, payable: Money, net: Money}>  $balances
      * @param  array<string, Money>  $stayTotals
      * @param  array<string, Money>  $paymentTotals
+     * @param  array<string, array{total: Money, complete: bool}>  $debitTl
+     * @param  array<string, array{total: Money, complete: bool}>  $creditTl
      * @return array<int, CurrencyTotals>
      */
-    private function currencyTotals(array $balances, array $stayTotals, array $paymentTotals): array
+    private function currencyTotals(array $balances, array $stayTotals, array $paymentTotals, array $debitTl = [], array $creditTl = []): array
     {
         $codes = array_values(array_unique(array_merge(
             array_keys($balances),
@@ -250,14 +275,28 @@ class DashboardService
         ));
 
         return array_map(
-            static fn (string $code): CurrencyTotals => new CurrencyTotals(
-                currency: Currency::from($code),
-                receivable: $balances[$code]['receivable'] ?? Money::zero(),
-                payable: $balances[$code]['payable'] ?? Money::zero(),
-                net: $balances[$code]['net'] ?? Money::zero(),
-                staysThisMonth: $stayTotals[$code] ?? Money::zero(),
-                paymentsThisMonth: $paymentTotals[$code] ?? Money::zero(),
-            ),
+            function (string $code) use ($balances, $stayTotals, $paymentTotals, $debitTl, $creditTl): CurrencyTotals {
+                $netTl = null;
+
+                if ($code !== Currency::TRY->value) {
+                    $debit = $debitTl[$code] ?? ['total' => Money::zero(), 'complete' => true];
+                    $credit = $creditTl[$code] ?? ['total' => Money::zero(), 'complete' => true];
+
+                    if ($debit['complete'] && $credit['complete']) {
+                        $netTl = $debit['total']->subtract($credit['total']);
+                    }
+                }
+
+                return new CurrencyTotals(
+                    currency: Currency::from($code),
+                    receivable: $balances[$code]['receivable'] ?? Money::zero(),
+                    payable: $balances[$code]['payable'] ?? Money::zero(),
+                    net: $balances[$code]['net'] ?? Money::zero(),
+                    staysThisMonth: $stayTotals[$code] ?? Money::zero(),
+                    paymentsThisMonth: $paymentTotals[$code] ?? Money::zero(),
+                    netTl: $netTl,
+                );
+            },
             $ordered,
         );
     }
@@ -265,21 +304,38 @@ class DashboardService
     /**
      * @param  array<string, array<int, array{company_id: int, balance: Money}>>  $topByCurrency
      * @param  array<int, string>  $companyNames
+     * @param  array<int, array<string, array{total: Money, complete: bool}>>  $debitTl
+     * @param  array<int, array<string, array{total: Money, complete: bool}>>  $creditTl
      * @return array<string, array<int, CompanyBalanceRow>>
      */
-    private function decorateTopCompanies(array $topByCurrency, array $companyNames): array
+    private function decorateTopCompanies(array $topByCurrency, array $companyNames, array $debitTl = [], array $creditTl = []): array
     {
         $decorated = [];
 
         foreach ($topByCurrency as $code => $rows) {
             $decorated[$code] = array_map(
-                static fn (array $row): CompanyBalanceRow => new CompanyBalanceRow(
-                    companyId: $row['company_id'],
-                    // Firma silinmişse ekran çökmez; ad yerine nötr metin gösterilir.
-                    companyName: $companyNames[$row['company_id']] ?? 'Firma bulunamadı',
-                    balance: $row['balance'],
-                    currency: Currency::from($code),
-                ),
+                function (array $row) use ($code, $companyNames, $debitTl, $creditTl): CompanyBalanceRow {
+                    $companyId = $row['company_id'];
+                    $balanceTl = null;
+
+                    if ($code !== Currency::TRY->value) {
+                        $debit = $debitTl[$companyId][$code] ?? ['total' => Money::zero(), 'complete' => true];
+                        $credit = $creditTl[$companyId][$code] ?? ['total' => Money::zero(), 'complete' => true];
+
+                        if ($debit['complete'] && $credit['complete']) {
+                            $balanceTl = $debit['total']->subtract($credit['total']);
+                        }
+                    }
+
+                    return new CompanyBalanceRow(
+                        companyId: $companyId,
+                        // Firma silinmişse ekran çökmez; ad yerine nötr metin gösterilir.
+                        companyName: $companyNames[$companyId] ?? 'Firma bulunamadı',
+                        balance: $row['balance'],
+                        currency: Currency::from($code),
+                        balanceTl: $balanceTl,
+                    );
+                },
                 $rows,
             );
         }

@@ -22,6 +22,11 @@ final readonly class CurrencyTotals
         public Money $net,
         public Money $staysThisMonth,
         public Money $paymentsThisMonth,
+        // v2.1.1-D §3: yabancı para biriminin TL karşılığı — yalnızca
+        // TRY DIŞI para birimlerinde dolu. Katkı sağlayan herhangi bir kaynak
+        // kaydın kuru eksikse `null` kalır (dürüstlük ilkesi, `fx-note`
+        // bileşeniyle AYNI karar) — sessizce yanlış bir rakam üretilmez.
+        public ?Money $netTl = null,
     ) {}
 
     /** Bu para biriminde gösterilecek bir şey var mı? */

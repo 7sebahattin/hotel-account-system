@@ -230,4 +230,31 @@
             height: calc(3rem + env(safe-area-inset-top));
         }
     }
+
+    /*
+        Kenar çubuğu Kasa/Cari/Yönetim başlıkları — native <details>/<summary>
+        (Alpine.js kurulu DEĞİLDİR, CLAUDE.md §11.7). Tarayıcının kendi
+        açma/kapama üçgeni (Chrome'da ::-webkit-details-marker, Firefox'ta
+        list-style marker) yerine kendi ok ikonumuzu kullanıyoruz; bu yüzden
+        ikisi de bilerek gizlenir. Ok ikonu `<details open>` durumunda CSS
+        ile döner — sunucu her sayfa yüklemesinde `open` özniteliğini doğru
+        hesapladığı için (aktif grup açık başlar), JS'e gerek yoktur; kullanıcı
+        elle açıp kapadığında da tarayıcının kendi native durumu ile senkron
+        kalır.
+    */
+    .nav-group > summary {
+        list-style: none;
+    }
+
+    .nav-group > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .nav-group-chevron {
+        transition: transform 150ms ease;
+    }
+
+    .nav-group[open] > summary .nav-group-chevron {
+        transform: rotate(180deg);
+    }
 }

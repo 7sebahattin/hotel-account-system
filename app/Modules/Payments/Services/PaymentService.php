@@ -25,6 +25,7 @@ use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Support\ShiftCollectionSummary;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -279,6 +280,123 @@ class PaymentService
     public function findOrFail(int $id): Payment
     {
         return Payment::query()->findOrFail($id);
+    }
+
+    /**
+     * Verilen tahsilat id'leri için kur anlık görüntüsü — TEK sorguda.
+     *
+     * `StayService::exchangeRateSnapshotsFor()` ile AYNI gerekçe: durum
+     * filtrelenmez, orijinal + ters kayıt aynı anlık görüntüyü paylaşır ve
+     * zaten birbirini götürür.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, array{rate: ?string, equivalent: ?string}>
+     */
+    public function exchangeRateSnapshotsFor(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Payment::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'exchange_rate_to_try', 'try_equivalent'])
+            ->mapWithKeys(fn (Payment $payment): array => [
+                $payment->getKey() => ['rate' => $payment->exchange_rate_to_try, 'equivalent' => $payment->try_equivalent],
+            ])
+            ->all();
+    }
+
+    /**
+     * TÜM zamanlar TL karşılığı toplamı (yalnızca AKTİF tahsilatlar),
+     * verilen firmalar için, para birimi bazında — TEK sorgu.
+     *
+     * `StayService::exchangeRateDebitTotalsForCompanies()` ile AYNI gerekçe
+     * (yön ALACAK'tır): iptal edilmiş bir tahsilatın orijinal alacağı ile
+     * ters kaydı zaten birbirini götürür.
+     *
+     * @param  array<int, int>  $companyIds
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    public function exchangeRateCreditTotalsForCompanies(array $companyIds): array
+    {
+        if ($companyIds === []) {
+            return [];
+        }
+
+        return $this->mapExchangeRateTotals(
+            $this->exchangeRateCreditQuery()->whereIn('company_id', $companyIds)->get()
+        );
+    }
+
+    /**
+     * Aynı toplam, TÜM firmalar için — Dashboard'ın sistem çapındaki
+     * "açık borç" TL karşılığı içindir (v2.1.1-D §3).
+     *
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    public function systemWideExchangeRateCreditTotals(): array
+    {
+        return $this->mapExchangeRateTotals($this->exchangeRateCreditQuery()->get());
+    }
+
+    /**
+     * Aynı toplam, firma ayrımı OLMADAN, yalnızca para birimi bazında —
+     * `StayService::systemWideExchangeRateDebitTotalsByCurrency()` ile AYNI
+     * gerekçe (v2.1.1-D §3, Dashboard "Açık alacak" kartı).
+     *
+     * @return array<string, array{total: Money, complete: bool}>
+     */
+    public function systemWideExchangeRateCreditTotalsByCurrency(): array
+    {
+        $rows = DB::table('payments')
+            ->select('currency')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
+            ->where('status', PaymentStatus::Active->value)
+            ->where('currency', '<>', Currency::TRY->value)
+            ->groupBy('currency')
+            ->get();
+
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'complete' => (int) $row->missing === 0,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function exchangeRateCreditQuery(): QueryBuilder
+    {
+        return DB::table('payments')
+            ->select('company_id', 'currency')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
+            ->where('status', PaymentStatus::Active->value)
+            ->where('currency', '<>', Currency::TRY->value)
+            ->groupBy('company_id', 'currency');
+    }
+
+    /**
+     * @param  Collection<int, \stdClass>  $rows
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    private function mapExchangeRateTotals(Collection $rows): array
+    {
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(int) $row->company_id][(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'complete' => (int) $row->missing === 0,
+            ];
+        }
+
+        return $result;
     }
 
     /**

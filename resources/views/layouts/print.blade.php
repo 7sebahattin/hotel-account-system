@@ -50,6 +50,10 @@
         .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .rev { font-style: italic; }
 
+        /* Yabancı para biriminin altındaki küçük TL karşılığı (v2.1.1-D §3). */
+        .fx { display: block; font-size: 8.5pt; color: #666; font-weight: 400; font-variant-numeric: tabular-nums; }
+        .fx.incomplete { font-style: italic; }
+
         .foot { margin-top: 14px; border-top: 1px solid #999; padding-top: 6px;
                 font-size: 9pt; color: #444; display: flex; justify-content: space-between; gap: 12px; }
 

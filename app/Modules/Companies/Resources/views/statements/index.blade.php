@@ -72,7 +72,7 @@
                         </a>
                     </td>
                     <td class="px-4 py-3">
-                        @include('companies::statements._balances', ['companyBalances' => $companyBalances])
+                        @include('companies::statements._balances', ['companyBalances' => $companyBalances, 'companyFx' => $fxTotals[$company->id] ?? []])
                     </td>
                     <td class="px-4 py-3 tabular-nums text-mut">
                         {{ isset($lastDates[$company->id])
@@ -106,7 +106,7 @@
                 <x-ui.card>
                     <p class="truncate text-tx">{{ $company->name }}</p>
                     <div class="mt-2">
-                        @include('companies::statements._balances', ['companyBalances' => $companyBalances])
+                        @include('companies::statements._balances', ['companyBalances' => $companyBalances, 'companyFx' => $fxTotals[$company->id] ?? []])
                     </div>
                     <p class="mt-2 text-xs text-mut">
                         Son hareket:

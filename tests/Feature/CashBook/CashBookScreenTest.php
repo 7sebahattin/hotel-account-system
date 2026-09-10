@@ -237,8 +237,9 @@ class CashBookScreenTest extends CashBookTestCase
         $session = $this->openSession($personel, ['TRY' => '7000.00', 'EUR' => '300.00']);
         $this->record($session, CashMovementType::RoomIncome, '1000.00', $personel);
 
-        // Gün 11: kasa kartı artık Operasyon görünümündedir (varsayılan pano).
-        $this->actingAs($this->patron())->get(route('home'))
+        // Gün 11: kasa kartı Operasyon görünümündedir (?view=operations —
+        // Ana Sayfa'nın varsayılanı artık Finans'tır, kullanıcı talimatı).
+        $this->actingAs($this->patron())->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertSee('Kasada')
             ->assertSee('Mehmet')
@@ -251,7 +252,7 @@ class CashBookScreenTest extends CashBookTestCase
     #[Test]
     public function acik_vardiya_yokken_pano_karti_hic_cizilmez(): void
     {
-        $this->actingAs($this->patron())->get(route('home'))
+        $this->actingAs($this->patron())->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertSee('Kasa Kapalı')
             ->assertDontSee('Kasada');

@@ -2190,3 +2190,151 @@ RoleName}.php`, `app/Modules/AuditLog/Enums/AuditEvent.php`,
 `resources/views/components/ui/fx-note.blade.php`, `resources/views/
 partials/sidebar.blade.php`, `resources/js/app.js`, ilgili testler,
 `CLAUDE.md`.
+
+## K-105 · v2.1.1-D: Finans varsayılan pano görünümü, kenar çubuğu grupları, döviz TL karşılığı her yerde
+
+**Bağlam:** Kullanıcı kullanımda üç somut sorun/istek bildirdi:
+
+1. Ana sayfa varsayılan olarak Operasyon görünümünü açıyordu; kullanıcı
+   Finans'ın önce gelmesini istedi.
+2. Kenar çubuğundaki Kasa/Cari/Yönetim grupları her zaman açık ve düzsüz
+   duruyordu; kullanıcı koyu renk, tıklanabilir, VARSAYILAN KAPALI başlıklar
+   istedi — aktif sayfanın grubu açık kalmalı, başka gruba geçilene kadar
+   kapanmamalı. Ayrıca gerçek bir bug bildirildi: Kasa Hareketleri veya Devir
+   Geçmişi sayfasındayken kenar çubuğunda hâlâ "Kasa Defteri" seçili
+   görünüyordu.
+3. Cari ekstrede yabancı para birimli bakiyenin altında küçük yazıyla TL
+   karşılığının görünmesini, bunun sistemin HER YERİNDE (döviz cinsi
+   gösterilen her alanda) uygulanmasını istedi.
+
+Hiçbiri §3.2'nin yasaklı listesiyle çelişmiyordu (kur servisi/otomatik
+güncelleme DEĞİL, yalnızca ZATEN v2.1.1-C'de saklanan `try_equivalent`
+anlık görüntüsünün EKRANDA daha çok yerde gösterilmesi) — bu yüzden onay
+sorulmadan doğrudan uygulandı.
+
+### Karar 1 — Pano varsayılanı Finans
+
+`DashboardController`'daki dal seçimi tersine çevrildi:
+`?view=operations` AÇIKÇA istenmedikçe `finance` gösterilir (önceki
+davranışın TAM TERSİ). CLAUDE.md §8/Dashboard güncellendi. Tüm ilgili
+testler (`DashboardTest`, `CashBookScreenTest`) `route('home', ['view' =>
+'operations'])` kullanacak şekilde güncellendi; yeni bir test
+(`admin_ve_patron_operasyon_gorunumunu_view_parametresiyle_gorur`) eklendi.
+
+### Karar 2 — Kenar çubuğu: koyu, tıklanabilir, varsayılan kapalı gruplar + bug düzeltmesi
+
+**Bug'un kök nedeni:** `sidebar-link.blade.php` her linkin kendi `$patterns`
+dizisini taşıyordu ve `cashbook.index` (Kasa Defteri) girdisi yanlışlıkla
+kardeş rotaların (`cashbook.movements.*`, `cashbook.transfers.*`) desenlerini
+de içeriyordu — bu yüzden Kasa Hareketleri/Devir Geçmişi sayfaları da Kasa
+Defteri'nin kendi `aria-current` kontrolünü tetikliyordu. Düzeltme: desen
+haritası `sidebar.blade.php`'ye TAŞINDI ve merkezileştirildi (Blade
+`@include` içinde tanımlanan değişken üst kapsama sızmaz, bu yüzden
+merkezileştirme kopyalamayı da önledi), her rotaya KENDİ, ÇAKIŞMAYAN deseni
+verildi; eksik olan `receipt-book.index`, `rooms.index`,
+`cashbook.categories.index`, `fx-correction.index` desenleri de eklendi.
+
+**Gruplar:** Alpine.js KURULU DEĞİLDİR (CLAUDE.md §11.7) — bu yüzden native
+`<details>`/`<summary>` kullanıldı, `open` durumu SUNUCU tarafında
+(`$groupActive = collect($group['items'])->contains(...)`) hesaplanıyor.
+Bu, ayrı bir istemci-taraflı durum makinesi olmadan "aktif sayfanın grubu
+açık kalır, başka gruba geçilene kadar kapanmaz" davranışını BEDAVA verir —
+her sayfa yüklemesi kendi doğru `open` durumunu sunucudan getirir. CSS'e
+(`app.css`) `.nav-group`/`.nav-group-chevron` eklendi (dönen ok ikonu).
+
+**Testler:** `DesignSystemTest`'e dört yeni test eklendi:
+`kasa_hareketlerinde_yalniz_kendi_menu_ogesi_aktif_olur`,
+`devir_gecmisinde_yalniz_kendi_menu_ogesi_aktif_olur` (regex tabanlı
+`aria-current` doğrulaması), `aktif_sayfanin_grubu_acik_baslar_digerleri_kapali_kalir`,
+`baska_gruba_gecince_onceki_grup_kapanir`. Gerçek Playwright QA'sı ile de
+görsel olarak doğrulandı.
+
+### Karar 3 — Döviz TL karşılığı: tekil kayıt vs. TOPLAM/bakiye ayrımı
+
+`fx-note` bileşeni v2.1.1-C'de yalnızca TEK bir Stay/Payment kaydının
+(`rate` + `equivalent`) altında kullanılıyordu. Bu turda kullanıcı **bir
+BAKİYENİN** (birden çok kaydın NET toplamı) altında da TL karşılığı istedi
+— ama bir bakiyenin TEK bir kuru YOKTUR (her katkı sağlayan kayıt kendi
+anlık görüntüsünü taşır). İki teknik ayrı senaryolar için seçildi:
+
+1. **Zincir tekniği** (tek firma, satır + yürüyen bakiye detayı gerekir):
+   `StatementController::tlEquivalents()` firmanın TAM, FİLTRESİZ ekstresini
+   (`LedgerStatementService::forCompany($id, new StatementCriteria)`) İKİNCİ
+   kez, kronolojik sırada çeker — tıpkı `runningBalance`'ın kendisi gibi
+   kullanıcının tarih/tür/arama filtrelerinden TAMAMEN BAĞIMSIZDIR. Her
+   satırın kaynak Stay/Payment'ının GÜNCEL `try_equivalent`i toplu sorguyla
+   (`exchangeRateSnapshotsFor()`) çekilir, işaretli (`isDebit()`) olarak
+   biriktirilir.
+
+   **Matematik ispatı:** bir ters kayıt AYNI `source_id`yi taşır ve yönü
+   ters çevrilir (§6/L8) — bu yüzden eski bir borç + onun ters kaydı, HANGİ
+   `try_equivalent` değeri kullanılırsa kullanılsın her zaman TAM SIFIRA
+   iner (ikisi de AYNI kaynağın AYNI güncel değerini okur, yalnızca işaret
+   ters). Bu yüzden `ledger_entries`'e YENİ bir kur sütunu eklemeye HİÇ
+   gerek yoktur — kaynağın GÜNCEL `try_equivalent`i her zaman doğru sonucu
+   verir.
+
+2. **Doğrudan toplu-toplam tekniği** (çok firma / sistem çapında, yalnızca
+   toplam gerekir, satır detayı GEREKMEZ): `SUM(try_equivalent) FROM stays
+   WHERE status='active' AND currency<>'TRY' GROUP BY company_id, currency`
+   eksi `payments`'ın aynısı. AYNI iptal-çifti-sıfıra-iner özelliği sayesinde
+   zincir tekniğiyle MATEMATİKSEL OLARAK ÖZDEŞ sonuç verir ama çok daha
+   ucuzdur (N firma için N ledger-yürüyüşü yerine 2 toplu sorgu). Firma
+   Bakiye Listesi (`StatementController::companyFxTotals()`), Dashboard'ın
+   "Açık alacak" kartı (`StayService::systemWideExchangeRateDebitTotalsByCurrency()`
+   + `PaymentService`'in eşleniği) ve "En yüksek bakiyeli firmalar" paneli
+   bu tekniği kullanır.
+
+**Dürüstlük ilkesi** (K-104'teki `Payment::amountInWords()` kararıyla AYNI):
+katkı sağlayan HERHANGİ bir kaynağın kuru eksikse (bu turdan önceki,
+düzeltilmemiş kayıt), o para biriminin TL rakamı YA hiç gösterilmez YA DA
+"eksik veri" notuyla işaretlenir — sessizce yanlış bir toplam ÜRETİLMEZ.
+
+**Kapsanan ekranlar:** Cari Ekstre (tablo + mobil kart + özet kartı +
+devreden bakiye + yazdırma), Firma Bakiye Listesi, Firma Kartı'nın "Cari
+bakiye" widget'ı VE "Konaklamalar"/"Tahsilatlar" mini listeleri, Dashboard
+Finans görünümünün "Net bakiye" kartı + "En yüksek bakiyeli firmalar" +
+"Son tahsilatlar" + "Yaklaşan konaklamalar" panelleri. Kapsam dışı
+BIRAKILAN (bilerek): Kasa Defteri (fiziksel kasa TRY-yalnızca bir kavram
+değildir ama kasa hareketleri zaten kendi para biriminde tutuluyor ve yeni
+şema/migration istemeyen bir tur için kapsam dışı tutuldu).
+
+**Bulunan ve düzeltilen regresyon:** `fx-note.blade.php`'nin üst açıklama
+yorumu İÇİNDE (`{{-- ... --}}`) ikinci bir `{{-- toplam/bakiye --}}` yorumu
+AÇILMIŞTI. Blade yorumları İÇ İÇE geçemez — normal ifadesi non-greedy
+olduğu için İLK `--}}`'de kapanır, bu da dosyanın GERÇEK kapanışının
+(15. satır) HTML'e DÜZ METİN olarak sızmasına yol açtı. Bu, `fx-note`
+bileşeninin KULLANILDIĞI HER EKRANDA (Payments, Stays, ReceiptBook dahil)
+"--}}" metninin görünmesine neden olacaktı — gerçek tarayıcı QA'sında
+(Playwright ekran görüntüsü) YAKALANDI, otomatik testler (assertSee alt
+dize eşleşmesi) bunu KAÇIRDI çünkü aranan TL rakamı metni yine de sayfada
+mevcuttu. Ders: yorum metnini iç içe AÇMA, parantez içi örnek kullanımları
+düz metinle yaz.
+
+**Sorgu bütçesi güncellemesi:** Dashboard Finans görünümünün sorgu üst
+sınırı 15'ten 17'ye çıkarıldı (2 sistem çapında TL toplamı + 2 en yüksek
+bakiyeli firma TL toplamı, kayıt sayısıyla BÜYÜMEYEN sabit ek). CLAUDE.md
+§8/Dashboard ve `DashboardTest::finans_gorunumu_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez`
+güncellendi.
+
+**Yeni testler:** `tests/Feature/Statements/StatementFxDisplayTest.php` (9
+test — tekil hareket TL karşılığı, kapanış bakiyesi net hesabı, iptalin
+sıfıra inişi, devreden bakiye, eksik kur uyarısı, firma bakiye listesi,
+firma detayı, dashboard net bakiye, TRY'de hiç TL notu gösterilmemesi).
+
+**Kapsam:** Yeni tablo/kolon/migration YOK — yalnızca v2.1.1-C'de zaten
+saklanan `try_equivalent` alanının okunduğu yer/biçim genişledi. Kur
+servisi, TCMB entegrasyonu, otomatik güncelleme HÂLÂ kapsam dışıdır (§3.2).
+
+**Etkilenen dosyalar:** `app/Modules/Dashboard/Http/Controllers/
+DashboardController.php`, `app/Modules/Dashboard/Services/
+DashboardService.php`, `app/Modules/Dashboard/Support/{CurrencyTotals,
+CompanyBalanceRow}.php`, `app/Modules/Dashboard/Resources/views/
+finance.blade.php`, `app/Modules/Stays/Services/StayService.php`,
+`app/Modules/Payments/Services/PaymentService.php`, `app/Modules/
+Companies/Http/Controllers/{StatementController,CompanyController}.php`,
+`app/Modules/Companies/Resources/views/{show,statements/*}.blade.php`,
+`resources/views/components/ui/fx-note.blade.php`, `resources/views/
+layouts/print.blade.php`, `resources/views/partials/{sidebar,
+sidebar-link}.blade.php`, `resources/css/app.css`, ilgili testler,
+`CLAUDE.md`.

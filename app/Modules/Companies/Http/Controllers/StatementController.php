@@ -28,6 +28,10 @@ use Illuminate\Support\Collection;
  * tanımaz (CLAUDE.md §4.3/3) ve firma adını okuyabilmek için Companies'e
  * bağımlı olamaz. Ekstre hesabının tamamı `LedgerStatementService`'tedir;
  * o servis firmayı yalnızca `int $companyId` olarak bilir.
+ *
+ * v2.1.1-D §3: yabancı para birimi TL karşılığı hesapları da AYNI gerekçeyle
+ * burada yapılır — `LedgerStatementService`'in üzerine, StayService/
+ * PaymentService'in kur anlık görüntüsü sorgularıyla birleştirilerek.
  */
 class StatementController extends Controller
 {
@@ -79,6 +83,7 @@ class StatementController extends Controller
                 'companies' => $companies,
                 'filter' => $filter,
                 'balances' => $this->statements->balancesForCompanies($ids),
+                'fxTotals' => $this->companyFxTotals($ids),
                 'lastDates' => $this->statements->lastEntryDates($ids),
                 'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
                 'balanceCurrency' => $currency,
@@ -138,6 +143,7 @@ class StatementController extends Controller
             'filter' => $filter,
             // Sayfadaki firmalar için alt küme — tam liste zaten $allBalances'ta hesaplı.
             'balances' => array_intersect_key($allBalances, array_flip($pageIds)),
+            'fxTotals' => $this->companyFxTotals($pageIds),
             'lastDates' => $this->statements->lastEntryDates($pageIds),
             'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
             'balanceCurrency' => $currency,
@@ -173,6 +179,7 @@ class StatementController extends Controller
             'currencies' => Currency::cases(),
             'types' => LedgerEntryType::filterable(),
             'existingSources' => $this->existingSources($statement->rows),
+            'fx' => $this->tlEquivalents($company->getKey(), $criteria),
         ];
     }
 
@@ -202,5 +209,157 @@ class StatementController extends Controller
             'stay' => $this->stays->existingIds(array_values(array_unique($ids['stay']))),
             'payment' => $this->payments->existingIds(array_values(array_unique($ids['payment']))),
         ];
+    }
+
+    /**
+     * Kur anlık görüntüsü — kaynak tipi başına TEK sorgu (v2.1.1-D §3).
+     *
+     * @param  array<int, StatementRow>  $rows
+     * @return array<string, array<int, array{rate: ?string, equivalent: ?string}>>
+     */
+    private function exchangeRateSnapshots(array $rows): array
+    {
+        $ids = ['stay' => [], 'payment' => []];
+
+        foreach ($rows as $row) {
+            $type = (string) $row->entry->source_type;
+
+            if (isset($ids[$type]) && $row->entry->source_id !== null) {
+                $ids[$type][] = $row->entry->source_id;
+            }
+        }
+
+        return [
+            'stay' => $this->stays->exchangeRateSnapshotsFor(array_values(array_unique($ids['stay']))),
+            'payment' => $this->payments->exchangeRateSnapshotsFor(array_values(array_unique($ids['payment']))),
+        ];
+    }
+
+    /**
+     * Her hareketin TL karşılığı VE o para biriminin o anki yürüyen TL
+     * bakiyesi — ekstredeki "Bakiye" kolonunun altında küçük yazıyla
+     * gösterilir (kullanıcı talimatı, v2.1.1-D §3).
+     *
+     * KRİTİK: bu zincir GÖRÜNTÜLENEN filtreden (tarih/tür/arama) TAMAMEN
+     * BAĞIMSIZDIR — tıpkı `runningBalance`'ın kendisi gibi, defterin
+     * TAMAMINDAN (tarih filtresi olmadan) hesaplanır; aksi hâlde bir tarih
+     * filtresi uygulandığında devreden bakiyenin TL karşılığı hiç
+     * bilinemezdi. `LedgerStatementService::forCompany()` bu yüzden BURADA
+     * ikinci kez, filtresiz ve kronolojik sırada çağrılır — Ledger modülüne
+     * hiçbir yeni metot eklenmeden.
+     *
+     * Bir para biriminde katkı sağlayan HERHANGİ bir kaynak kaydın kuru
+     * eksikse (bu turdan önceki, düzeltilmemiş kayıt), o para biriminin TL
+     * zinciri o noktadan itibaren "eksik" işaretlenir — sessizce yanlış bir
+     * rakam ASLA üretilmez (CLAUDE.md §13 dürüstlük ilkesi, `Payment::
+     * amountInWords()`'teki AYNI karar).
+     *
+     * Dönüş şekli:
+     *   - `byEntry`: `ledger_entries.id` → satırın kendi TL karşılığı + o ana
+     *     kadarki yürüyen TL bakiyesi ("Bakiye" kolonunun altında gösterilir).
+     *   - `closing`: para birimi kodu → EN SON hareketin TL bakiyesi (özet
+     *     kartındaki "Bakiye" satırı).
+     *   - `carryForward`: para birimi kodu → `criteria->dateFrom`'dan HEMEN
+     *     ÖNCEKİ TL bakiyesi ("Devreden bakiye" satırı); tarih filtresi
+     *     yoksa boştur.
+     *
+     * @return array{
+     *     byEntry: array<int, array{equivalent: ?Money, runningTl: ?Money, complete: bool}>,
+     *     closing: array<string, array{value: ?Money, complete: bool}>,
+     *     carryForward: array<string, array{value: ?Money, complete: bool}>,
+     * }
+     */
+    private function tlEquivalents(int $companyId, StatementCriteria $criteria): array
+    {
+        $baseline = $this->statements->forCompany($companyId, new StatementCriteria);
+        $snapshots = $this->exchangeRateSnapshots($baseline->rows);
+
+        $running = [];
+        $complete = [];
+        $result = [];
+        $closing = [];
+        $carryForward = [];
+
+        foreach ($baseline->rows as $row) {
+            $code = $row->currency()->value;
+
+            if ($code === Currency::TRY->value) {
+                continue;
+            }
+
+            // dateFrom'dan ÖNCEKİ son satırdaysak, devreden anlık görüntüsünü
+            // şimdi (bir sonraki satıra geçmeden önce) yakala.
+            if (
+                $criteria->dateFrom !== null
+                && $row->entry->entry_date->lt($criteria->dateFrom)
+            ) {
+                $carryForward[$code] = ['value' => $running[$code] ?? Money::zero(), 'complete' => $complete[$code] ?? true];
+            }
+
+            $running[$code] ??= Money::zero();
+            $complete[$code] ??= true;
+
+            $type = (string) $row->entry->source_type;
+            $sourceId = $row->entry->source_id;
+            $snapshot = ($sourceId !== null ? ($snapshots[$type][$sourceId] ?? null) : null);
+            $equivalent = $snapshot['equivalent'] ?? null;
+
+            if ($equivalent === null) {
+                $complete[$code] = false;
+            } else {
+                $signed = Money::fromDecimal($equivalent);
+                $running[$code] = $running[$code]->add($row->entry->isDebit() ? $signed : $signed->negate());
+            }
+
+            $result[$row->entry->id] = [
+                'equivalent' => $equivalent === null ? null : Money::fromDecimal($equivalent),
+                'runningTl' => $complete[$code] ? $running[$code] : null,
+                'complete' => $complete[$code],
+            ];
+
+            $closing[$code] = ['value' => $complete[$code] ? $running[$code] : null, 'complete' => $complete[$code]];
+        }
+
+        return ['byEntry' => $result, 'closing' => $closing, 'carryForward' => $carryForward];
+    }
+
+    /**
+     * Firmaların TÜM zamanlar TL karşılığı bakiyesi (borç − alacak), para
+     * birimi bazında — Firma Bakiye Listesi içindir (v2.1.1-D §3). İki bulk
+     * sorgunun (Stays + Payments) birleşimidir; firma/kayıt sayısı kadar
+     * sorgu ATILMAZ.
+     *
+     * @param  array<int, int>  $companyIds
+     * @return array<int, array<string, array{net: Money, complete: bool}>>
+     */
+    private function companyFxTotals(array $companyIds): array
+    {
+        if ($companyIds === []) {
+            return [];
+        }
+
+        $debit = $this->stays->exchangeRateDebitTotalsForCompanies($companyIds);
+        $credit = $this->payments->exchangeRateCreditTotalsForCompanies($companyIds);
+
+        $result = [];
+
+        foreach ($companyIds as $companyId) {
+            $codes = array_unique([
+                ...array_keys($debit[$companyId] ?? []),
+                ...array_keys($credit[$companyId] ?? []),
+            ]);
+
+            foreach ($codes as $code) {
+                $debitEntry = $debit[$companyId][$code] ?? ['total' => Money::zero(), 'complete' => true];
+                $creditEntry = $credit[$companyId][$code] ?? ['total' => Money::zero(), 'complete' => true];
+
+                $result[$companyId][$code] = [
+                    'net' => $debitEntry['total']->subtract($creditEntry['total']),
+                    'complete' => $debitEntry['complete'] && $creditEntry['complete'],
+                ];
+            }
+        }
+
+        return $result;
     }
 }

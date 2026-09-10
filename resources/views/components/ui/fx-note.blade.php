@@ -1,10 +1,17 @@
 {{--
     Yabancı para birimli tutarların TL karşılığı — küçük, soluk, İKİNCİL
-    metin (v2.1.1-C §2). Tabloları KALABALIKLAŞTIRMAZ: yalnızca kur KAYITLI
-    ise render edilir, geçmiş boşluğu (eksik kur) burada SESSİZCE atlanır —
+    metin (v2.1.1-C §2). Tabloları KALABALIKLAŞTIRMAZ: `equivalent` NULL ise
+    hiç render edilmez, geçmiş boşluğu (eksik kur) burada SESSİZCE atlanır —
     "Geçmiş Döviz Düzeltme" ekranı bu boşluğu ayrıca listeler.
 
+    İKİ MOD vardır:
+    - TEK işlem: `rate` DE verilir → "≈ 25.600,00 TL · Kur: 51,20".
+    - TOPLAM/bakiye (v2.1.1-D §3 — birden çok işlemin TOPLAMI, TEK bir kur
+      YOKTUR): yalnızca `equivalent` verilir, `rate` boş bırakılır →
+      "≈ 25.600,00 TL" (kur satırı olmadan).
+
     Kullanım: <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" />
+              <x-ui.fx-note :equivalent="$runningTl" /> (toplam/bakiye modu)
 --}}
 @props(['rate' => null, 'equivalent' => null])
 
@@ -28,9 +35,11 @@
     $formattedRate = $formatRate($rate);
 @endphp
 
-@if ($formattedRate !== null && $equivalent !== null)
+@if ($equivalent !== null)
     <p {{ $attributes->class(['mt-0.5 text-xs text-mut tabular-nums']) }}>
         ≈ {{ $equivalent->format(\App\Modules\Core\Enums\Currency::TRY) }}
-        <span class="text-mut">· Kur: {{ $formattedRate }}</span>
+        @if ($formattedRate !== null)
+            <span class="text-mut">· Kur: {{ $formattedRate }}</span>
+        @endif
     </p>
 @endif

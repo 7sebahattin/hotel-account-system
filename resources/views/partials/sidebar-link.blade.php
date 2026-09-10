@@ -5,26 +5,12 @@
         Aktif öğe ÜÇ işaretle belirtilir: sol altın şerit, açık zemin ve
         `aria-current`. Yalnızca renge güvenilmez (CLAUDE.md §11.6).
 
-        `routeIs` desen alır: 'companies.index' yerine 'companies.*' verilirse
-        alt ekranlarda da aktif kalır. Ekstre ekranları Companies modülünde
-        olduğu için Firmalar ile Cari Ekstre ayrı desenler kullanır.
+        `$active` çağıran taraftan (partials/sidebar.blade.php) HAZIR gelir:
+        aktiflik deseni artık TEK yerde tanımlıdır — burada TEKRAR
+        hesaplanmaz (önceki bir bug: bu dosyanın kendi desen listesi
+        'cashbook.index'i 'cashbook.movements.*'/'cashbook.transfers.*'yi de
+        kapsayacak biçimde yanlış tanımlıyordu).
     */
-    $patterns = [
-        'home' => ['home'],
-        // Kasa defterinin alt ekranları (hareket, devir, vardiya) da Kasa
-        // Defteri'ni aktif tutar; Günlük Defter kendi deseniyle ayrılır.
-        'cashbook.index' => ['cashbook.index', 'cashbook.sessions.*', 'cashbook.movements.*', 'cashbook.transfers.*'],
-        'cashbook.day' => ['cashbook.day'],
-        'companies.index' => ['companies.*'],
-        'stays.index' => ['stays.*'],
-        'payments.index' => ['payments.*'],
-        'statements.index' => ['statements.*'],
-        'users.index' => ['users.*'],
-        'roles.index' => ['roles.*'],
-        'audit.index' => ['audit.*'],
-    ];
-
-    $active = request()->routeIs(...($patterns[$item['route']] ?? [$item['route']]));
 @endphp
 
 <li>

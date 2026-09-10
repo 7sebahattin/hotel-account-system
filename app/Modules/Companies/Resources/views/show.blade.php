@@ -87,7 +87,10 @@
             @else
                 <div class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     @foreach ($balances as $code => $balance)
-                        @php $currency = \App\Modules\Core\Enums\Currency::from($code); @endphp
+                        @php
+                            $currency = \App\Modules\Core\Enums\Currency::from($code);
+                            $balanceFx = ($balancesFx ?? [])[$code] ?? null;
+                        @endphp
 
                         <x-ui.card>
                             <div class="flex items-center justify-between gap-2">
@@ -104,6 +107,13 @@
                                 'text-credit' => $balance->isNegative(),
                                 'text-tx' => $balance->isZero(),
                             ])>{{ $balance->format($currency) }}</p>
+
+                            @if ($currency !== \App\Modules\Core\Enums\Currency::TRY && $balanceFx)
+                                <x-ui.fx-note :equivalent="$balanceFx['net']" />
+                                @if (! $balanceFx['complete'])
+                                    <p class="mt-0.5 text-xs text-mut">TL karşılığı eksik veri nedeniyle tam değil</p>
+                                @endif
+                            @endif
 
                             {{-- Anlam renge değil metne bağlıdır (CLAUDE.md §11.6). --}}
                             <p class="mt-0.5 text-xs text-mut">
@@ -215,7 +225,10 @@
                             </span>
 
                             <span class="flex items-center gap-3">
-                                <span class="text-sm tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                                <span class="text-right">
+                                    <span class="block text-sm tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                                    <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
+                                </span>
                                 @include('stays::_status', ['stay' => $stay])
                             </span>
                         </a>
@@ -269,7 +282,10 @@
                             </span>
 
                             <span class="flex items-center gap-3">
-                                <span class="text-sm tabular-nums text-tx">{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                                <span class="text-right">
+                                    <span class="block text-sm tabular-nums text-tx">{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                                    <x-ui.fx-note :rate="$payment->exchange_rate_to_try" :equivalent="$payment->tryEquivalentMoney()" class="text-right" />
+                                </span>
                                 @include('payments::_status', ['payment' => $payment])
                             </span>
                         </a>

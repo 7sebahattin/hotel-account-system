@@ -17,6 +17,7 @@ use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
 use App\Modules\Stays\Models\Stay;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -251,6 +252,129 @@ class StayService
     public function findOrFail(int $id): Stay
     {
         return Stay::query()->findOrFail($id);
+    }
+
+    /**
+     * Verilen konaklama id'leri için kur anlık görüntüsü — TEK sorguda.
+     *
+     * Cari Ekstre satır bazında TL karşılığı göstermek için kullanılır
+     * (v2.1.1-D §3): Companies modülü `Stay::class`i hiç KULLANMAZ, yalnızca
+     * bu servis üzerinden (§4.3/1) — durum (aktif/iptal) filtrelenmez, çünkü
+     * bir kaydın orijinal borcu VE onun ters kaydı AYNI anlık görüntüyü
+     * paylaşır ve zaten birbirini götürür; burada durumu ayırmak GEREKMEZ.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, array{rate: ?string, equivalent: ?string}>
+     */
+    public function exchangeRateSnapshotsFor(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Stay::query()
+            ->whereIn('id', $ids)
+            ->get(['id', 'exchange_rate_to_try', 'try_equivalent'])
+            ->mapWithKeys(fn (Stay $stay): array => [
+                $stay->getKey() => ['rate' => $stay->exchange_rate_to_try, 'equivalent' => $stay->try_equivalent],
+            ])
+            ->all();
+    }
+
+    /**
+     * TÜM zamanlar TL karşılığı toplamı (yalnızca AKTİF konaklamalar),
+     * verilen firmalar için, para birimi bazında — TEK sorgu.
+     *
+     * Yalnızca AKTİF kayıtlar sayılır: iptal edilmiş bir konaklamanın
+     * orijinal borcu ile ters kaydı zaten birbirini götürür (§6/L7), bu
+     * yüzden ledger'daki net etkiyle AYNI sonucu üretir — ledger'ı ayrıca
+     * satır satır dolaşmaya GEREK YOKTUR (Firma Bakiye Listesi/Dashboard
+     * için, çok sayıda firma kapsayabileceğinden ucuz kalması bilinçlidir).
+     *
+     * @param  array<int, int>  $companyIds
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    public function exchangeRateDebitTotalsForCompanies(array $companyIds): array
+    {
+        if ($companyIds === []) {
+            return [];
+        }
+
+        return $this->mapExchangeRateTotals(
+            $this->exchangeRateDebitQuery()->whereIn('company_id', $companyIds)->get()
+        );
+    }
+
+    /**
+     * Aynı toplam, TÜM firmalar için — Dashboard'ın sistem çapındaki
+     * "açık alacak" TL karşılığı içindir (v2.1.1-D §3).
+     *
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    public function systemWideExchangeRateDebitTotals(): array
+    {
+        return $this->mapExchangeRateTotals($this->exchangeRateDebitQuery()->get());
+    }
+
+    /**
+     * Aynı toplam, firma ayrımı OLMADAN, yalnızca para birimi bazında —
+     * Dashboard'ın "Açık alacak" kartının TL karşılığı içindir (v2.1.1-D §3):
+     * o kart zaten tüm firmaları tek toplamda gösterir (CLAUDE.md §8/Dashboard
+     * "Açık alacak/borç firma bazında NETLENDİKTEN SONRA toplanır"), bu yüzden
+     * TL karşılığı da aynı granülaritede olmalıdır.
+     *
+     * @return array<string, array{total: Money, complete: bool}>
+     */
+    public function systemWideExchangeRateDebitTotalsByCurrency(): array
+    {
+        $rows = DB::table('stays')
+            ->select('currency')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
+            ->where('status', StayStatus::Active->value)
+            ->where('currency', '<>', Currency::TRY->value)
+            ->groupBy('currency')
+            ->get();
+
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'complete' => (int) $row->missing === 0,
+            ];
+        }
+
+        return $result;
+    }
+
+    private function exchangeRateDebitQuery(): QueryBuilder
+    {
+        return DB::table('stays')
+            ->select('company_id', 'currency')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
+            ->where('status', StayStatus::Active->value)
+            ->where('currency', '<>', Currency::TRY->value)
+            ->groupBy('company_id', 'currency');
+    }
+
+    /**
+     * @param  Collection<int, \stdClass>  $rows
+     * @return array<int, array<string, array{total: Money, complete: bool}>>
+     */
+    private function mapExchangeRateTotals(Collection $rows): array
+    {
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(int) $row->company_id][(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'complete' => (int) $row->missing === 0,
+            ];
+        }
+
+        return $result;
     }
 
     /**

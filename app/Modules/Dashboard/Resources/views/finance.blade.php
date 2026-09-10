@@ -70,11 +70,20 @@
                                 :value="$totals->payable->format($totals->currency)"
                                 hint="Bizim firmalara borcumuz" />
 
-                            <x-ui.stat
-                                label="Net bakiye"
-                                :tone="$totals->net->isNegative() ? 'credit' : 'debit'"
-                                :value="$totals->net->format($totals->currency)"
-                                :hint="$totals->net->isNegative() ? 'Net borçluyuz' : 'Net alacaklıyız'" />
+                            <div>
+                                <x-ui.stat
+                                    label="Net bakiye"
+                                    :tone="$totals->net->isNegative() ? 'credit' : 'debit'"
+                                    :value="$totals->net->format($totals->currency)"
+                                    :hint="$totals->net->isNegative() ? 'Net borçluyuz' : 'Net alacaklıyız'" />
+                                @if ($totals->currency !== \App\Modules\Core\Enums\Currency::TRY)
+                                    @if ($totals->netTl !== null)
+                                        <x-ui.fx-note :equivalent="$totals->netTl" />
+                                    @else
+                                        <p class="mt-0.5 text-xs text-mut">TL karşılığı eksik veri nedeniyle tam değil</p>
+                                    @endif
+                                @endif
+                            </div>
 
                             <x-ui.stat
                                 label="Bu ay konaklama"
@@ -119,8 +128,13 @@
                                            class="-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-lg px-2 hover:bg-well">
                                             <span class="min-w-0 truncate text-sm text-tx">{{ $row->companyName }}</span>
 
-                                            <span class="shrink-0 text-sm font-medium tabular-nums text-debit">
-                                                {{ $row->balance->format($row->currency) }}
+                                            <span class="shrink-0 text-right">
+                                                <span class="block text-sm font-medium tabular-nums text-debit">
+                                                    {{ $row->balance->format($row->currency) }}
+                                                </span>
+                                                @if ($row->balanceTl !== null)
+                                                    <x-ui.fx-note :equivalent="$row->balanceTl" class="text-right" />
+                                                @endif
                                             </span>
                                         </a>
                                     </li>
@@ -151,11 +165,14 @@
                                 </span>
 
                                 {{-- İptal edilmiş tahsilat "alacak" rengiyle gösterilmez. --}}
-                                <span @class([
-                                    'shrink-0 text-sm font-medium tabular-nums',
-                                    'text-credit' => ! $payment->isCancelled(),
-                                    'text-mut line-through' => $payment->isCancelled(),
-                                ])>{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                                <span class="shrink-0 text-right">
+                                    <span @class([
+                                        'block text-sm font-medium tabular-nums',
+                                        'text-credit' => ! $payment->isCancelled(),
+                                        'text-mut line-through' => $payment->isCancelled(),
+                                    ])>{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                                    <x-ui.fx-note :rate="$payment->exchange_rate_to_try" :equivalent="$payment->tryEquivalentMoney()" class="text-right" />
+                                </span>
                             </div>
 
                             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mut">
@@ -188,8 +205,11 @@
                             <div class="flex items-baseline justify-between gap-3">
                                 <span class="min-w-0 truncate text-sm text-tx">{{ $stay->guest_name }}</span>
 
-                                <span class="shrink-0 text-sm font-medium tabular-nums text-tx">
-                                    {{ $stay->amountMoney()->format($stay->currency) }}
+                                <span class="shrink-0 text-right">
+                                    <span class="block text-sm font-medium tabular-nums text-tx">
+                                        {{ $stay->amountMoney()->format($stay->currency) }}
+                                    </span>
+                                    <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
                                 </span>
                             </div>
 

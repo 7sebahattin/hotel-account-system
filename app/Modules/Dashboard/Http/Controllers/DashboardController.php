@@ -37,7 +37,9 @@ class DashboardController extends Controller
             ]);
         }
 
-        $view = $request->query('view') === 'finance' ? 'finance' : 'operations';
+        // Kullanıcı talimatı: Ana Sayfa'nın varsayılanı artık FİNANS'tır —
+        // Operasyon yalnızca ?view=operations ile açıkça istenirse gelir.
+        $view = $request->query('view') === 'operations' ? 'operations' : 'finance';
 
         if ($view === 'finance') {
             return view('dashboard::finance', [

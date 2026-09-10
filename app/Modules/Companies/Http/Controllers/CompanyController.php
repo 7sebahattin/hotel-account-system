@@ -12,6 +12,7 @@ use App\Modules\Companies\Http\Requests\CompanyRequest;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
@@ -90,6 +91,13 @@ class CompanyController extends Controller
             'balances' => $request->user()?->can(Permission::LedgerView->value) === true
                 ? $this->ledger->balancesForCompanyByCurrency($company->getKey())
                 : [],
+
+            // Bakiyenin TL karşılığı (v2.1.1-D §3) — AYNI yetki koşulu,
+            // Firma Bakiye Listesi'ndeki `companyFxTotals()` ile AYNI
+            // per-firma sorgu deseni (Stays debit + Payments credit).
+            'balancesFx' => $request->user()?->can(Permission::LedgerView->value) === true
+                ? $this->companyFx($company->getKey())
+                : [],
         ]);
     }
 
@@ -130,6 +138,33 @@ class CompanyController extends Controller
 
         return redirect()->route('companies.show', $company)
             ->with('success', 'Firma geri alındı.');
+    }
+
+    /**
+     * Tek firmanın para birimi bazında TL karşılığı — `StatementController::
+     * companyFxTotals()` ile AYNI hesap, tek firma için.
+     *
+     * @return array<string, array{net: Money, complete: bool}>
+     */
+    private function companyFx(int $companyId): array
+    {
+        $debit = $this->stays->exchangeRateDebitTotalsForCompanies([$companyId])[$companyId] ?? [];
+        $credit = $this->payments->exchangeRateCreditTotalsForCompanies([$companyId])[$companyId] ?? [];
+
+        $codes = array_unique([...array_keys($debit), ...array_keys($credit)]);
+        $result = [];
+
+        foreach ($codes as $code) {
+            $debitEntry = $debit[$code] ?? ['total' => Money::zero(), 'complete' => true];
+            $creditEntry = $credit[$code] ?? ['total' => Money::zero(), 'complete' => true];
+
+            $result[$code] = [
+                'net' => $debitEntry['total']->subtract($creditEntry['total']),
+                'complete' => $debitEntry['complete'] && $creditEntry['complete'],
+            ];
+        }
+
+        return $result;
     }
 
     /**

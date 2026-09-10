@@ -331,14 +331,28 @@ class DashboardTest extends TestCase
     }
 
     #[Test]
-    public function admin_ve_patron_varsayilan_olarak_operasyon_gorunumunu_gorur(): void
+    public function admin_ve_patron_varsayilan_olarak_finans_gorunumunu_gorur(): void
     {
+        // Kullanıcı talimatı: Ana Sayfa'nın varsayılanı Finans'tır; Operasyon
+        // yalnızca ?view=operations ile açıkça istenir. Sistemde firma
+        // yokken finans boş-durum ekranını ("Sistem henüz boş") gösterir —
+        // bu da operasyona özgü "Şu an" başlığının GÖRÜNMEDİĞİNİ kanıtlar.
         foreach ([RoleName::Admin, RoleName::Patron] as $role) {
             $this->actingAs($this->userWithRole($role))->get(route('home'))
                 ->assertOk()
+                ->assertSee('Sistem henüz boş')
+                ->assertDontSee('Şu an');
+        }
+    }
+
+    #[Test]
+    public function admin_ve_patron_operasyon_gorunumunu_view_parametresiyle_gorur(): void
+    {
+        foreach ([RoleName::Admin, RoleName::Patron] as $role) {
+            $this->actingAs($this->userWithRole($role))->get(route('home', ['view' => 'operations']))
+                ->assertOk()
                 ->assertSee('Şu an')
-                ->assertDontSee('Cari durum')
-                ->assertDontSee('En yüksek bakiyeli firmalar');
+                ->assertDontSee('Cari durum');
         }
     }
 
@@ -385,7 +399,7 @@ class DashboardTest extends TestCase
     #[Test]
     public function admin_operasyon_panosunda_hizli_islem_menusunu_gorur(): void
     {
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertSee('Hızlı işlem')
             ->assertSee('Tahsilat')
@@ -442,11 +456,11 @@ class DashboardTest extends TestCase
         $this->debit($company, '1000.00', Currency::TRY, '2026-09-01');
 
         $admin = $this->userWithRole(RoleName::Admin);
-        $this->actingAs($admin)->get(route('home'));
+        $this->actingAs($admin)->get(route('home', ['view' => 'operations']));
 
         DB::enableQueryLog();
         DB::flushQueryLog();
-        $this->actingAs($admin)->get(route('home'))->assertOk();
+        $this->actingAs($admin)->get(route('home', ['view' => 'operations']))->assertOk();
         $queries = DB::getRawQueryLog();
         DB::disableQueryLog();
 
@@ -519,7 +533,10 @@ class DashboardTest extends TestCase
             "Sorgu sayısı firma sayısıyla arttı ({$withThree} → {$withFifteen}): N+1 var."
         );
 
-        $this->assertLessThanOrEqual(15, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 15.");
+        // v2.1.1-D §3: TL karşılığı hesapları (sistem çapında + en yüksek
+        // bakiyeli firmalar) dört yeni TOPLU sorgu ekledi (13 → 17); bunlar da
+        // kayıt sayısıyla BÜYÜMEZ (yukarıdaki assertSame zaten bunu kanıtlar).
+        $this->assertLessThanOrEqual(17, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 17.");
     }
 
     #[Test]
@@ -528,11 +545,11 @@ class DashboardTest extends TestCase
         $admin = $this->userWithRole(RoleName::Admin);
 
         $measure = function () use ($admin): int {
-            $this->actingAs($admin)->get(route('home'));
+            $this->actingAs($admin)->get(route('home', ['view' => 'operations']));
 
             DB::enableQueryLog();
             DB::flushQueryLog();
-            $this->actingAs($admin)->get(route('home'))->assertOk();
+            $this->actingAs($admin)->get(route('home', ['view' => 'operations']))->assertOk();
             $count = count(DB::getRawQueryLog());
             DB::disableQueryLog();
 
@@ -627,7 +644,7 @@ class DashboardTest extends TestCase
     #[Test]
     public function operasyon_gorunumu_acik_vardiya_yokken_kapali_durumu_gosterir(): void
     {
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertSee('Kasa Kapalı')
             ->assertSee('Açık vardiya yok');
@@ -664,7 +681,7 @@ class DashboardTest extends TestCase
         $this->assertSame('0.00', $summary->todayTotals['TRY']->expense->toDecimal());
         $this->assertSame('-12000.00', $summary->todayTotals['TRY']->cashOut->toDecimal());
 
-        $html = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))->getContent();
+        $html = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))->getContent();
         $this->assertStringNotContainsString('12.000,00 ₺ gider', (string) $html);
     }
 
@@ -681,7 +698,7 @@ class DashboardTest extends TestCase
         $this->assertTrue($summary->hasCountDifferenceToday);
         $this->assertTrue($summary->needsAttention());
 
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertSee('Dikkat gerekenler')
             ->assertSee('Kasa farkı');
@@ -693,7 +710,7 @@ class DashboardTest extends TestCase
         $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
         $this->cash->openSession($x, ['TRY' => Money::fromDecimal('1000.00')]);
 
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
+        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
             ->assertDontSee('Dikkat gerekenler');
     }

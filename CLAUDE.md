@@ -1058,16 +1058,18 @@ admin paneli değildir. `DashboardController` üç dala ayrılır ve dal seçimi
    kullanıcı `dashboard::personnel` görür — `?view=` parametresi HİÇ okunmaz.
    Bu sıra bağlayıcıdır: personel `/dashboard?view=finance` yazarak Admin/Patron
    dallarına asla giremez (kayıt bazlı değil, dalın kendisi kapalıdır).
-2. `dashboard.financial` yetkisi **true** ise `?view=finance` ⇒ `dashboard::finance`,
-   aksi hâlde (varsayılan) `dashboard::operations`.
+2. `dashboard.financial` yetkisi **true** ise `?view=operations` ⇒
+   `dashboard::operations`, aksi hâlde (VARSAYILAN, v2.1.1-D §1 — kullanıcı
+   talimatıyla Finans öne alındı) `dashboard::finance`.
 
 **Operasyon ve Finans AYRI sorgulanır** — `DashboardService::operations()` hiç
 `ledger_entries`/`companies`/`stays`/`payments` sorgulamaz; `finance()` hiç
 `cash_*` tablosu sorgulamaz. Hangisi seçiliyse yalnız o çalışır
 (`DashboardTest::operasyon_gorunumu_cari_veya_firma_sorgusu_calistirmaz`,
 `finans_gorunumu_kasa_sorgusu_calistirmaz`). İkisi de kayıt sayısıyla BÜYÜMEZ;
-sorgu üst sınırı Finans için 15, Operasyon için vardiya/devir sayısından
-bağımsız sabit bir sayıdır (`CashBookService::summariesFor()` zaten O(1)).
+sorgu üst sınırı Finans için 17 (v2.1.1-D §3 — TL karşılığı toplu sorguları
+dahil), Operasyon için vardiya/devir sayısından bağımsız sabit bir sayıdır
+(`CashBookService::summariesFor()` zaten O(1)).
 
 - **Operasyon** ("Otelde şu anda ne oluyor?") — A) Şu an (açık vardiya sahibi +
   saat + hareket sayısı, `CashBookService::dashboardSnapshot()`'tan), B) Kasada
@@ -1415,9 +1417,16 @@ Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` il
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
 `alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`.
 
-`fx-note` (v2.1.1-C) yabancı para birimli bir tutarın altında küçük/soluk "≈ … TL
-· Kur: …" metnini gösterir; kur kayıtlı DEĞİLSE hiç render edilmez (tabloyu
-kalabalıklaştırmaz).
+`fx-note` (v2.1.1-C, v2.1.1-D'de genişletildi) yabancı para birimli bir
+tutarın altında küçük/soluk TL karşılığını gösterir; kur kayıtlı DEĞİLSE hiç
+render edilmez (tabloyu kalabalıklaştırmaz). İKİ MODU vardır: `:rate` DE
+verilen TEK işlem modu ("≈ … TL · Kur: …") ve yalnızca `:equivalent` verilen
+TOPLAM/bakiye modu ("≈ … TL", kur satırı olmadan — birden çok işlemin NETİ
+olduğu için TEK bir kur yoktur). **Bileşenin kendi üst açıklama yorumu
+İÇİNE ikinci bir `{{-- --}}` yorumu AÇILMAMALIDIR** — Blade yorumları iç
+içe geçmez, ilk `--}}`'de kapanır ve dosyanın gerçek kapanışı HTML'e düz
+metin olarak sızar (K-105'te tam olarak bu yaşandı ve gerçek tarayıcı
+QA'sında yakalandı).
 
 `stat` sayısal özet kutusudur (etiket + değer + ipucu); `panel` başlıklı liste
 kartıdır (dahili başlığı `<h3>`'tür — sayfa başlığı `<h1>`, `<x-ui.page-header>`
@@ -1447,8 +1456,18 @@ yeterlidir (`count` atlanır).
 - Kenar çubuğu üstünde **marka alanı** vardır (`partials/brand`): logo dosyası
   (`config('hotel.brand.logo')`, varsayılan `public/images/logo.svg`) varsa
   kullanılır, yoksa altın zeminli monogram çizilir — kırık görsel gösterilmez.
-- Menü **gruplu**dur: başlıksız ana grup, "Cari", "Yönetim". İçinde görünür öğe
-  kalmayan grup hiç çizilmez.
+- Menü **gruplu**dur: başlıksız ana grup ("Ana Sayfa"), "Kasa", "Cari",
+  "Yönetim". İçinde görünür öğe kalmayan grup hiç çizilmez.
+- **Etiketli gruplar (Kasa/Cari/Yönetim) native `<details>`/`<summary>` ile
+  çökertilebilir/genişletilebilirdir** (v2.1.1-D §2 — Alpine.js kurulu
+  DEĞİLDİR, §11.7): koyu (`bg-nav-well`) başlık satırı tıklanınca alt
+  öğeleri açar/kapatır. **Varsayılan KAPALIDIR**; yalnızca aktif sayfanın
+  bulunduğu grup sunucu tarafında `open` hesaplanır
+  (`$groupActive = collect($group['items'])->contains(...)`) ve o grup
+  başka bir gruba geçilene kadar açık kalır. Aktif öğe deseni
+  `sidebar.blade.php`'de MERKEZİLEŞTİRİLMİŞTİR — her rotanın KENDİ,
+  ÇAKIŞMAYAN bir `routeIs()` deseni vardır (bir kardeş rotanın deseniyle
+  ASLA örtüşmez; K-105'te tam olarak bu örtüşme bir bug'a yol açmıştı).
 - Aktif öğe ÜÇ işaretle belirtilir: sol altın şerit, `nav-well` zemin ve
   `aria-current="page"`. Aktiflik desenle bulunur (`companies.*`), böylece alt
   ekranlarda da işaretli kalır.
