@@ -38,6 +38,8 @@ use Illuminate\Support\Carbon;
  * @property StayPricingMode $pricing_mode
  * @property string|null $daily_rate
  * @property Currency $currency
+ * @property string|null $exchange_rate_to_try
+ * @property string|null $try_equivalent
  * @property string|null $notes
  * @property StayStatus $status
  * @property int $created_by
@@ -69,6 +71,8 @@ class Stay extends Model
         'pricing_mode',
         'daily_rate',
         'currency',
+        'exchange_rate_to_try',
+        'try_equivalent',
         'notes',
     ];
 
@@ -87,6 +91,8 @@ class Stay extends Model
             'daily_rate' => 'decimal:2',
             'pricing_mode' => StayPricingMode::class,
             'currency' => Currency::class,
+            'exchange_rate_to_try' => 'decimal:4',
+            'try_equivalent' => 'decimal:2',
             'status' => StayStatus::class,
             'nights' => 'integer',
         ];
@@ -126,6 +132,27 @@ class Stay extends Model
     public function dailyRateMoney(): ?Money
     {
         return $this->daily_rate === null ? null : Money::fromDecimal($this->daily_rate);
+    }
+
+    /**
+     * TL karşılığı — yalnızca yabancı para birimli ve kuru KAYITLI konaklamalarda
+     * dolu (v2.1.1-C §2). İşlem anında bir kez hesaplanan bir ANLIK GÖRÜNTÜdür;
+     * burada YENİDEN hesaplanmaz, yalnızca saklanan değer okunur.
+     */
+    public function tryEquivalentMoney(): ?Money
+    {
+        return $this->try_equivalent === null ? null : Money::fromDecimal($this->try_equivalent);
+    }
+
+    public function hasExchangeRate(): bool
+    {
+        return $this->exchange_rate_to_try !== null;
+    }
+
+    /** Yabancı para birimli ve kur bilgisi EKSİK olan kayıt — düzeltme kuyruğuna girer. */
+    public function isMissingExchangeRate(): bool
+    {
+        return $this->currency !== Currency::TRY && $this->exchange_rate_to_try === null;
     }
 
     public function isDailyPriced(): bool

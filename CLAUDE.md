@@ -92,6 +92,10 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
   (**Fiziksel kasa defteri Gün 10'da kapsama ALINDI** — vardiya/devir/sayım.
   Kapsam dışı olan yalnızca BANKA tarafıdır; bkz. §8/Kasa Defteri.)
 - Kur servisi, TCMB entegrasyonu, döviz çevrimi
+  (**v2.1.1-C'de DAR bir istisna açıldı** — bkz. aşağıdaki blockquote.
+  Otomatik/canlı kur servisi, TCMB entegrasyonu ve otomatik güncelleme
+  HÂLÂ kapsam dışıdır; açılan yalnızca elle girilen, tek seferlik bir
+  kur ANLIK GÖRÜNTÜSÜdür.)
 - Yaşlandırma (aging) raporları
 - Fatura / e-Fatura / e-Arşiv
 - Channel manager
@@ -108,6 +112,19 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
 > Oda Tipi lookup tablosu, fiyatlandırma/oda ilişkisi, PMS durumları HÂLÂ
 > kapsam dışıdır ve bu istisnanın parçası DEĞİLDİR. Detay: §5.9, §8/Odalar,
 > `docs/kararlar.md` K-100.
+
+> **Döviz kuru anlık görüntüsü v2.1.1-C'de kapsama ALINDI** — kullanıcı bu
+> listedeki kuralı bilerek AŞMIŞTIR (istisna talep edildi, "dur ve sor" kuralı
+> uygulanıp kullanıcıya açıkça soruldu, "evet ikisini de şimdi yap" yanıtı
+> alındı). Kapsam KASITLI OLARAK dar tutulmuştur: yalnızca (1) yeni bir
+> Stay/Payment/ReceiptBookEntry TRY DIŞI bir para biriminde oluşturulurken
+> operatörün ELLE girdiği bir kurun `exchange_rate_to_try`/`try_equivalent`
+> olarak SAKLANMASI ve (2) bu turdan ÖNCEKİ eksik kayıtları tek seferlik
+> doldurmak için "Yönetim → Geçmiş Döviz Düzeltme" ekranı. Otomatik/canlı kur
+> servisi, TCMB entegrasyonu, periyodik güncelleme, kur çevrimi (farklı para
+> birimlerini birbirine dönüştürme) HÂLÂ kapsam dışıdır ve bu istisnanın
+> parçası DEĞİLDİR. Detay: §5.3, §5.4, §7.2, §8/Payments, §8/Geçmiş Döviz
+> Düzeltme, `docs/kararlar.md` K-104.
 
 **Kural:** Bu listedeki bir şey isteniyorsa dur ve kullanıcıya sor. "Sadece küçük bir alan ekleyeyim" yapma.
 
@@ -145,6 +162,8 @@ app/
     ├── Ledger/
     ├── Dashboard/
     ├── CashBook/
+    ├── FxCorrection/               # Geçmiş Döviz Düzeltme (v2.1.1-C) — kendi model/migration'ı yok
+    ├── ReceiptBook/                # Tahsilat Makbuzu Defteri (v2.1.1-C) — muhasebeden AYRI, yazdırma amaçlı
     └── AuditLog/
 config/
 ├── hotel.php                       # uygulamaya özel ayarlar
@@ -265,6 +284,8 @@ Genel kurallar:
 | pricing_mode | varchar(10) | `total` \| `daily` — ücretin nasıl girildiği |
 | daily_rate | decimal(15,2) null | yalnızca `daily` modunda dolu |
 | currency | char(3) | default TRY |
+| exchange_rate_to_try | decimal(10,4) null | v2.1.1-C — yalnızca TRY DIŞI kayıtlarda, işlem ANINDA girilen kur ANLIK GÖRÜNTÜSÜ; sonradan yeniden hesaplanmaz (bkz. §8/Payments, K-104) |
+| try_equivalent | decimal(15,2) null | v2.1.1-C — `amount × exchange_rate_to_try` (tamsayı kuruş aritmetiğiyle); salt bilgi amaçlı, `ledger_entries`e hiç yazılmaz |
 | notes | text null | |
 | status | varchar(20) | `active` \| `cancelled` — V1'de PMS durumu YOK |
 | created_by / updated_by | FK users | |
@@ -288,6 +309,8 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 - `CHECK (nights >= 1)`
 - `CHECK (pricing_mode IN ('total','daily'))`
 - `CHECK ((pricing_mode='total' AND daily_rate IS NULL) OR (pricing_mode='daily' AND daily_rate IS NOT NULL AND daily_rate > 0))`
+- `CHECK (currency <> 'TRY' OR (exchange_rate_to_try IS NULL AND try_equivalent IS NULL))` — TRY hiç kur taşımaz (v2.1.1-C)
+- `CHECK` — kur ve karşılık HER ZAMAN birlikte dolu ya da birlikte boş; ikisi de pozitif
 
 ### 5.4 `payments`
 
@@ -298,6 +321,8 @@ Index: `(company_id, check_in_date)`, `(check_in_date, check_out_date)`, `(check
 | payment_date | date | index |
 | amount | decimal(15,2) | > 0 |
 | currency | char(3) | default TRY |
+| exchange_rate_to_try | decimal(10,4) null | v2.1.1-C — `stays` ile AYNI kur anlık görüntüsü deseni; `Payment::IMMUTABLE_FIELDS`e BİLEREK eklenmedi (normal düzenleme yolu zaten bu alanı hiç bilmiyor), tek yazma yolu `create()` ve Geçmiş Döviz Düzeltme |
+| try_equivalent | decimal(15,2) null | v2.1.1-C — `stays` ile AYNI, salt bilgi amaçlı |
 | payment_method | varchar(30) null | enum `PaymentMethod`: `cash`, `bank_transfer`, `credit_card`, `cheque`, `other` |
 | cash_session_id | FK cash_sessions null | v2.1.1-A.1 — oluşturma anında EXPLICIT atanır, bir daha değişmez (bkz. §8/Payments, K-095) |
 | receipt_no | varchar(20) null, unique | v2.1.1-B — `Payment::id` üzerinden türetilir (`TM-{Y}-{id:06d}`), bir daha değişmez (bkz. §8/Payments, K-096) |
@@ -321,6 +346,8 @@ Index: `(company_id, payment_date)`, `(payment_date)`, `(status)`, `(currency)`,
 - `CHECK (status IN ('active','cancelled'))`
 - `CHECK (payment_method IS NULL OR payment_method IN ('cash','bank_transfer','credit_card','cheque','other'))`
 - `CHECK ((status='active' AND cancelled_at IS NULL AND cancelled_by IS NULL) OR (status='cancelled' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL))`
+- `CHECK (currency <> 'TRY' OR (exchange_rate_to_try IS NULL AND try_equivalent IS NULL))` — TRY hiç kur taşımaz (v2.1.1-C)
+- `CHECK` — kur ve karşılık HER ZAMAN birlikte dolu ya da birlikte boş; ikisi de pozitif
 
 ### 5.5 `ledger_entries`
 
@@ -482,6 +509,37 @@ gereksiz soyutlama, §3.3).
 Pasif (`is_active=false`) bir oda YENİ konaklama için seçilemez ama geçmişte
 görünmeye devam eder (`Stay.room_id` değişmez).
 
+### 5.10 `receipt_book_entries` (v2.1.1-C)
+
+Tahsilat Makbuzu Defteri — mevcut muhasebe `payments` tablosundan TAMAMEN
+AYRI, yazdırma amaçlı bir kayıt defteri. `ledger_entries`/`payments`/
+`cash_movements` ile **hiçbir FK/yazma ilişkisi yoktur**; bkz. §8/Tahsilat
+Makbuzu Defteri.
+
+| Alan | Tip | Not |
+|---|---|---|
+| id | bigint PK | |
+| receipt_no | varchar(20) null, unique | `id` üzerinden türetilir (`MKB-{Y}-{id:06d}`) — gerçek muhasebe makbuzunun (`TM-…`) önekiyle KARIŞTIRILMAZ |
+| receipt_date | date | index |
+| customer_name | varchar(200) | serbest metin — `companies` FK'si YOKTUR (dokümantasyon amaçlı, herhangi bir müşteri için) |
+| amount | decimal(15,2) | > 0 |
+| currency | char(3) | default TRY |
+| exchange_rate_to_try | decimal(10,4) null | `stays`/`payments` ile AYNI kur anlık görüntüsü deseni |
+| try_equivalent | decimal(15,2) null | salt bilgi amaçlı |
+| payment_method | varchar(30) null | enum `ReceiptPaymentMethod` — `Payments\PaymentMethod`ile PAYLAŞILMAZ (o enum'un `Cash` değeri kasa hareketi tetikler, bu modülde HİÇBİR yan etki yoktur) |
+| description | text null | |
+| created_by / updated_by | FK users | |
+| created_at / updated_at | | |
+
+**Silme/iptal ucu YOKTUR** — route, policy ve serviste tanımlı değildir;
+geçmiş makbuz asla silinmez/değiştirilmez. Bu yüzden `deleted_at`/`status`
+kolonu AÇILMADI (§3.2 ilkesi).
+
+**Veritabanı düzeyinde değişmezler:** `CHECK (amount > 0)`,
+`CHECK (currency <> 'TRY' OR (exchange_rate_to_try IS NULL AND try_equivalent IS NULL))`,
+kur/karşılık çifti her zaman birlikte dolu/boş ve pozitif — `stays`/`payments`
+ile BİREBİR AYNI üç CHECK deseni.
+
 ### 5.7 Morph map
 
 `AppServiceProvider::boot()` içinde `Relation::enforceMorphMap([...])` zorunlu:
@@ -489,7 +547,7 @@ görünmeye devam eder (`Stay.room_id` değişmez).
 `'user' => User::class`, `'role' => Role::class`, `'ledger_entry' => LedgerEntry::class`,
 `'cash_session' => CashSession::class`, `'cash_movement' => CashMovement::class`,
 `'cash_transfer' => CashTransfer::class`, `'cash_movement_category' => CashMovementCategory::class`,
-`'room' => Room::class`.
+`'room' => Room::class`, `'receipt_book_entry' => ReceiptBookEntry::class`.
 Sınıf adı değişse bile veri bozulmaz.
 
 ---
@@ -619,6 +677,9 @@ cashbook.manage_categories  # kasa hareket türlerini (kategori) yönet (v2.1.1-
 dashboard.financial    # finansal dashboard kartları
 export.excel
 audit.view
+fx.correct_historical  # Geçmiş Döviz Düzeltme (v2.1.1-C) — yalnızca Admin/Patron
+receipt_book.view      # Tahsilat Makbuzu Defteri'ni görüntüle/yazdır (v2.1.1-C, payments.view ile AYNI birleşik desen)
+receipt_book.create    # Tahsilat Makbuzu Defteri'ne yeni makbuz ekle (v2.1.1-C)
 ```
 
 Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse sabit/enum üzerinden referans verilir.
@@ -661,6 +722,9 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | export.excel | ✅ | ✅ | ❌ |
 | audit.view | ✅ | ✅ (salt okunur) | ❌ |
 | audit — silme | ❌ | ❌ | ❌ |
+| fx.correct_historical | ✅ | ✅ | ❌ |
+| receipt_book.view | ✅ | ✅ | ✅ |
+| receipt_book.create | ✅ | ✅ | ✅ |
 
 ⚠️ = policy içinde koşullu
 
@@ -735,6 +799,14 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
   Pasif bir oda YENİ kayıt için seçilemez (`StayRequest`); düzenlemede kaydın KENDİ odası
   pasifleşmiş olsa bile seçenekten kaybolmaz. `room_id` finansal alan DEĞİLDİR, değişimi
   ters kayıt üretmez.
+- **Kur (v2.1.1-C, §3.2 istisnası):** yeni bir TRY DIŞI konaklama oluşturulurken
+  `exchange_rate_to_try` ZORUNLUDUR; sunucu `try_equivalent`i `Money::multiplyByRate()`
+  ile tamsayı aritmetiğiyle hesaplar ve saklar. `LedgerService`'e HİÇ geçirilmez —
+  cari hareketi her zaman orijinal para biriminde kalır (§6/L5). Yalnızca OLUŞTURMADA
+  sorulur; düzenleme formunda bu alan hiç YOKTUR. Finansal bir düzenleme (tutar/para
+  birimi değişimi) MEVCUT kuru koruyarak karşılığı yeniden hesaplar — yeni bir CANLI
+  kur DEĞİLDİR. Eksik geçmiş kayıtlar yalnızca "Geçmiş Döviz Düzeltme" ile doldurulur
+  (bkz. aşağı). Detay: K-104.
 
 ### Rooms (Odalar) — K-100
 
@@ -884,6 +956,52 @@ bu açıkça yazılıdır. Z-raporu hâlâ YOKTUR (yukarıdaki madde).
   (yalnızca route ADI ile — CashBook Payments sınıflarını import ETMEZ, §4.3/3
   ihlal edilmez); `payments::show` da bağlı vardiyaya (`Payment.cashSession`)
   bağlantı verir.
+- **Kur (v2.1.1-C, §3.2 istisnası):** Stays ile AYNI kural — TRY DIŞI tahsilatta
+  `exchange_rate_to_try` ZORUNLUDUR, `try_equivalent` sunucuda hesaplanır. Tahsilat
+  tamamen değişmez olduğu için (yukarı) bu alanlar `Payment::IMMUTABLE_FIELDS`e
+  BİLEREK EKLENMEDİ — normal düzenleme yolu (`UpdatePaymentRequest`) zaten bu
+  alanları hiç bilmiyor, tek yazma yolu `create()` ve "Geçmiş Döviz Düzeltme"dir.
+  Detay: K-104.
+
+### Geçmiş Döviz Düzeltme (v2.1.1-C, §3.2 istisnası)
+
+Yönetim → Geçmiş Döviz Düzeltme (`fx.correct_historical`, Admin/Patron). Bu
+turdan ÖNCE oluşturulmuş, TRY DIŞI ve kuru EKSİK Stay/Payment kayıtlarını
+listeler; operatör her satıra yalnızca o günkü kuru girer.
+
+- Kendi migration/model'i YOKTUR — `StayService`/`PaymentService`'in
+  `missingExchangeRate()`/`correctHistoricalExchangeRate()` metotlarını çağıran
+  ince bir kontrolcüdür (Ledger ekstresinin Companies'te barınma gerekçesiyle
+  AYNI desen, §4.3/3).
+- **Katı kurallar:** orijinal tutar/para birimi ASLA değişmez; ikinci bir
+  finansal işlem OLUŞTURULMAZ; cari hareketi ASLA ters kaydedilmez/yeniden
+  işlenmez — yalnızca eksik `exchange_rate_to_try`/`try_equivalent` yazılır.
+  Kur ZATEN kayıtlıysa ikinci "düzeltme" REDDEDİLİR (`ExchangeRateAlreadyRecorded`)
+  — normal ekranlardan rastgele düzenleme mimari olarak İMKÂNSIZDIR.
+  Her düzeltme `AuditEvent::ExchangeRateCorrected` ile kim/ne zaman AYRICA loglanır.
+
+### Tahsilat Makbuzu Defteri (v2.1.1-C, §4.3 kural 5 istisnası)
+
+Mevcut muhasebe **Tahsilatlar** (`Payments`) modülünden TAMAMEN AYRI, yazdırma/
+dokümantasyon amaçlı bir modül (`ReceiptBook`) — kullanıcının açık onayıyla,
+gerçek muhasebe Tahsilat Makbuzuyla (K-096) karışmasın diye BİLEREK FARKLI
+isimlendirildi.
+
+- **KRİTİK:** bir makbuzun kaydı firma cari bakiyesini, fiziksel kasayı veya
+  herhangi bir muhasebe kaydını KESİNLİKLE ETKİLEMEZ — `ReceiptBookService`
+  `LedgerService`/`PaymentService`/`CashBookService`'i HİÇ import ETMEZ.
+- Kendi tablosu, kendi numaralandırması (`MKB-{Y}-{id:06d}` — gerçek `TM-…`
+  ile KARIŞTIRILMAZ), kendi ödeme şekli enum'u (`ReceiptPaymentMethod`).
+- **Silme/iptal ucu YOKTUR** — geçmiş makbuz asla silinmez.
+- Giriş UX'i: "Yeni Makbuz" Kasa Hareketi dialog'unun (K-098) AYNI desenini
+  kullanan bir modal/sheet açar; standalone `receipt-book.create` sayfası
+  JS kapalıyken/doğrulama hatasında FALLBACK'tir.
+- Yazdırma: şirket bilgisi sol / "TAHSİLAT MAKBUZU" başlığı sağ (iki sütun),
+  `config('hotel.company.*')` kullanır (K-096 ile AYNI kaynak, hardcode YOK).
+- Sidebar: "Cari" grubunda **"TAHSİLAT MAKBUZLARI"** — "Tahsilatlar"dan
+  görsel/metinsel olarak AÇIKÇA AYRI.
+- Yetkiler `receipt_book.view`/`receipt_book.create` — Personel de sahiptir
+  (`payments.create` ile AYNI operasyonel seviye). Detay: K-104.
 
 ### Ledger / Current Account
 
@@ -1295,7 +1413,11 @@ ve sağa hizalı.
 
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
-`alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`.
+`alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`.
+
+`fx-note` (v2.1.1-C) yabancı para birimli bir tutarın altında küçük/soluk "≈ … TL
+· Kur: …" metnini gösterir; kur kayıtlı DEĞİLSE hiç render edilmez (tabloyu
+kalabalıklaştırmaz).
 
 `stat` sayısal özet kutusudur (etiket + değer + ipucu); `panel` başlıklı liste
 kartıdır (dahili başlığı `<h3>`'tür — sayfa başlığı `<h1>`, `<x-ui.page-header>`
@@ -1673,7 +1795,10 @@ Kurallar:
 - Cron: günlük `mysqldump` + şifreli yedek kopyası (offsite). `schedule:run` V1'de sadece yedek için.
 - Deploy sonrası, bu SIRAYLA (bağlayıcı, K-099/K-102 — tam kontrol listesi
   `docs/release-checklist-v2.1.1.md`):
-  `config:clear route:clear view:clear event:clear` (bayat cache temizliği,
+  `config:clear route:clear view:clear event:clear` — eşdeğeri olarak tek
+  komut `php artisan optimize:clear` de kullanılabilir (Laravel'in bu dört
+  `:clear` komutunu TEK ÇAĞRIDA topladığı kısayolu; K-104'te kullanıcı
+  talimatıyla teyit edildi) (bayat cache temizliği,
   **MIGRATE'TEN ÖNCE** — K-102: önceki deploy'dan kalan bayat
   `bootstrap/cache/config.php`, bu deploy'da yeni eklenen bir modülün
   Service Provider'ını taşımıyorsa `migrate` o modülün migration'larını hiç

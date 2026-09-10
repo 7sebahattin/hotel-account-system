@@ -398,6 +398,10 @@ function initStayPricing() {
     const totalGroups = root.querySelectorAll('[data-pricing-total]');
     const dailyGroups = root.querySelectorAll('[data-pricing-daily]');
     const totalOutput = root.querySelector('[data-daily-total]');
+    const amountInput = root.querySelector('[name="amount"]');
+    const exchangeRateGroup = root.querySelector('[data-exchange-rate-group]');
+    const exchangeRateInput = root.querySelector('[data-exchange-rate]');
+    const exchangeRatePreview = root.querySelector('[data-exchange-rate-preview]');
 
     // Sembol JS'de sabit bir listeye bağlanmaz: her <option> kendi sembolünü
     // `data-symbol` ile taşır (bkz. Currency::symbol(), PHP tarafındaki tek kaynak).
@@ -448,20 +452,236 @@ function initStayPricing() {
         totalGroups.forEach((group) => { group.hidden = daily; });
         dailyGroups.forEach((group) => { group.hidden = !daily; });
         // Gizli alan zorunlu kalırsa tarayıcı form gönderimini engeller.
-        root.querySelector('[name="amount"]')?.toggleAttribute('required', !daily);
+        amountInput?.toggleAttribute('required', !daily);
         rateInput?.toggleAttribute('required', daily);
         renderTotal();
     };
 
+    // Kur alanı yalnızca TRY DIŞI para biriminde görünür/zorunludur
+    // (v2.1.1-C §2). TRY'ye dönülürse alan hem gizlenir hem TEMİZLENİR —
+    // sunucu zaten TRY için gönderilse bile bu alanı reddeder, ama
+    // formda görünmemesi kullanıcı için daha dürüsttür.
+    const renderExchangeRatePreview = () => {
+        if (!exchangeRatePreview) return;
+        const amountMinor = toMinorUnits(amountInput?.value);
+        const rateMinor = toMinorUnits(exchangeRateInput?.value);
+        if (amountMinor === null || rateMinor === null) {
+            exchangeRatePreview.textContent = '';
+            return;
+        }
+        // rateMinor kuruş cinsinden 'kur × 100'dür (ör. 51,20 → 5120).
+        // TL karşılığı = tutar(kuruş) × kur(yüzde) / 100 / 100 — tamsayı bölme.
+        const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+        exchangeRatePreview.textContent = `≈ ${formatMinorUnits(equivalentMinor, '₺')} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
+    };
+
+    const applyCurrency = () => {
+        if (!exchangeRateGroup || !exchangeRateInput) return;
+        const isTry = currencySelect?.value === 'TRY';
+        exchangeRateGroup.hidden = isTry;
+        exchangeRateInput.toggleAttribute('required', !isTry);
+        if (isTry) {
+            exchangeRateInput.value = '';
+        }
+        renderExchangeRatePreview();
+    };
+
     modeSelect?.addEventListener('change', applyMode);
+    currencySelect?.addEventListener('change', applyCurrency);
     [rateInput, currencySelect, checkIn, checkOut].forEach((el) =>
         el?.addEventListener('input', renderTotal)
     );
+    [amountInput, exchangeRateInput].forEach((el) =>
+        el?.addEventListener('input', renderExchangeRatePreview)
+    );
 
     applyMode();
+    applyCurrency();
 }
 
 document.addEventListener('DOMContentLoaded', initStayPricing);
+
+/**
+ * Tahsilat formu — kur alanının TL dışı para biriminde gösterilmesi
+ * (v2.1.1-C §2). Yalnızca UX: sunucu tarafı `StorePaymentRequest`/
+ * `PaymentService` doğrulamayı ve hesaplamayı BAĞIMSIZ olarak tekrar yapar.
+ */
+function initPaymentExchangeRate() {
+    const root = document.querySelector('[data-payment-exchange-rate]');
+    if (!root) return;
+
+    const currencySelect = root.querySelector('[data-currency]');
+    const amountInput = root.querySelector('[data-amount]');
+    const group = root.querySelector('[data-exchange-rate-group]');
+    const rateInput = root.querySelector('[data-exchange-rate]');
+    const preview = root.querySelector('[data-exchange-rate-preview]');
+
+    const toMinorUnits = (raw) => {
+        const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
+        const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+        if (!match) return null;
+        return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
+    };
+
+    const formatMinorUnits = (minor) => {
+        const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        const fraction = String(minor % 100).padStart(2, '0');
+        return `${whole},${fraction}`;
+    };
+
+    const renderPreview = () => {
+        if (!preview) return;
+        const amountMinor = toMinorUnits(amountInput?.value);
+        const rateMinor = toMinorUnits(rateInput?.value);
+        if (amountMinor === null || rateMinor === null) {
+            preview.textContent = '';
+            return;
+        }
+        const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+        preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
+    };
+
+    const applyCurrency = () => {
+        if (!group || !rateInput) return;
+        const isTry = currencySelect?.value === 'TRY';
+        group.hidden = isTry;
+        rateInput.toggleAttribute('required', !isTry);
+        if (isTry) {
+            rateInput.value = '';
+        }
+        renderPreview();
+    };
+
+    currencySelect?.addEventListener('change', applyCurrency);
+    [amountInput, rateInput].forEach((el) => el?.addEventListener('input', renderPreview));
+
+    applyCurrency();
+}
+
+document.addEventListener('DOMContentLoaded', initPaymentExchangeRate);
+
+/**
+ * Tahsilat Makbuzu Defteri formu — kur alanı (v2.1.1-C §5). Payments'takiyle
+ * AYNI mantık, ayrı bir kök seçici (`[data-receipt-book-form]`) üzerinden —
+ * iki form birbirinden bağımsız DOM'da yaşayabilir (dialog + standalone sayfa
+ * aynı anda mevcut olabilir).
+ */
+function initReceiptBookExchangeRate() {
+    document.querySelectorAll('[data-receipt-book-form]').forEach((root) => {
+        const currencySelect = root.querySelector('[data-currency]');
+        const amountInput = root.querySelector('[data-amount]');
+        const group = root.querySelector('[data-exchange-rate-group]');
+        const rateInput = root.querySelector('[data-exchange-rate]');
+        const preview = root.querySelector('[data-exchange-rate-preview]');
+        if (!currencySelect || !group || !rateInput) return;
+
+        const toMinorUnits = (raw) => {
+            const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
+            const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+            if (!match) return null;
+            return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
+        };
+
+        const formatMinorUnits = (minor) => {
+            const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            const fraction = String(minor % 100).padStart(2, '0');
+            return `${whole},${fraction}`;
+        };
+
+        const renderPreview = () => {
+            if (!preview) return;
+            const amountMinor = toMinorUnits(amountInput?.value);
+            const rateMinor = toMinorUnits(rateInput?.value);
+            if (amountMinor === null || rateMinor === null) {
+                preview.textContent = '';
+                return;
+            }
+            const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+            preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı`;
+        };
+
+        const applyCurrency = () => {
+            const isTry = currencySelect.value === 'TRY';
+            group.hidden = isTry;
+            rateInput.toggleAttribute('required', !isTry);
+            if (isTry) rateInput.value = '';
+            renderPreview();
+        };
+
+        currencySelect.addEventListener('change', applyCurrency);
+        [amountInput, rateInput].forEach((el) => el?.addEventListener('input', renderPreview));
+
+        applyCurrency();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initReceiptBookExchangeRate);
+
+/**
+ * "Yeni Makbuz" dialog/sheet'i (v2.1.1-C §5) — Kasa Hareketi dialog'unun
+ * (v2.1.1-B.1) SADELEŞTİRİLMİŞ AYNI deseni: bu modülde Hızlı İşlem paneli
+ * YOKTUR, tetikleyici doğrudan "Tahsilat Makbuzu Defteri" sayfasındadır.
+ *
+ * Form GERÇEK bir <form> POST'udur; başarılı gönderim tam sayfa
+ * yönlendirmesiyle makbuz detayına döner (modal kendiliğinden ekrandan
+ * gider). Doğrulama hatası HER ZAMAN standalone "Yeni Makbuz" sayfasına
+ * yönlendirilir (bkz. `StoreReceiptBookEntryRequest::failedValidation()`).
+ */
+function initReceiptBookDialog() {
+    const dialog = document.querySelector('#makbuz-dialog');
+    const content = dialog?.querySelector('[data-receipt-dialog-content]');
+    const triggers = Array.from(document.querySelectorAll('[data-receipt-dialog-trigger]'));
+    if (!dialog || !content || triggers.length === 0) return;
+
+    let focusOnClose = null;
+
+    const open = async (trigger) => {
+        focusOnClose = trigger;
+
+        content.innerHTML = '<p class="p-6 text-sm text-mut">Yükleniyor…</p>';
+        dialog.showModal();
+
+        let response;
+        try {
+            response = await fetch(trigger.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        } catch {
+            dialog.close();
+            window.location.href = trigger.href;
+            return;
+        }
+
+        if (response.redirected || !response.ok) {
+            dialog.close();
+            window.location.href = response.url || trigger.href;
+            return;
+        }
+
+        content.innerHTML = await response.text();
+        initReceiptBookExchangeRate();
+        content.querySelector('input, select, textarea')?.focus();
+    };
+
+    triggers.forEach((trigger) => {
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            open(event.currentTarget);
+        });
+    });
+
+    dialog.addEventListener('click', (event) => {
+        if (event.target === dialog) dialog.close();
+        if (event.target instanceof Element && event.target.closest('[data-receipt-dialog-close]')) {
+            dialog.close();
+        }
+    });
+
+    dialog.addEventListener('close', () => {
+        content.innerHTML = '';
+        focusOnClose?.focus();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initReceiptBookDialog);
 
 /**
  * Service worker kaydı (mobil PWA turu).

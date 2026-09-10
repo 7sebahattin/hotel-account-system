@@ -115,6 +115,45 @@ final readonly class Money implements Stringable
         return self::fromMinorUnits($this->minorUnits * $factor);
     }
 
+    /**
+     * Bir kur oranıyla çarpar — yabancı para biriminin TL karşılığını
+     * hesaplamak içindir (v2.1.1-C §2).
+     *
+     * Oran metin olarak ayrıştırılır (en fazla dört ondalık basamak);
+     * kayan nokta ve `bcmath` KULLANILMAZ — oran 10.000 ile ölçeklenip tam
+     * sayı olarak çarpılır, sonuç en yakın kuruşa YARIM YUKARI yuvarlanır.
+     * Taşma riskine karşı çarpımdan ÖNCE sınır kontrolü yapılır.
+     */
+    public function multiplyByRate(string $rate): self
+    {
+        $rate = trim($rate);
+
+        if (! preg_match('/^(?<whole>\d+)(?:\.(?<fraction>\d{1,4}))?$/', $rate, $m)) {
+            throw new InvalidArgumentException(
+                "Geçersiz kur biçimi: '{$rate}'. Beklenen: en fazla dört ondalık basamaklı pozitif sayı."
+            );
+        }
+
+        $scaledRate = (int) $m['whole'] * 10000 + (int) str_pad($m['fraction'] ?? '0', 4, '0');
+
+        if ($scaledRate === 0) {
+            return self::zero();
+        }
+
+        if ($this->minorUnits !== 0 && abs($this->minorUnits) > intdiv(PHP_INT_MAX, $scaledRate)) {
+            throw new InvalidArgumentException('Kur hesaplaması taşma sınırını aşıyor.');
+        }
+
+        $product = $this->minorUnits * $scaledRate;
+        $sign = $product < 0 ? -1 : 1;
+        $absolute = abs($product);
+
+        // Yarım yukarı yuvarlama: 10.000 ölçeğinde tam sayı bölme.
+        $rounded = intdiv($absolute + 5000, 10000);
+
+        return self::fromMinorUnits($sign * $rounded);
+    }
+
     public function negate(): self
     {
         return new self(-$this->minorUnits);

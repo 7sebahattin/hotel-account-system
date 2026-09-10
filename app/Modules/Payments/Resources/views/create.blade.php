@@ -10,7 +10,7 @@
         <x-ui.card class="p-6">
             <x-ui.errors />
 
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="grid gap-4 sm:grid-cols-2" data-payment-exchange-rate>
                 <div class="sm:col-span-2">
                     <x-ui.select label="Firma" name="company_id" required>
                         <option value="">Seçiniz…</option>
@@ -35,17 +35,30 @@
                     @endforeach
                 </x-ui.select>
 
-                <x-ui.input label="Tutar" name="amount" required inputmode="decimal"
+                <x-ui.input label="Tutar" name="amount" required inputmode="decimal" data-amount
                             placeholder="Örn: 5.000,00" class="tabular-nums"
                             hint="Ondalık için virgül kullanabilirsiniz: 1.250,50" />
 
-                <x-ui.select label="Para birimi" name="currency" required>
+                <x-ui.select label="Para birimi" name="currency" required data-currency>
                     @foreach ($currencies as $currency)
                         <option value="{{ $currency->value }}" @selected(old('currency', 'TRY') === $currency->value)>
                             {{ $currency->value }} — {{ $currency->label() }}
                         </option>
                     @endforeach
                 </x-ui.select>
+
+                {{--
+                    Kur yalnızca YENİ tahsilatta istenir (v2.1.1-C §2) —
+                    tahsilat zaten tamamen değişmez olduğu için düzenleme
+                    formunda bu alan hiç YOKTUR.
+                --}}
+                <div data-exchange-rate-group @if (old('currency', 'TRY') === 'TRY') hidden @endif>
+                    <x-ui.input label="Kur (1 birim → TL)" name="exchange_rate_to_try" inputmode="decimal"
+                                data-exchange-rate placeholder="51,20" class="tabular-nums"
+                                :value="old('exchange_rate_to_try')"
+                                hint="TL dışı para biriminde zorunludur; işlem anındaki kur olarak SAKLANIR, sonradan güncellenmez." />
+                    <p class="mt-1 text-xs text-mut" data-exchange-rate-preview aria-live="polite"></p>
+                </div>
 
                 <x-ui.input label="Referans no" name="reference_no" maxlength="50"
                             hint="Dekont / slip numarası." />
@@ -57,7 +70,7 @@
 
             <x-ui.alert tone="info" class="mt-4">
                 Kaydedildiğinde firmanın carisine alacak hareketi düşer. Tutar, tarih, firma,
-                para birimi ve ödeme yöntemi <strong>sonradan değiştirilemez</strong>; düzeltme için
+                para birimi, kur ve ödeme yöntemi <strong>sonradan değiştirilemez</strong>; düzeltme için
                 tahsilat iptal edilip yeniden girilir.
             </x-ui.alert>
         </x-ui.card>

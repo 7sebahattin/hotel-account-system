@@ -53,6 +53,13 @@ enum Permission: string
 
     case AuditView = 'audit.view';
 
+    /** Geçmiş Döviz Düzeltme — yalnızca Admin/Patron (v2.1.1-C §3). */
+    case FxCorrectHistorical = 'fx.correct_historical';
+
+    /** Tahsilat Makbuzu Defteri — mevcut muhasebe Tahsilatlarından AYRI, yazdırma amaçlı modül (v2.1.1-C §4). */
+    case ReceiptBookView = 'receipt_book.view';
+    case ReceiptBookCreate = 'receipt_book.create';
+
     /** Yetki yönetimi ekranındaki gruplama başlığı. */
     public function group(): string
     {
@@ -71,6 +78,8 @@ enum Permission: string
             self::DashboardFinancial => 'Dashboard',
             self::ExportExcel => 'Dışa Aktarma',
             self::AuditView => 'Denetim Kaydı',
+            self::FxCorrectHistorical => 'Geçmiş Döviz Düzeltme',
+            self::ReceiptBookView, self::ReceiptBookCreate => 'Tahsilat Makbuzu Defteri',
         };
     }
 
@@ -102,6 +111,9 @@ enum Permission: string
             self::DashboardFinancial => 'Finansal dashboard kartlarını görüntüle',
             self::ExportExcel => 'Excel dışa aktarma',
             self::AuditView => 'Denetim kaydını görüntüle',
+            self::FxCorrectHistorical => 'Geçmiş kaydın eksik döviz kurunu düzelt',
+            self::ReceiptBookView => 'Tahsilat makbuzu defterini görüntüle / yazdır',
+            self::ReceiptBookCreate => 'Tahsilat makbuzu defterine yeni makbuz ekle',
         };
     }
 

@@ -2050,3 +2050,143 @@ veya `tests/Feature/Ui/` altındadır.
 app.js`, `resources/css/app.css`, `public/manifest.json`, `public/sw.js`,
 `public/offline.html`, `public/icons/*.png`, `tests/Feature/Ui/
 DesignSystemTest.php`, `CLAUDE.md` (§11.4, §11.7 çevresi, "PWA (temel)").
+
+## K-104 · v2.1.1-C: Döviz kuru anlık görüntüsü, Geçmiş Döviz Düzeltme, Tahsilat Makbuzu Defteri
+
+**Bağlam:** Kullanıcı geri bildirim paketi üç ana istekten oluştu ve
+ikisi CLAUDE.md'nin bağlayıcı "dur ve sor" kurallarıyla DOĞRUDAN çelişiyordu.
+`AskUserQuestion` ile açıkça soruldu, kullanıcı her ikisini de ONAYLADI (Room
+Registry/K-100 ile AYNI istisna deseni):
+
+1. **§3.2 istisnası:** "Kur servisi, TCMB entegrasyonu, döviz çevrimi" kesin
+   yasaklı listededir. Kullanıcı, CANLI/otomatik bir kur servisi DEĞİL, yalnızca
+   işlem ANINDA elle girilen bir kur anlık görüntüsü istedi — kapsam bilerek
+   dar tutuldu: TCMB entegrasyonu, otomatik güncelleme, kur servisi HÂLÂ
+   kapsam dışıdır.
+2. **§4.3 kural 5 istisnası:** yeni modül kullanıcı onayı gerektirir. "Tahsilat
+   Makbuzları" gerçek muhasebe `Payments` modülüyle isim çakışması riski
+   taşıyordu (K-096'nın "Tahsilat Makbuzu" belgesiyle); kullanıcıya bu risk
+   açıkça anlatıldı, "yap ama isimlendirmeyi netleştir" onayı alındı — yeni
+   modül **"Tahsilat Makbuzu Defteri"** (`ReceiptBook`) adıyla, gerçek
+   muhasebe belgesinden görsel/metinsel olarak AYRIŞTIRILARAK açıldı.
+
+### Karar 1 — Kur anlık görüntüsü (`exchange_rate_to_try` / `try_equivalent`)
+
+`stays` ve `payments` tablolarına iki nullable kolon eklendi:
+`exchange_rate_to_try DECIMAL(10,4)`, `try_equivalent DECIMAL(15,2)`.
+Üç CHECK kısıtı (TRY hiç taşımaz / çift ya birlikte dolu ya birlikte boş /
+her ikisi de pozitif) hem `stays` hem `payments`'ta BİREBİR AYNIDIR.
+
+- **Bir kez hesaplanan, BİR DAHA YENİDEN HESAPLANMAYAN bir anlık
+  görüntüdür** (kullanıcı talimatı: "never use a live FX rate later to
+  recalculate historical records"). Hesap `Money::multiplyByRate()` ile
+  TAMSAYI aritmetiğiyle yapılır — oran 10.000 ile ölçeklenip tam sayı
+  çarpılır, sonuç en yakın kuruşa YARIM YUKARI yuvarlanır; `bcmath` veya
+  kayan nokta KULLANILMAZ (CLAUDE.md §13). Örnek: 500 EUR × 51,20 = 25.600,00
+  TL — kullanıcı talimatındaki örnekle BİREBİR eşleşir (birim testle
+  doğrulandı).
+- **`LedgerService`'e HİÇBİR ZAMAN geçirilmez:** `StayService::postDebit()`/
+  `PaymentService::postCredit()` hâlâ yalnızca orijinal para birimi ve
+  tutarla çağrılır. `try_equivalent` salt bilgi/raporlama amaçlıdır; §6/L5
+  ("para birimleri asla birleştirilmez") bu yüzden İHLAL EDİLMEZ.
+- **Yalnızca OLUŞTURMADA yakalanır, düzenlemede HİÇ SORULMAZ:**
+  `StayRequest`/`StorePaymentRequest` bu alanı yalnızca YENİ kayıtta
+  tanımlar (`StayRequest::rules()` düzenlemede bu kuralı hiç EKLEMEZ,
+  `UpdatePaymentRequest` zaten hiç bilmiyordu). Stay'de finansal alan
+  değişince (§6/L7 reversal akışı) kur MEVCUT değerini KORUYARAK karşılığı
+  yeniden hesaplar — bu YENİ bir CANLI kur DEĞİL, aynı işlemin aynı
+  anlık görüntüsünün tutarla tutarlı KALMASIDIR.
+- **Gerçek tarayıcı formu böcek:** `hidden` HTML özniteliği alanı DOM'dan
+  kaldırmaz, tarayıcı yine de BOŞ DEĞERLE gönderir (`disabled` değil).
+  `ConvertEmptyStringsToNull` bunu `null`'a çevirir ama `nullable` kural
+  olmadan `numeric`/`gt`/`decimal` yine de null üzerinde ÇALIŞIR ve
+  reddeder — TRY seçiliyken form hiç gönderilemez hâle gelirdi. Üç
+  FormRequest'e de (`StayRequest`, `StorePaymentRequest`,
+  `StoreReceiptBookEntryRequest`) `'nullable'` eklendi; `required_unless`
+  YİNE de zorunluluğu doğru uygular (Laravel önce "zorunlu mu" sorusunu
+  çözer, `nullable` bunu bastırmaz) — gerçek Playwright QA'sında
+  YAKALANDI, HTTP test client'ı bu böceği görmüyordu (dizi anahtarı hiç
+  yoksa gerçekten "yok" sayılıyor, boş string DEĞİL).
+- **Gösterim:** `<x-ui.fx-note>` bileşeni ("≈ 25.600,00 TL · Kur: 51,20")
+  yalnızca kur KAYITLIYSA render edilir, tabloları KALABALIKLAŞTIRMAZ —
+  Stay/Payment show+index+receipt ekranlarına eklendi (Ledger ekstresi/
+  Dashboard bu turun kapsamı DIŞINDA bırakıldı — dürüst sınırlama).
+
+### Karar 2 — Geçmiş Döviz Düzeltme (`FxCorrection` modülü)
+
+Yeni, kendi migration/model'i OLMAYAN ince bir modül: `Stays`/`Payments`
+Service'lerini çağırır (§4.3/1), Ledger ekstresinin Companies'te barınma
+gerekçesiyle AYNI desen (§4.3/3) — iki modülün verisini TEK ekranda
+birleştirdiği için kendi modülüne sahiptir.
+
+- `StayService::missingExchangeRate()` / `PaymentService::missingExchangeRate()`
+  — TRY DIŞI ve kuru NULL olan kayıtları listeler.
+- `StayService::correctHistoricalExchangeRate()` /
+  `PaymentService::correctHistoricalExchangeRate()` — **yalnızca EKSİK**
+  kaydı doldurur: zaten kayıtlıysa `ExchangeRateAlreadyRecorded` fırlatır
+  (§3: "do not allow casual editing of completed historical FX values").
+  Orijinal tutar/para birimi hiç DOKUNULMAZ, ikinci bir finansal işlem
+  OLUŞTURULMAZ, cari hareketi ASLA ters kaydedilmez/yeniden işlenmez —
+  yeni `AuditEvent::ExchangeRateCorrected` ile kim/ne zaman AYRICA loglanır.
+- Yeni yetki `fx.correct_historical` — Admin/Patron'da, Personel'de YOKTUR
+  (kullanıcı talimatı §9 birebir).
+- Ekran: Yönetim → Geçmiş Döviz Düzeltme (`fx-correction.index`), her satırda
+  tek alanlı bir düzeltme formu.
+
+### Karar 3 — Tahsilat Makbuzu Defteri (`ReceiptBook` modülü)
+
+Tamamen yeni, izole modül — gerçek muhasebe `Payments`/`Tahsilat Makbuzu`
+(K-096) ile **HİÇBİR ilişkisi YOKTUR**:
+
+- Kendi tablosu (`receipt_book_entries`), kendi numaralandırması
+  (`MKB-{yıl}-{id:06d}` — gerçek `TM-{yıl}-{id:06d}` ile KARIŞTIRILMASIN
+  diye bilerek FARKLI önek), kendi enum'u (`ReceiptPaymentMethod` —
+  `Payments\PaymentMethod`in `Cash` değeri `CashBookService`'i TETİKLEDİĞİ
+  için PAYLAŞILMADI).
+- `ReceiptBookService` `LedgerService`/`PaymentService`/`CashBookService`'i
+  HİÇ import ETMEZ/ÇAĞIRMAZ — bir makbuzun kaydı firma bakiyesini, fiziksel
+  kasayı, herhangi bir cari hareketi KESİNLİKLE ETKİLEMEZ (test: her üçünün
+  de sayısı 0 kalır).
+- Silme/iptal UCU YOKTUR (route/policy/servis hiçbiri tanımlamaz) —
+  "do not hard-delete issued receipts" kuralı, silme YETENEĞİNİN kendisini
+  hiç AÇMAYARAK trivially sağlanır (§3.2 ilkesi: kullanılmayan kolon/uç
+  açılmaz).
+- Giriş UX'i Kasa Hareketi dialog'unun (K-098) AYNI deseni: "Yeni Makbuz"
+  native `<dialog>` açar, içerik `$request->ajax()` ile fragment olarak
+  gelir, doğrulama hatası HER ZAMAN standalone `receipt-book.create`
+  sayfasına yönlendirilir (Referer'a güvenilmez).
+  Yazdırma (`receipt-book::print`) `layouts.print`i genişletir, iki sütunlu
+  başlık (şirket bilgisi sol / "TAHSİLAT MAKBUZU" sağ) — verilen referans
+  görsele yakın, `config('hotel.company.*')`'ı (K-096 ile AYNI kaynak)
+  kullanır, Blade'e hardcode EDİLMEZ.
+- Yetkiler: `receipt_book.view` (liste + görüntüle/yazdır — `payments.view`
+  ile AYNI birleşik desen), `receipt_book.create`. Personel de ikisine de
+  sahiptir — `payments.create` ile AYNI operasyonel seviye (§9).
+- Sidebar: "Cari" grubunda **"TAHSİLAT MAKBUZLARI"**, "Tahsilatlar"dan
+  hemen sonra ama görsel/metinsel olarak AÇIKÇA AYRI bir satır.
+
+**Test:** `tests/Unit/MoneyTest.php` (kur çarpımı: örnek değer, yuvarlama,
+sınır durumları), `tests/Feature/Core/ExchangeRateTest.php` (TRY/yabancı
+zorunluluk, hesap doğruluğu, ledger orijinal para biriminde kalır, kur
+zamanla değişmez), `tests/Feature/Core/HistoricalFxCorrectionTest.php`
+(kuyruk, tek seferlik düzeltme, ikinci düzeltme reddi, yetki matrisi),
+`tests/Feature/ReceiptBook/ReceiptBookTest.php` (muhasebe yan etkisi YOK,
+numaralandırma, yazdırma, yetki). `RolePermissionMatrixTest` yeni yetkilerle
+güncellendi. Gerçek Playwright QA'sı ile de doğrulandı — yukarıdaki
+"nullable" böceği TAM OLARAK bu turda, gerçek tarayıcı gönderimiyle
+YAKALANDI.
+
+**Kapsam:** `bcmath`/canlı kur servisi/otomatik güncelleme YOK. Mevcut
+`ledger_entries`/`Payment.IMMUTABLE_FIELDS` mimarisine HİÇ DOKUNULMADI.
+Migration'lar artımlı ve production-güvenlidir (`down()` yazılı, yeni
+tablolar/kolonlar nullable, mevcut veriyi ETKİLEMEZ).
+
+**Etkilenen dosyalar:** `app/Modules/Core/Support/Money.php`
+(`multiplyByRate()`), `app/Modules/Stays/*`, `app/Modules/Payments/*`
+(Model/Service/Request/view'lar), yeni `app/Modules/FxCorrection/*`, yeni
+`app/Modules/ReceiptBook/*`, `app/Modules/Authorization/Enums/{Permission,
+RoleName}.php`, `app/Modules/AuditLog/Enums/AuditEvent.php`,
+`app/Providers/AppServiceProvider.php` (morph map), `bootstrap/providers.php`,
+`resources/views/components/ui/fx-note.blade.php`, `resources/views/
+partials/sidebar.blade.php`, `resources/js/app.js`, ilgili testler,
+`CLAUDE.md`.

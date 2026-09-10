@@ -323,6 +323,7 @@ class CurrencyTest extends TestCase
             'pricing_mode' => 'total',
             'amount' => '500,00',
             'currency' => 'USD',
+            'exchange_rate_to_try' => '32,50',
         ])->assertSessionDoesntHaveErrors();
 
         $this->assertDatabaseHas('stays', ['guest_name' => 'Dolarlı Misafir', 'currency' => 'USD']);

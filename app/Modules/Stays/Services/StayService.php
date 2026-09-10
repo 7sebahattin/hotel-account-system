@@ -7,12 +7,14 @@ namespace App\Modules\Stays\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
+use App\Modules\Stays\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Support\Carbon;
@@ -242,6 +244,79 @@ class StayService
         return Stay::query()->where('room_id', $roomId)->exists();
     }
 
+    /**
+     * `id` ile tek konaklama — FxCorrection modülünün tek bilmesi GEREKEN
+     * erişim yoludur (§4.3/1: o modül `Stay::class`i hiç KULLANMAZ).
+     */
+    public function findOrFail(int $id): Stay
+    {
+        return Stay::query()->findOrFail($id);
+    }
+
+    /**
+     * Kur bilgisi EKSİK yabancı para birimli konaklamalar — Geçmiş Döviz
+     * Düzeltme kuyruğu (v2.1.1-C §3). İptal edilmiş kayıtlar da gösterilir:
+     * geçmiş veri dürüstçe tamamlanır, durumdan bağımsız.
+     *
+     * @return Collection<int, Stay>
+     */
+    public function missingExchangeRate(): Collection
+    {
+        return Stay::query()
+            ->with('company')
+            ->where('currency', '<>', Currency::TRY->value)
+            ->whereNull('exchange_rate_to_try')
+            ->orderBy('check_out_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Geçmiş bir konaklamanın EKSİK kur anlık görüntüsünü doldurur.
+     *
+     * v2.1.1-C §3'ün katı kuralları: orijinal tutar/para birimi değişmez,
+     * ikinci bir finansal işlem oluşmaz, cari hareketi ters kaydedilmez/
+     * yeniden işlenmez — yalnızca eksik metadata yazılır. Bu yüzden normal
+     * `update()` akışından TAMAMEN AYRIDIR: ledger'a hiç dokunmaz.
+     *
+     * Zaten kayıtlı bir kuru "düzeltmek" için bu metot KULLANILAMAZ — normal
+     * ekranlardan rastgele düzenlemeyi önlemek kasıtlıdır (§3: "do not allow
+     * casual editing of completed historical FX values").
+     *
+     * @throws ExchangeRateAlreadyRecorded
+     */
+    public function correctHistoricalExchangeRate(Stay $stay, string $rate, ?User $actor = null): Stay
+    {
+        if ($stay->exchange_rate_to_try !== null) {
+            throw ExchangeRateAlreadyRecorded::make($stay->getKey());
+        }
+
+        if ($stay->currency === Currency::TRY) {
+            throw new \InvalidArgumentException('TRY konaklamalar için kur düzeltmesi yapılamaz.');
+        }
+
+        $user = $this->resolveActor($actor);
+        $normalizedRate = Money::normalizeInput($rate);
+        $tryEquivalent = $stay->amountMoney()->multiplyByRate($normalizedRate)->toDecimal();
+
+        return DB::transaction(function () use ($stay, $normalizedRate, $tryEquivalent, $user): Stay {
+            $stay->exchange_rate_to_try = $normalizedRate;
+            $stay->try_equivalent = $tryEquivalent;
+            $stay->updated_by = $user->getKey();
+            $stay->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::ExchangeRateCorrected,
+                subject: $stay,
+                oldValues: ['exchange_rate_to_try' => null, 'try_equivalent' => null],
+                newValues: ['exchange_rate_to_try' => $normalizedRate, 'try_equivalent' => $tryEquivalent],
+                user: $user,
+            );
+
+            return $stay;
+        });
+    }
+
     // ------------------------------------------------------------------ iç
 
     private function postDebit(Stay $stay, User $user): LedgerEntry
@@ -275,6 +350,39 @@ class StayService
     }
 
     /**
+     * Kur anlık görüntüsünü çözer (v2.1.1-C §2).
+     *
+     * Yalnızca YENİ kayıtta `exchange_rate_to_try` `$data` içinde bulunur
+     * (StayRequest bunu düzenlemede hiç tanımlamaz) — düzenlemede bu metot
+     * sessizce hiçbir şey yapmaz, mevcut kur DEĞİŞMEZ. TRY'ye geçiş her
+     * koşulda ikisini de temizler (§6/L5 — TRY çevrim taşımaz).
+     *
+     * Finansal bir düzenleme (tutar/para birimi) MEVCUT kuru koruyarak
+     * karşılığı yeniden hesaplar — bu, YENİ bir canlı kur DEĞİL, aynı
+     * işlemin aynı anlık görüntüsünün tutarla tutarlı kalmasıdır.
+     */
+    private function resolveExchangeRate(Stay $stay, array $data): void
+    {
+        if ($stay->currency === Currency::TRY) {
+            $stay->exchange_rate_to_try = null;
+            $stay->try_equivalent = null;
+
+            return;
+        }
+
+        $rate = array_key_exists('exchange_rate_to_try', $data) && $data['exchange_rate_to_try'] !== null
+            ? Money::normalizeInput((string) $data['exchange_rate_to_try'])
+            : $stay->exchange_rate_to_try;
+
+        if ($rate === null) {
+            return;
+        }
+
+        $stay->exchange_rate_to_try = $rate;
+        $stay->try_equivalent = $stay->amountMoney()->multiplyByRate($rate)->toDecimal();
+    }
+
+    /**
      * Kullanıcı girdisini modele uygular ve SUNUCU tarafından belirlenen
      * alanları (gece sayısı, nihai tutar) yeniden hesaplar.
      *
@@ -289,6 +397,7 @@ class StayService
         $stay->fill($this->fillable($data));
         $stay->nights = $this->nightsFor($stay);
         $this->resolvePricing($stay);
+        $this->resolveExchangeRate($stay, $data);
     }
 
     /** Ücretlendirme moduna göre nihai tutarı ve günlük ücreti belirler. */
@@ -337,6 +446,8 @@ class StayService
             'daily_rate' => $stay->daily_rate === null ? null : Money::fromDecimal($stay->daily_rate)->toDecimal(),
             'amount' => Money::fromDecimal($stay->amount)->toDecimal(),
             'currency' => $stay->currency->value,
+            'exchange_rate_to_try' => $stay->exchange_rate_to_try,
+            'try_equivalent' => $stay->try_equivalent === null ? null : Money::fromDecimal($stay->try_equivalent)->toDecimal(),
             'notes' => $stay->notes,
             'status' => $stay->status->value,
         ];

@@ -72,7 +72,15 @@
         </tr>
         <tr>
             <th>Tutar</th>
-            <td class="amount">{{ $payment->amountMoney()->format($payment->currency) }}</td>
+            <td class="amount">
+                {{ $payment->amountMoney()->format($payment->currency) }}
+                @if ($payment->hasExchangeRate())
+                    <br><span style="font-size: 9pt; font-weight: 400; color: #444;">
+                        ≈ {{ $payment->tryEquivalentMoney()->format(\App\Modules\Core\Enums\Currency::TRY) }}
+                        · Kur: {{ rtrim(rtrim(number_format((float) $payment->exchange_rate_to_try, 4, ',', '.'), '0'), ',') }}
+                    </span>
+                @endif
+            </td>
         </tr>
         @if ($payment->amountInWords())
             <tr>

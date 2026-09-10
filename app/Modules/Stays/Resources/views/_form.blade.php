@@ -79,6 +79,23 @@
         @endforeach
     </x-ui.select>
 
+    {{--
+        Kur yalnızca YENİ kayıtta istenir (v2.1.1-C §2) — StayRequest bu
+        alanı düzenlemede hiç TANIMLAMAZ, bu yüzden formda da göstermek
+        yanıltıcı olurdu ("gönderilse bile hiçbir etkisi yok"). Geçmiş bir
+        kaydın eksik kuru YALNIZCA "Yönetim → Geçmiş Döviz Düzeltme" ile
+        doldurulur.
+    --}}
+    @unless (isset($stay))
+        <div data-exchange-rate-group @if (old('currency', 'TRY') === 'TRY') hidden @endif>
+            <x-ui.input label="Kur (1 birim → TL)" name="exchange_rate_to_try" inputmode="decimal"
+                        data-exchange-rate placeholder="51,20" class="tabular-nums"
+                        :value="old('exchange_rate_to_try')"
+                        hint="TL dışı para biriminde zorunludur; işlem anındaki kur olarak SAKLANIR, sonradan güncellenmez." />
+            <p class="mt-1 text-xs text-mut" data-exchange-rate-preview aria-live="polite"></p>
+        </div>
+    @endunless
+
     <div class="sm:col-span-2" data-pricing-daily @if ($mode !== 'daily') hidden @endif>
         <p class="block text-sm text-mut">Hesaplanan toplam</p>
         <p class="mt-1 flex min-h-11 items-center rounded-lg border border-line bg-well px-3 tabular-nums text-tx"
@@ -96,7 +113,19 @@
     </div>
 
     <div class="sm:col-span-2">
-        <x-ui.textarea label="Notlar" name="notes" :rows="3" maxlength="5000" :value="$s->notes ?? null" />
+        {{--
+            "Basitleştir" turu (v2.1.1-C §1): notlar sık kullanılmayan bir
+            alandır, formun ana akışında yer kaplamasın diye katlanabilir bir
+            bölüme alındı. Doldurulmuşsa (düzenleme) varsayılan olarak AÇIK
+            gelir — kullanıcı kendi girdiğini kapalı bir panelin ARKASINDA
+            kaybetmemelidir.
+        --}}
+        <details @if (trim((string) old('notes', $s->notes ?? '')) !== '') open @endif>
+            <summary class="cursor-pointer text-sm text-mut select-none hover:text-tx">Notlar (isteğe bağlı)</summary>
+            <div class="mt-2">
+                <x-ui.textarea label="Notlar" name="notes" :rows="3" maxlength="5000" :value="$s->notes ?? null" />
+            </div>
+        </details>
     </div>
 </div>
 

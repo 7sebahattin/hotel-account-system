@@ -206,8 +206,14 @@ class StayCrudTest extends TestCase
         $admin = $this->userWithRole(RoleName::Admin);
 
         foreach (['TRY', 'EUR', 'GBP'] as $currency) {
+            // TRY dışındaki para birimlerinde kur zorunludur (v2.1.1-C §2).
+            $overrides = ['currency' => $currency];
+            if ($currency !== 'TRY') {
+                $overrides['exchange_rate_to_try'] = '32,50';
+            }
+
             $this->actingAs($admin)
-                ->post(route('stays.store'), $this->payload(['currency' => $currency]))
+                ->post(route('stays.store'), $this->payload($overrides))
                 ->assertSessionHasNoErrors();
         }
 

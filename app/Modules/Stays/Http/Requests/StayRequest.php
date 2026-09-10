@@ -35,6 +35,7 @@ class StayRequest extends FormRequest
     {
         $stay = $this->route('stay');
         $currentRoomId = $stay instanceof Stay ? $stay->room_id : null;
+        $isCreate = ! $stay instanceof Stay;
 
         // Yeni kayıt: yalnızca AKTİF oda seçilebilir. Düzenlemede, kaydın
         // KENDİ odası pasifleşmiş olsa bile seçenekten kaybolmaz — aksi
@@ -50,7 +51,7 @@ class StayRequest extends FormRequest
             });
         });
 
-        return [
+        $rules = [
             'company_id' => ['required', Rule::exists('companies', 'id')->whereNull('deleted_at')],
             'guest_name' => ['required', 'string', 'max:150'],
             'room_id' => ['nullable', 'integer', $roomExists],
@@ -62,6 +63,29 @@ class StayRequest extends FormRequest
             'currency' => ['required', Rule::enum(Currency::class)],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
+
+        /*
+         * Kur yalnızca YENİ kayıtta yakalanır (v2.1.1-C §2). Düzenleme
+         * kuralları bu alanı hiç TANIMLAMAZ — `validated()` bu yüzden
+         * göndermez, servis mevcut değeri KORUR. Normal ekranlardan
+         * "casual" kur düzenlemesi böylece mimari olarak imkânsızdır;
+         * eksik kur yalnızca §3'teki ayrı araçla doldurulur.
+         */
+        if ($isCreate) {
+            $rules['exchange_rate_to_try'] = [
+                // 'nullable': alan HTML'de gizliyken bile TARAYICI tarafından
+                // boş değerle GÖNDERİLİR (yalnızca `hidden` — `disabled` değil).
+                // 'nullable' boşsa 'numeric'/'gt'/'decimal'i atlatır; ama
+                // `required_unless` YİNE de zorunlu kılınmışsa çalışır (Laravel
+                // önce "zorunlu mu" sorusunu çözer, `nullable` onu BASTIRMAZ).
+                'nullable',
+                'prohibited_if:currency,TRY',
+                'required_unless:currency,TRY',
+                'numeric', 'gt:0', 'decimal:0,4', 'max:999999.9999',
+            ];
+        }
+
+        return $rules;
     }
 
     /**
@@ -79,6 +103,7 @@ class StayRequest extends FormRequest
             'amount' => 'toplam tutar',
             'daily_rate' => 'günlük ücret',
             'currency' => 'para birimi',
+            'exchange_rate_to_try' => 'kur (TL karşılığı)',
             'notes' => 'notlar',
         ];
     }
@@ -95,13 +120,15 @@ class StayRequest extends FormRequest
             'daily_rate.required' => 'Günlük ücretlendirmede gecelik tutar zorunludur.',
             'daily_rate.gt' => 'Günlük ücret sıfırdan büyük olmalıdır.',
             'daily_rate.decimal' => 'Günlük ücret en fazla iki ondalık basamak içerebilir.',
+            'exchange_rate_to_try.required_unless' => 'TRY dışındaki para birimlerinde kur girilmesi zorunludur.',
+            'exchange_rate_to_try.prohibited_if' => 'TRY için kur girilmez.',
         ];
     }
 
     /** Türkçe klavyede ondalık ayırıcı virgüldür; noktaya çevrilir. */
     protected function prepareForValidation(): void
     {
-        foreach (['amount', 'daily_rate'] as $field) {
+        foreach (['amount', 'daily_rate', 'exchange_rate_to_try'] as $field) {
             $value = $this->input($field);
 
             if (is_string($value)) {

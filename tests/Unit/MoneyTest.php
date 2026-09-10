@@ -145,4 +145,46 @@ class MoneyTest extends TestCase
 
         Money::fromDecimal('9999999999999.99')->multiply(2);
     }
+
+    #[Test]
+    public function kur_carpimi_ornekteki_degeri_uretir(): void
+    {
+        // Kullanıcı talimatı örneği: 500 EUR, Kur: 51.20 → 25.600,00 TL.
+        $this->assertSame('25600.00', Money::fromDecimal('500.00')->multiplyByRate('51.20')->toDecimal());
+    }
+
+    #[Test]
+    #[DataProvider('kurCarpimlari')]
+    public function kur_carpimi_dogru_yuvarlar(string $amount, string $rate, string $expected): void
+    {
+        $this->assertSame($expected, Money::fromDecimal($amount)->multiplyByRate($rate)->toDecimal());
+    }
+
+    /** @return array<string, array{string, string, string}> */
+    public static function kurCarpimlari(): array
+    {
+        return [
+            'tam sayı kur' => ['100.00', '10', '1000.00'],
+            'dört ondalık kur' => ['10.00', '51.2035', '512.04'],
+            'yarım yukarı yuvarlama' => ['1.00', '0.005', '0.01'],
+            'sıfır kur' => ['500.00', '0', '0.00'],
+            'kesirli tutar' => ['0.01', '2.5', '0.03'],
+        ];
+    }
+
+    #[Test]
+    public function kur_carpimi_gecersiz_bicimi_reddeder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromDecimal('100.00')->multiplyByRate('abc');
+    }
+
+    #[Test]
+    public function kur_carpimi_bes_ondaliktan_fazlasini_reddeder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromDecimal('100.00')->multiplyByRate('51.20000');
+    }
 }

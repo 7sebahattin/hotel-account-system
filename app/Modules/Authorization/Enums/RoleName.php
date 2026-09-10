@@ -63,6 +63,9 @@ enum RoleName: string
                 Permission::DashboardFinancial,
                 Permission::ExportExcel,
                 Permission::AuditView,
+                Permission::FxCorrectHistorical,
+                Permission::ReceiptBookView,
+                Permission::ReceiptBookCreate,
             ],
 
             self::Personel => [
@@ -85,6 +88,15 @@ enum RoleName: string
                  */
                 Permission::CashBookView,
                 Permission::CashBookOperate,
+
+                /*
+                 * Personel zaten Tahsilat kaydı girebiliyor (PaymentsCreate) —
+                 * makbuz defteri de AYNI operasyonel seviyededir (v2.1.1-C §9:
+                 * "Personel permissions should follow existing operational
+                 * role conventions"). Geçmiş Döviz Düzeltme personelde YOKTUR.
+                 */
+                Permission::ReceiptBookView,
+                Permission::ReceiptBookCreate,
             ],
         };
     }

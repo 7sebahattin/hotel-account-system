@@ -68,11 +68,15 @@ class RolePermissionMatrixTest extends TestCase
             Permission::CashBookManageCategories,
             // Room Registry (K-100): patron oda tanımlarını da yönetir.
             Permission::RoomsManage,
+            // v2.1.1-C: patron geçmiş döviz düzeltmesi ve makbuz defterini de yönetir.
+            Permission::FxCorrectHistorical,
+            Permission::ReceiptBookView,
+            Permission::ReceiptBookCreate,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
-        $this->assertCount(21, $granted);
+        $this->assertCount(24, $granted);
     }
 
     #[Test]
@@ -91,6 +95,8 @@ class RolePermissionMatrixTest extends TestCase
             Permission::CashBookViewAll,
             // Room Registry (K-100): oda tanımı yönetimi Admin/Patron'dadır.
             Permission::RoomsManage,
+            // v2.1.1-C: geçmiş döviz düzeltmesi Admin/Patron'dadır, personelde YOKTUR.
+            Permission::FxCorrectHistorical,
         ] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted, "personel {$forbidden->value} yetkisine sahip olmamalı");
         }
@@ -112,6 +118,9 @@ class RolePermissionMatrixTest extends TestCase
              */
             Permission::CashBookView->value,
             Permission::CashBookOperate->value,
+            // v2.1.1-C: personel de tahsilat makbuzu defteri girebilir (PaymentsCreate ile AYNI seviye).
+            Permission::ReceiptBookView->value,
+            Permission::ReceiptBookCreate->value,
         ], $granted);
     }
 

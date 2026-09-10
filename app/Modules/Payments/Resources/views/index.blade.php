@@ -91,6 +91,7 @@
                     <td class="px-4 py-3 text-mut">{{ $payment->company?->name ?? '—' }}</td>
                     <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
                         {{ $payment->amountMoney()->format($payment->currency) }}
+                        <x-ui.fx-note :rate="$payment->exchange_rate_to_try" :equivalent="$payment->tryEquivalentMoney()" class="text-right" />
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $payment->payment_method?->label() ?? '—' }}</td>
                     <td class="px-4 py-3 tabular-nums text-mut">{{ $payment->reference_no ?: '—' }}</td>
@@ -134,7 +135,10 @@
                             @endif
                         </p>
 
-                        <span class="shrink-0 tabular-nums text-tx">{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                        <span class="shrink-0 text-right">
+                            <span class="block tabular-nums text-tx">{{ $payment->amountMoney()->format($payment->currency) }}</span>
+                            <x-ui.fx-note :rate="$payment->exchange_rate_to_try" :equivalent="$payment->tryEquivalentMoney()" class="text-right" />
+                        </span>
                     </div>
                 </x-ui.card>
             </a>

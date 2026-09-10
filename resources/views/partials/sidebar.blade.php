@@ -29,6 +29,10 @@
                 ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
                 ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
                 ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
+                // "TAHSİLAT MAKBUZLARI" — mevcut Tahsilatlar'dan AYRI bir
+                // yazdırma defteri (v2.1.1-C §4/§8). İsim bilerek FARKLI
+                // tutuldu, karışıklık riskine karşı (§9).
+                ['route' => 'receipt-book.index', 'label' => 'Tahsilat Makbuzları', 'can' => Permission::ReceiptBookView->value, 'icon' => 'log'],
                 ['route' => 'statements.index', 'label' => 'Cari Ekstre', 'can' => Permission::LedgerViewAll->value, 'icon' => 'ledger'],
             ],
         ],
@@ -39,6 +43,7 @@
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
                 ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
                 ['route' => 'cashbook.categories.index', 'label' => 'Kasa Hareket Türleri', 'can' => Permission::CashBookManageCategories->value, 'icon' => 'log'],
+                ['route' => 'fx-correction.index', 'label' => 'Geçmiş Döviz Düzeltme', 'can' => Permission::FxCorrectHistorical->value, 'icon' => 'log'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
         ],

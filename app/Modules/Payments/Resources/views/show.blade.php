@@ -43,6 +43,10 @@
                     <dt class="text-xs uppercase tracking-wide text-mut">Tutar</dt>
                     <dd class="mt-0.5 text-sm tabular-nums text-tx">
                         {{ $payment->amountMoney()->format($payment->currency) }}
+                        <x-ui.fx-note :rate="$payment->exchange_rate_to_try" :equivalent="$payment->tryEquivalentMoney()" />
+                        @if ($payment->isMissingExchangeRate())
+                            <span class="mt-0.5 block text-xs text-mut">Kur bilgisi eksik (geçmiş kayıt).</span>
+                        @endif
                     </dd>
                 </div>
                 <div>

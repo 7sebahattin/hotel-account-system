@@ -35,6 +35,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $payment_date
  * @property string $amount
  * @property Currency $currency
+ * @property string|null $exchange_rate_to_try
+ * @property string|null $try_equivalent
  * @property PaymentMethod|null $payment_method
  * @property int|null $cash_session_id
  * @property string|null $receipt_no
@@ -89,6 +91,8 @@ class Payment extends Model
         'payment_date',
         'amount',
         'currency',
+        'exchange_rate_to_try',
+        'try_equivalent',
         'payment_method',
         'reference_no',
         'description',
@@ -110,6 +114,8 @@ class Payment extends Model
             'payment_date' => 'date',
             'amount' => 'decimal:2',
             'currency' => Currency::class,
+            'exchange_rate_to_try' => 'decimal:4',
+            'try_equivalent' => 'decimal:2',
             'payment_method' => PaymentMethod::class,
             'status' => PaymentStatus::class,
             'cancelled_at' => 'datetime',
@@ -162,6 +168,27 @@ class Payment extends Model
     public function amountMoney(): Money
     {
         return Money::fromDecimal($this->amount);
+    }
+
+    /**
+     * TL karşılığı — yalnızca yabancı para birimli ve kuru KAYITLI
+     * tahsilatlarda dolu (v2.1.1-C §2). İşlem anında bir kez hesaplanan bir
+     * ANLIK GÖRÜNTÜdür; burada YENİDEN hesaplanmaz.
+     */
+    public function tryEquivalentMoney(): ?Money
+    {
+        return $this->try_equivalent === null ? null : Money::fromDecimal($this->try_equivalent);
+    }
+
+    public function hasExchangeRate(): bool
+    {
+        return $this->exchange_rate_to_try !== null;
+    }
+
+    /** Yabancı para birimli ve kur bilgisi EKSİK olan kayıt — düzeltme kuyruğuna girer. */
+    public function isMissingExchangeRate(): bool
+    {
+        return $this->currency !== Currency::TRY && $this->exchange_rate_to_try === null;
     }
 
     public function isCancelled(): bool

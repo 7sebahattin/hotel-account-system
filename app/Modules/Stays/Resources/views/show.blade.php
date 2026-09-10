@@ -68,6 +68,10 @@
                                 {{ $stay->nights }} gece × {{ $stay->dailyRateMoney()?->format($stay->currency) }}
                             </span>
                         @endif
+                        <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" />
+                        @if ($stay->isMissingExchangeRate())
+                            <span class="mt-0.5 block text-xs text-mut">Kur bilgisi eksik (geçmiş kayıt).</span>
+                        @endif
                     </dd>
                 </div>
                 <div class="sm:col-span-2">

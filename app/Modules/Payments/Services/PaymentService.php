@@ -12,6 +12,7 @@ use App\Modules\CashBook\Exceptions\NoOpenCashSession;
 use App\Modules\CashBook\Models\CashMovement;
 use App\Modules\CashBook\Models\CashSession;
 use App\Modules\CashBook\Services\CashBookService;
+use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
@@ -19,6 +20,7 @@ use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
 use App\Modules\Payments\Exceptions\CashSessionNotOwnedByActor;
+use App\Modules\Payments\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Models\Payment;
@@ -84,6 +86,7 @@ class PaymentService
             $payment->status = PaymentStatus::Active;
             $payment->created_by = $user->getKey();
             $payment->updated_by = $user->getKey();
+            $this->applyExchangeRate($payment, $data);
 
             $isCash = $payment->payment_method === PaymentMethod::Cash;
             $session = $isCash
@@ -269,7 +272,101 @@ class PaymentService
         return Payment::query()->whereIn('id', $ids)->pluck('id')->all();
     }
 
+    /**
+     * `id` ile tek tahsilat — FxCorrection modülünün tek bilmesi GEREKEN
+     * erişim yoludur (§4.3/1: o modül `Payment::class`i hiç KULLANMAZ).
+     */
+    public function findOrFail(int $id): Payment
+    {
+        return Payment::query()->findOrFail($id);
+    }
+
+    /**
+     * Kur bilgisi EKSİK yabancı para birimli tahsilatlar — Geçmiş Döviz
+     * Düzeltme kuyruğu (v2.1.1-C §3). İptal edilmiş kayıtlar da gösterilir.
+     *
+     * @return Collection<int, Payment>
+     */
+    public function missingExchangeRate(): Collection
+    {
+        return Payment::query()
+            ->with('company')
+            ->where('currency', '<>', Currency::TRY->value)
+            ->whereNull('exchange_rate_to_try')
+            ->orderBy('payment_date')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Geçmiş bir tahsilatın EKSİK kur anlık görüntüsünü doldurur.
+     *
+     * v2.1.1-C §3'ün katı kuralları: `Payment::IMMUTABLE_FIELDS` (tutar,
+     * para birimi) hiç değişmez, ikinci bir tahsilat/cari hareketi oluşmaz,
+     * iptal/yeniden işleme YAPILMAZ — yalnızca eksik metadata yazılır. Bu
+     * yüzden normal `updateMetadata()` akışından TAMAMEN AYRIDIR.
+     *
+     * Zaten kayıtlı bir kuru "düzeltmek" için bu metot KULLANILAMAZ (§3:
+     * "do not allow casual editing of completed historical FX values").
+     *
+     * @throws ExchangeRateAlreadyRecorded
+     */
+    public function correctHistoricalExchangeRate(Payment $payment, string $rate, ?User $actor = null): Payment
+    {
+        if ($payment->exchange_rate_to_try !== null) {
+            throw ExchangeRateAlreadyRecorded::make($payment->getKey());
+        }
+
+        if ($payment->currency === Currency::TRY) {
+            throw new \InvalidArgumentException('TRY tahsilatlar için kur düzeltmesi yapılamaz.');
+        }
+
+        $user = $this->resolveActor($actor);
+        $normalizedRate = Money::normalizeInput($rate);
+        $tryEquivalent = $payment->amountMoney()->multiplyByRate($normalizedRate)->toDecimal();
+
+        return DB::transaction(function () use ($payment, $normalizedRate, $tryEquivalent, $user): Payment {
+            $payment->exchange_rate_to_try = $normalizedRate;
+            $payment->try_equivalent = $tryEquivalent;
+            $payment->updated_by = $user->getKey();
+            $payment->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::ExchangeRateCorrected,
+                subject: $payment,
+                oldValues: ['exchange_rate_to_try' => null, 'try_equivalent' => null],
+                newValues: ['exchange_rate_to_try' => $normalizedRate, 'try_equivalent' => $tryEquivalent],
+                user: $user,
+            );
+
+            return $payment;
+        });
+    }
+
     // ------------------------------------------------------------------ iç
+
+    /**
+     * Kur anlık görüntüsünü çözer (v2.1.1-C §2) — yalnızca OLUŞTURMADA
+     * çağrılır. TRY için her zaman NULL; yabancı para biriminde
+     * `StorePaymentRequest` kuru ZORUNLU kıldığı için `$data` içinde vardır.
+     */
+    private function applyExchangeRate(Payment $payment, array $data): void
+    {
+        if ($payment->currency === Currency::TRY) {
+            $payment->exchange_rate_to_try = null;
+            $payment->try_equivalent = null;
+
+            return;
+        }
+
+        if (! array_key_exists('exchange_rate_to_try', $data) || $data['exchange_rate_to_try'] === null) {
+            return;
+        }
+
+        $rate = Money::normalizeInput((string) $data['exchange_rate_to_try']);
+        $payment->exchange_rate_to_try = $rate;
+        $payment->try_equivalent = $payment->amountMoney()->multiplyByRate($rate)->toDecimal();
+    }
 
     private function postCredit(Payment $payment, User $user): LedgerEntry
     {

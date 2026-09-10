@@ -91,6 +91,7 @@
                     <td class="px-4 py-3 text-mut">{{ $stay->company?->name ?? '—' }}</td>
                     <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
                         {{ $stay->amountMoney()->format($stay->currency) }}
+                        <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
                     </td>
                     <td class="px-4 py-3">@include('stays::_status', ['stay' => $stay])</td>
                     <td class="px-4 py-3 text-mut">{{ $stay->creator?->name ?? '—' }}</td>
@@ -133,7 +134,10 @@
                             @if ($stay->roomLabel()) · Oda <span class="tabular-nums">{{ $stay->roomLabel() }}</span> @endif
                         </p>
 
-                        <span class="shrink-0 tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                        <span class="shrink-0 text-right">
+                            <span class="block tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                            <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
+                        </span>
                     </div>
                 </x-ui.card>
             </a>

@@ -18,6 +18,9 @@ enum AuditEvent: string
     case Exported = 'exported';
     case PermissionChanged = 'permission_changed';
 
+    /** Geçmiş Döviz Düzeltme aracıyla eksik kur bilgisinin doldurulması (v2.1.1-C §3). */
+    case ExchangeRateCorrected = 'exchange_rate_corrected';
+
     public function label(): string
     {
         return match ($this) {
@@ -32,6 +35,7 @@ enum AuditEvent: string
             self::Reversed => 'Ters kayıt yapıldı',
             self::Exported => 'Dışa aktarıldı',
             self::PermissionChanged => 'Yetki değişikliği',
+            self::ExchangeRateCorrected => 'Döviz kuru düzeltildi',
         };
     }
 }
