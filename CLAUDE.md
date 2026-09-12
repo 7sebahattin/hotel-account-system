@@ -2,6 +2,14 @@
 
 ## Onaylı geliştirme kapsamı — 11 Eylül 2026
 
+13 Eylül 2026 yayın paketi: kullanıcı açıkça “yayınla” dedi. Yedek provasını
+erteledi; yapılmış sayılmaz. Bu `codex/yayin-cari-1` dalında yalnız bireysel
+cari ve aynı para biriminde dağıtım vardır; dövizden TL kapama kodu/migration'ı
+bu paketten ayrılmıştır. Aşağıdaki üçüncü adım notları diğer geliştirme
+dalının tarihçesidir. Eski ödemeler otomatik eşleştirilmez, bakiye korunur.
+Canlı aktarım öncesi sunucuda bakım ve migration çalıştırma erişimi gerekir;
+dosya aktarımı tek başına tamamlanmış yayın değildir.
+
 Entegrasyon kopyası durum notu: bu çalışma ağacı `codex/canli-entegrasyon`
 dalında, güncel `origin/main` (`ea6c438`) tabanında hazırlanmıştır. K-106
 filtreleri ile bireysel cari/ödeme/döviz geliştirmeleri birleştirilmiştir.

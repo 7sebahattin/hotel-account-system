@@ -760,13 +760,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const account = form.elements.company_id;
     const currency = form.elements.currency;
     const mode = form.elements.allocation_mode;
-    const settlement = form.elements.settlement_currency;
-    const settlementGroup = form.querySelector('[data-settlement-group]');
-    const syncSettlement = () => {
-        settlementGroup.hidden = currency.value === 'TRY';
-        settlement.disabled = settlementGroup.hidden;
-        if (settlement.disabled) settlement.value = '';
-    };
     const payer = form.elements.payer_type;
     const payerGroup = form.querySelector('[data-payer-name]');
     const selection = form.querySelector('[data-allocation-selection]');
@@ -794,7 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
         message.textContent = 'Konaklamalar yükleniyor…';
         const url = new URL(form.dataset.optionsUrl, window.location.href);
         url.searchParams.set('company_id', account.value);
-        url.searchParams.set('currency', settlement.value || currency.value);
+        url.searchParams.set('currency', currency.value);
         try {
             const response = await fetch(url, {headers: {Accept: 'application/json'}, signal: controller.signal});
             if (!response.ok) throw new Error('Liste alınamadı');
@@ -820,13 +813,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     account.addEventListener('change', () => { previous.clear(); refresh(); });
-    currency.addEventListener('change', () => { previous.clear(); syncSettlement(); refresh(); });
-    settlement.addEventListener('change', () => { previous.clear(); refresh(); });
+    currency.addEventListener('change', () => { previous.clear(); refresh(); });
     mode.addEventListener('change', refresh);
     payer.addEventListener('change', syncPayer);
     form.querySelector('[data-allocation-retry]').addEventListener('click', refresh);
     syncPayer();
-    syncSettlement();
     refresh();
 });
 

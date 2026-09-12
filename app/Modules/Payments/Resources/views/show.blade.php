@@ -32,16 +32,11 @@
                 @foreach ($allocations as $allocation)
                     <li class="flex flex-wrap justify-between gap-2 text-sm">
                         <a class="text-acc-tx underline" href="{{ route('stays.show', $allocation['stay_id']) }}">#{{ $allocation['stay_id'] }} · {{ $allocation['guest_name'] }}</a>
-                        <span class="tabular-nums text-right">{{ $allocation['amount']->format($allocation['currency']) }}
-                            @if ($allocation['payment_amount'])<span class="block text-xs text-mut">Kullanılan: {{ $allocation['payment_amount']->format($payment->currency) }}</span>@endif
-                        </span>
+                        <span class="tabular-nums">{{ $allocation['amount']->format($payment->currency) }}</span>
                     </li>
                 @endforeach
             </ul>
             <p class="mt-3 text-sm tabular-nums">Kullanılabilir avans: {{ $availableAdvance->format($payment->currency) }}</p>
-            @if ($payment->settlement_currency)
-                <p class="mt-2 text-xs text-mut">TL borç, işlemde kaydedilen {{ $payment->exchange_rate_to_try }} kuruyla kapatıldı. Küçük kuruş farkları kalan borç veya döviz avansı olarak korunur.</p>
-            @endif
         @endif
     </x-ui.card>
 

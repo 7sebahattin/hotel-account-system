@@ -101,12 +101,6 @@ class PaymentService
             $payment->created_by = $user->getKey();
             $payment->updated_by = $user->getKey();
             $this->applyExchangeRate($payment, $data);
-            $target = $data['settlement_currency'] ?? null;
-            if ($target !== null && ($target !== 'TRY' || $payment->currency === Currency::TRY || $payment->exchange_rate_to_try === null || ! $payment->tryEquivalentMoney()?->isPositive())) {
-                throw ValidationException::withMessages(['settlement_currency' => 'TL borç kapama için döviz tahsilatı ve pozitif TL karşılığı olan bir kur girin.']);
-            }
-            $payment->settlement_currency = $target === 'TRY' ? Currency::TRY : null;
-
             $isCash = $payment->payment_method === PaymentMethod::Cash;
             $session = $isCash
                 ? $this->requireOwnedOpenSession($user)
@@ -378,9 +372,8 @@ class PaymentService
     public function systemWideExchangeRateCreditTotalsByCurrency(): array
     {
         $rows = DB::table('payments')
-            ->leftJoinSub(app(PaymentAllocationService::class)->conversionTotalsQuery(), 'conversions', 'conversions.payment_id', '=', 'payments.id')
             ->select('currency')
-            ->selectRaw('CAST(COALESCE(SUM(try_equivalent - COALESCE(conversions.converted_total, 0)), 0) AS CHAR) as total')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
             ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
             ->where('status', PaymentStatus::Active->value)
             ->where('currency', '<>', Currency::TRY->value)
@@ -402,9 +395,8 @@ class PaymentService
     private function exchangeRateCreditQuery(): QueryBuilder
     {
         return DB::table('payments')
-            ->leftJoinSub(app(PaymentAllocationService::class)->conversionTotalsQuery(), 'conversions', 'conversions.payment_id', '=', 'payments.id')
             ->select('company_id', 'currency')
-            ->selectRaw('CAST(COALESCE(SUM(try_equivalent - COALESCE(conversions.converted_total, 0)), 0) AS CHAR) as total')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
             ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
             ->where('status', PaymentStatus::Active->value)
             ->where('currency', '<>', Currency::TRY->value)
@@ -712,7 +704,6 @@ class PaymentService
             'payer_type' => $payment->payer_type?->value,
             'payer_name' => $payment->payer_name,
             'allocation_mode' => $payment->allocation_mode?->value,
-            'settlement_currency' => $payment->settlement_currency?->value,
             'exchange_rate_to_try' => $payment->exchange_rate_to_try,
             'try_equivalent' => $payment->try_equivalent,
             'payment_date' => Carbon::parse($payment->payment_date)->toDateString(),

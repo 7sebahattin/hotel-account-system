@@ -7,17 +7,13 @@
     $source = [
         'stay' => ['route' => 'stays.show', 'label' => 'Konaklama kaydı'],
         'payment' => ['route' => 'payments.show', 'label' => 'Tahsilat kaydı'],
-        'payment_allocation' => ['route' => 'payments.show', 'label' => 'Döviz tahsilatı'],
     ][$type] ?? null;
 
     // Ledger'ın doğruluğu kaynak kayda BAĞLI DEĞİLDİR: kayıt silinmiş olsa bile
     // ekstre satırı geçerlidir ve ekran hata vermez.
     $exists = $source !== null
         && $entry->source_id !== null
-        && ($type === 'payment_allocation'
-            ? isset($existingSources[$type][$entry->source_id])
-            : in_array($entry->source_id, $existingSources[$type] ?? [], true));
-    $targetId = $type === 'payment_allocation' ? ($existingSources[$type][$entry->source_id] ?? null) : $entry->source_id;
+        && in_array($entry->source_id, $existingSources[$type] ?? [], true);
 @endphp
 
 @if ($exists)
@@ -25,7 +21,7 @@
         Görsel metin küçük kalsın diye (dar "Kaynak" kolonu / mobil kart),
         `min-h-11` dokunma yüksekliğini padding tahmini olmadan garanti eder.
     --}}
-    <a href="{{ route($source['route'], $targetId) }}"
+    <a href="{{ route($source['route'], $entry->source_id) }}"
        class="inline-flex min-h-11 items-center text-mut underline hover:text-acc">
         {{ $source['label'] }}
     </a>

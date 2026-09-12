@@ -78,20 +78,12 @@
                     <x-ui.input label="Açıklama" name="description" maxlength="255" />
                 </div>
 
-                <div class="sm:col-span-2" data-settlement-group>
-                    <x-ui.select label="Hangi borçtan düşülsün?" name="settlement_currency">
-                        <option value="">Ödeme ile aynı para birimindeki borç</option>
-                        <option value="TRY" @selected(old('settlement_currency') === 'TRY')>TL borç — girilen kurla hesapla</option>
-                    </x-ui.select>
-                    <p class="mt-2 text-xs text-mut">Alınan döviz tutarı korunur. TL borcu aşan kısım döviz avansı kalır. Kuruşa bölünmeyen küçük farklar silinmez; kalan borç veya avans olarak görünür.</p>
-                </div>
-
                 <div class="sm:col-span-2 border-t border-line pt-4">
                     <x-ui.select label="Ödeme dağıtımı" name="allocation_mode" required>
                         <option value="oldest_first" @selected(old('allocation_mode', 'oldest_first') === 'oldest_first')>En eski konaklama borcundan başla</option>
                         <option value="selected" @selected(old('allocation_mode') === 'selected')>Belirli konaklamaları seç</option>
                     </x-ui.select>
-                    <p class="mt-2 text-xs text-mut">Seçilen borç para birimindeki konaklamalara uygulanır. Ödeme yetmezse kalan borç açık kalır; fazla ödeme seçilen cari hesapta avans olarak tutulur.</p>
+                    <p class="mt-2 text-xs text-mut">Aynı para birimindeki borçlara uygulanır. Ödeme yetmezse kalan borç açık kalır; fazla ödeme seçilen cari hesapta avans olarak tutulur.</p>
                     <fieldset data-allocation-selection class="mt-3 space-y-2" hidden disabled>
                         <legend class="text-sm text-mut">Ödenecek konaklamalar</legend>
                         <p data-allocation-message class="text-sm text-mut" role="status"></p>

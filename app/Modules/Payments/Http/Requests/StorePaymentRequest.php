@@ -31,7 +31,6 @@ class StorePaymentRequest extends FormRequest
             'payer_type' => ['sometimes', 'required', Rule::enum(PayerType::class)],
             'payer_name' => ['nullable', 'required_if:payer_type,individual', 'string', 'max:200'],
             'allocation_mode' => ['sometimes', 'required', Rule::enum(AllocationMode::class)],
-            'settlement_currency' => ['nullable', Rule::in(['TRY']), 'prohibited_if:currency,TRY'],
             'stay_ids' => ['required_if:allocation_mode,selected', 'array', 'max:200'],
             'stay_ids.*' => ['integer', 'distinct', Rule::exists('stays', 'id')->whereNull('deleted_at')],
             'company_id' => ['required', Rule::exists('companies', 'id')->whereNull('deleted_at')],

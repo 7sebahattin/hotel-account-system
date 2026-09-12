@@ -7,7 +7,6 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
-use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Payments\Enums\AllocationMode;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
@@ -29,35 +28,6 @@ class PaymentAllocationService
             ->whereNotExists(fn (Builder $q) => $q->selectRaw('1')->from('payment_allocations as r')->whereColumn('r.reverses_allocation_id', 'a.id'));
     }
 
-    /** Dövizde kalan TL karşılığını raporlayan sorgular için; aynı para birimli dağılımlar hariçtir. */
-    public function conversionTotalsQuery(): Builder
-    {
-        return $this->active()->whereNotNull('a.payment_amount')->groupBy('a.payment_id')
-            ->selectRaw('a.payment_id, SUM(a.amount) as converted_total');
-    }
-
-    /** @param array<int, int> $ids
-     * @return array<int, array{rate: ?string, equivalent: ?string}>
-     */
-    public function exchangeRateSnapshotsFor(array $ids): array
-    {
-        if ($ids === []) {
-            return [];
-        }
-
-        return DB::table('payment_allocations as a')->join('payments as p', 'p.id', '=', 'a.payment_id')
-            ->whereIn('a.id', $ids)->get(['a.id', 'a.amount', 'p.exchange_rate_to_try'])
-            ->mapWithKeys(fn ($row) => [(int) $row->id => ['rate' => $row->exchange_rate_to_try, 'equivalent' => $row->amount]])->all();
-    }
-
-    /** @param array<int, int> $ids
-     * @return array<int, int>
-     */
-    public function paymentIdsForAllocations(array $ids): array
-    {
-        return $ids === [] ? [] : DB::table('payment_allocations')->whereIn('id', $ids)->pluck('payment_id', 'id')->map(fn ($id) => (int) $id)->all();
-    }
-
     /** @param array<int, int> $stayIds
      * @return array<int, int>
      */
@@ -74,14 +44,14 @@ class PaymentAllocationService
             return Money::zero();
         }
 
-        return $payment->amountMoney()->subtract(Money::fromDecimal((string) $this->active()->where('a.payment_id', $payment->id)->sum(DB::raw('COALESCE(a.payment_amount, a.amount)'))));
+        return $payment->amountMoney()->subtract(Money::fromDecimal((string) $this->active()->where('a.payment_id', $payment->id)->sum('a.amount')));
     }
 
     /** @param array<int, int> $selectedIds */
     public function allocate(Payment $payment, array $selectedIds, User $actor): void
     {
         $selectedIds = array_values(array_unique(array_map('intval', $selectedIds)));
-        $candidates = app(StayService::class)->allocationCandidates($payment->company_id, $payment->settlement_currency ?? $payment->currency);
+        $candidates = app(StayService::class)->allocationCandidates($payment->company_id, $payment->currency);
         if ($payment->allocation_mode === AllocationMode::Selected) {
             $candidates = array_values(array_filter($candidates, fn ($stay) => in_array($stay['id'], $selectedIds, true)));
             if ($selectedIds === [] || count($candidates) !== count($selectedIds)) {
@@ -95,11 +65,11 @@ class PaymentAllocationService
         $remaining = $this->available($payment)->minorUnits;
         $allocated = 0;
         foreach ($candidates as $stay) {
-            [$part, $used] = $this->portion($payment, $remaining, max(0, Money::fromDecimal($stay['amount'])->minorUnits - ($paid[$stay['id']] ?? 0)));
+            $part = min($remaining, max(0, Money::fromDecimal($stay['amount'])->minorUnits - ($paid[$stay['id']] ?? 0)));
             if ($part > 0) {
-                $this->writePortion($payment, $stay['id'], $part, $used, $actor);
+                $this->write($payment->id, $stay['id'], $part, $actor);
                 $allocated += $part;
-                $remaining -= $used;
+                $remaining -= $part;
             }
             if ($remaining === 0) {
                 break;
@@ -116,17 +86,15 @@ class PaymentAllocationService
         $stay = app(StayService::class)->allocationDetails([$stayId])[$stayId];
         $paid = $this->paidMinorByStay([$stayId]);
         $remaining = Money::fromDecimal($stay['amount'])->minorUnits - ($paid[$stayId] ?? 0);
-        $payments = Payment::query()->where('company_id', $stay['company_id'])
-            ->where(fn ($q) => $q->where('settlement_currency', $stay['currency'])
-                ->orWhere(fn ($same) => $same->whereNull('settlement_currency')->where('currency', $stay['currency'])))
+        $payments = Payment::query()->where('company_id', $stay['company_id'])->where('currency', $stay['currency'])
             ->where('status', PaymentStatus::Active)->whereNotNull('allocation_mode')->orderBy('payment_date')->orderBy('id')->get();
         $used = $this->active()->whereIn('a.payment_id', $payments->modelKeys())->groupBy('a.payment_id')
-            ->selectRaw('a.payment_id, SUM(COALESCE(a.payment_amount, a.amount)) as total')->get()
+            ->selectRaw('a.payment_id, SUM(a.amount) as total')->get()
             ->mapWithKeys(fn ($row) => [(int) $row->payment_id => Money::fromDecimal($row->total)->minorUnits])->all();
         foreach ($payments as $payment) {
-            [$part, $consumed] = $this->portion($payment, $payment->amountMoney()->minorUnits - ($used[$payment->id] ?? 0), $remaining);
+            $part = min($remaining, $payment->amountMoney()->minorUnits - ($used[$payment->id] ?? 0));
             if ($part > 0) {
-                $this->writePortion($payment, $stayId, $part, $consumed, $actor);
+                $this->write($payment->id, $stayId, $part, $actor);
                 $remaining -= $part;
             }
             if ($remaining === 0) {
@@ -145,15 +113,12 @@ class PaymentAllocationService
         foreach ($rows as $row) {
             $payment = $payments[$row->payment_id];
             $amount = Money::fromDecimal($row->amount)->minorUnits;
-            $keep = $payment->company_id === $stay['company_id'] && ($row->debt_currency ?? $payment->currency->value) === $stay['currency']
+            $keep = $payment->company_id === $stay['company_id'] && $payment->currency->value === $stay['currency']
                 ? min($remaining, $amount) : 0;
             if ($keep < $amount) {
                 $this->reverse($row, $actor, 'Konaklama düzeltildi');
                 if ($keep > 0) {
-                    [$keep, $consumed] = $this->portion($payment, Money::fromDecimal($row->payment_amount ?? $row->amount)->minorUnits, $keep);
-                    if ($keep > 0) {
-                        $this->writePortion($payment, $stayId, $keep, $consumed, $actor);
-                    }
+                    $this->write($payment->id, $stayId, $keep, $actor);
                 }
             }
             $remaining -= $keep;
@@ -185,64 +150,11 @@ class PaymentAllocationService
 
     private function reverse(object $row, User $actor, string $reason): void
     {
-        if ($row->payment_amount !== null) {
-            $ledger = app(LedgerService::class);
-            foreach ($ledger->activeEntriesForSource('payment_allocation', (int) $row->id) as $entry) {
-                $ledger->reverse($entry, actor: $actor);
-            }
-        }
         DB::table('payment_allocations')->insert([
             'payment_id' => $row->payment_id, 'stay_id' => $row->stay_id, 'amount' => $row->amount,
-            'payment_amount' => $row->payment_amount, 'debt_currency' => $row->debt_currency,
             'reverses_allocation_id' => $row->id, 'reason' => $reason,
             'created_by' => $actor->id, 'created_at' => now(),
         ]);
-    }
-
-    /** Borcu aşmayan en yüksek döviz kuruşunu bulur; farkı silmez. @return array{int, int} */
-    private function portion(Payment $payment, int $available, int $debt): array
-    {
-        if ($payment->settlement_currency === null) {
-            $part = min($available, $debt);
-
-            return [$part, $part];
-        }
-        $low = 0;
-        $high = $available;
-        $rate = (string) $payment->exchange_rate_to_try;
-        // Kalan tutarın karşılığından düş: parçalı dağılımda kuruşlar birikmez.
-        $equivalent = Money::fromMinorUnits($available)->multiplyByRate($rate)->minorUnits;
-        while ($low < $high) {
-            $mid = $low + intdiv($high - $low + 1, 2);
-            if ($equivalent - Money::fromMinorUnits($available - $mid)->multiplyByRate($rate)->minorUnits <= $debt) {
-                $low = $mid;
-            } else {
-                $high = $mid - 1;
-            }
-        }
-        $covered = $equivalent - Money::fromMinorUnits($available - $low)->multiplyByRate($rate)->minorUnits;
-
-        return $covered > 0 ? [$covered, $low] : [0, 0];
-    }
-
-    private function writePortion(Payment $payment, int $stayId, int $debt, int $received, User $actor): void
-    {
-        if ($payment->settlement_currency === null) {
-            $this->write($payment->id, $stayId, $debt, $actor);
-
-            return;
-        }
-        $debtMoney = Money::fromMinorUnits($debt);
-        $receivedMoney = Money::fromMinorUnits($received);
-        $id = DB::table('payment_allocations')->insertGetId([
-            'payment_id' => $payment->id, 'stay_id' => $stayId,
-            'amount' => $debtMoney->toDecimal(), 'payment_amount' => $receivedMoney->toDecimal(),
-            'debt_currency' => Currency::TRY->value, 'created_by' => $actor->id, 'created_at' => now(),
-        ]);
-        $description = 'Dövizle borç kapama · '.$payment->receipt_no.' · Konaklama #'.$stayId.' · Kur '.$payment->exchange_rate_to_try;
-        $ledger = app(LedgerService::class);
-        $ledger->debit($payment->company_id, $receivedMoney, $payment->currency, $payment->payment_date, $description, 'payment_allocation', $id, $actor);
-        $ledger->credit($payment->company_id, $debtMoney, Currency::TRY, $payment->payment_date, $description, 'payment_allocation', $id, $actor);
     }
 
     /** @param array<int, int> $ids
@@ -281,8 +193,6 @@ class PaymentAllocationService
             'stay_id' => (int) $row->stay_id,
             'guest_name' => $stays[$row->stay_id]['guest_name'] ?? 'Konaklama kaydı bulunamadı',
             'amount' => Money::fromDecimal($row->amount),
-            'currency' => $row->debt_currency === null ? $payment->currency : Currency::from($row->debt_currency),
-            'payment_amount' => $row->payment_amount === null ? null : Money::fromDecimal($row->payment_amount),
         ])->all();
     }
 

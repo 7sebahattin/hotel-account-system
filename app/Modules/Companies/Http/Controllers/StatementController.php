@@ -14,7 +14,6 @@ use App\Modules\Ledger\Enums\LedgerEntryType;
 use App\Modules\Ledger\Services\LedgerStatementService;
 use App\Modules\Ledger\Support\StatementCriteria;
 use App\Modules\Ledger\Support\StatementRow;
-use App\Modules\Payments\Services\PaymentAllocationService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Contracts\View\View;
@@ -199,7 +198,7 @@ class StatementController extends Controller
      */
     private function existingSources(array $rows): array
     {
-        $ids = ['stay' => [], 'payment' => [], 'payment_allocation' => []];
+        $ids = ['stay' => [], 'payment' => []];
 
         foreach ($rows as $row) {
             $type = (string) $row->entry->source_type;
@@ -212,7 +211,6 @@ class StatementController extends Controller
         return [
             'stay' => $this->stays->existingIds(array_values(array_unique($ids['stay']))),
             'payment' => $this->payments->existingIds(array_values(array_unique($ids['payment']))),
-            'payment_allocation' => app(PaymentAllocationService::class)->paymentIdsForAllocations(array_values(array_unique($ids['payment_allocation']))),
         ];
     }
 
@@ -224,7 +222,7 @@ class StatementController extends Controller
      */
     private function exchangeRateSnapshots(array $rows): array
     {
-        $ids = ['stay' => [], 'payment' => [], 'payment_allocation' => []];
+        $ids = ['stay' => [], 'payment' => []];
 
         foreach ($rows as $row) {
             $type = (string) $row->entry->source_type;
@@ -237,7 +235,6 @@ class StatementController extends Controller
         return [
             'stay' => $this->stays->exchangeRateSnapshotsFor(array_values(array_unique($ids['stay']))),
             'payment' => $this->payments->exchangeRateSnapshotsFor(array_values(array_unique($ids['payment']))),
-            'payment_allocation' => app(PaymentAllocationService::class)->exchangeRateSnapshotsFor(array_values(array_unique($ids['payment_allocation']))),
         ];
     }
 
