@@ -299,7 +299,7 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
                           modülün Service Provider'ını taşımazsa migrate
                           o modülün migration'larını hiç GÖRMEZ)
                         → php artisan migrate --force
-                        → php artisan db:seed --class=RolePermissionSeeder --force
+                        → php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force
                         → config:cache / route:cache / view:cache / event:cache
                         ↓
         başarılı → günlüğe yaz + işaret dosyasını SİL
@@ -534,7 +534,7 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
     K-102: bayat cache bu deploy'da yeni eklenen bir modülün Service
     Provider'ını taşımıyorsa `migrate` o modülün migration'larını hiç
     GÖRMEZ, sessizce atlar), sonra `migrate --force`, sonra
-    **`db:seed --class=RolePermissionSeeder --force`** (HER deploy'da,
+    **`db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`** (HER deploy'da,
     migrate'ten hemen sonra — atlanırsa production "no permission named X"
     hatası verir, gerçek üretim olayı), `storage:link`, sonra üretim
     cache'i KURULUR: `config:cache route:cache view:cache event:cache`.

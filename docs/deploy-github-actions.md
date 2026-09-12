@@ -73,7 +73,7 @@ Herhangi biri 200 dönerse deploy **geri alınır**.
 
 ## 6. KARAR VERİLDİ: cPanel cron + işaret dosyası
 
-`php artisan migrate --force`, `db:seed --class=RolePermissionSeeder --force`,
+`php artisan migrate --force`, `db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`,
 `config:cache`, `route:cache`, `view:cache` ve `event:cache` sunucuda çalışmak
 zorundadır. SSH yoksa iki seçenek vardır:
 
@@ -94,7 +94,7 @@ HTTP ucu **oluşturulmayacaktır.** Akış:
    atlanır). Bu, gerçek bir üretim olayının BİREBİR kök nedenidir (Room
    Registry modülü — bkz. `docs/kararlar.md` K-102).
 4. Gerekiyorsa `php artisan migrate --force` çalıştırır.
-5. **Ardından `php artisan db:seed --class=RolePermissionSeeder --force`
+5. **Ardından `php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`
    çalıştırır — atlanamaz.** Gerekçe: koddaki yeni bir `Permission` case'i
    deploy edilip bu adım koşulmazsa production "There is no permission
    named X for guard web" hatası verir (gerçek üretim olayı — tam sıra ve

@@ -37,7 +37,7 @@ CACHE TEMİZLE (config/route/view/event) — MIGRATE'TEN ÖNCE (K-102)
    ↓
 MIGRATE            php artisan migrate --force
    ↓
-ROLE/PERMISSION SEED   php artisan db:seed --class=RolePermissionSeeder --force
+ROLE/PERMISSION SEED   php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force
    ↓
 CACHE KUR (config/route/view/event)
    ↓
@@ -103,7 +103,7 @@ php artisan event:clear
 php artisan migrate --force
 
 # 3) ROLE/PERMISSION SEED — HER DEPLOY'DA, atlanamaz (bkz. §1)
-php artisan db:seed --class=RolePermissionSeeder --force
+php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force
 
 # 4) Production cache'ini kur
 php artisan config:cache
