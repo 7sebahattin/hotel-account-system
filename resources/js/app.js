@@ -833,3 +833,155 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('pageshow', sync);
     sync();
 });
+
+/**
+ * Aranabilir seçim kutusu — "lem" yazınca "Lemon" gibi eşleşenleri listeler.
+ *
+ * Alpine.js kurulu DEĞİLDİR (§11.7); bu davranış için ayrı bir paket
+ * eklenmedi, mevcut deseni izleyen bağımsız bir fonksiyon yeterli.
+ *
+ * Native <select> asla DOM'dan kaldırılmaz — yalnızca `hidden` yapılır ve
+ * form değeri HER ZAMAN ondan okunur/yazılır: kullanıcı yazdığı serbest
+ * metinle GERÇEKTE var olmayan bir kayda "bağlanamaz", çünkü seçim yalnızca
+ * listeden bir <option>'a tıklanarak/Enter ile onaylanabilir. JS çalışmazsa
+ * select normal açılır liste olarak görünmeye devam eder (progresif geliştirme).
+ */
+function initSearchableSelects() {
+    document.querySelectorAll('select[data-searchable-select]').forEach((select) => {
+        if (select.dataset.enhanced === '1') return;
+        select.dataset.enhanced = '1';
+
+        const label = select.parentElement?.querySelector('label');
+        const options = () => Array.from(select.options);
+        const fold = (value) => value.toLocaleLowerCase('tr-TR');
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.id = `${select.id}_search`;
+        input.className = select.className;
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-expanded', 'false');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-controls', `${select.id}_listbox`);
+        input.placeholder = 'Yazarak arayın…';
+
+        const listbox = document.createElement('ul');
+        listbox.id = `${select.id}_listbox`;
+        listbox.setAttribute('role', 'listbox');
+        listbox.hidden = true;
+        listbox.className = 'absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-line bg-card py-1 text-sm';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'relative';
+        wrap.append(input, listbox);
+
+        select.hidden = true;
+        select.insertAdjacentElement('afterend', wrap);
+        if (label) label.htmlFor = input.id;
+
+        let activeIndex = -1;
+        let matches = [];
+
+        const currentLabel = () => select.options[select.selectedIndex]?.text.trim() ?? '';
+
+        const close = () => {
+            listbox.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+            input.removeAttribute('aria-activedescendant');
+            activeIndex = -1;
+        };
+
+        const commit = (option) => {
+            select.value = option.value;
+            input.value = option.text.trim();
+            // 'change' olayı GERÇEK bir kullanıcı seçimini taklit eder — formdaki
+            // diğer dinleyiciler (ör. bireysel hesap alanının gizlenmesi) tetiklenir.
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            close();
+        };
+
+        const highlight = (index) => {
+            activeIndex = index;
+            const items = Array.from(listbox.querySelectorAll('[role="option"]'));
+            items.forEach((item, i) => {
+                item.classList.toggle('bg-well', i === index);
+                item.setAttribute('aria-selected', i === index ? 'true' : 'false');
+            });
+            if (index >= 0 && items[index]) {
+                input.setAttribute('aria-activedescendant', items[index].id);
+                items[index].scrollIntoView({ block: 'nearest' });
+            } else {
+                input.removeAttribute('aria-activedescendant');
+            }
+        };
+
+        const render = () => {
+            const term = fold(input.value.trim());
+            matches = options().filter((option) => fold(option.text).includes(term));
+            listbox.replaceChildren();
+
+            if (matches.length === 0) {
+                const empty = document.createElement('li');
+                empty.className = 'px-3 py-2 text-mut';
+                empty.textContent = 'Eşleşme yok';
+                listbox.append(empty);
+            } else {
+                matches.forEach((option, index) => {
+                    const item = document.createElement('li');
+                    item.id = `${select.id}_opt_${index}`;
+                    item.setAttribute('role', 'option');
+                    item.setAttribute('aria-selected', 'false');
+                    item.textContent = option.text.trim();
+                    item.className = 'flex min-h-11 cursor-pointer items-center px-3 py-2 hover:bg-well';
+                    // 'mousedown' (click DEĞİL) kullanılır: click, input'un blur
+                    // olayından SONRA ateşlenir ve o an liste zaten kapanmış olur.
+                    item.addEventListener('mousedown', (event) => {
+                        event.preventDefault();
+                        commit(option);
+                    });
+                    listbox.append(item);
+                });
+            }
+
+            listbox.hidden = false;
+            input.setAttribute('aria-expanded', 'true');
+            highlight(-1);
+        };
+
+        input.addEventListener('input', render);
+        input.addEventListener('focus', render);
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                if (listbox.hidden) { render(); return; }
+                highlight(Math.min(activeIndex + 1, matches.length - 1));
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                highlight(Math.max(activeIndex - 1, 0));
+            } else if (event.key === 'Enter') {
+                if (!listbox.hidden && activeIndex >= 0 && matches[activeIndex]) {
+                    event.preventDefault();
+                    commit(matches[activeIndex]);
+                }
+            } else if (event.key === 'Escape') {
+                close();
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            // Yazılan metin bir seçime dönüşmediyse görünen metin GERÇEK
+            // seçili değere (select.value) geri döner — kullanıcı yanlışlıkla
+            // yazdığı bir metinle var olmayan bir kayda "bağlanmış" GÖRÜNEMEZ.
+            window.setTimeout(() => {
+                input.value = currentLabel();
+                close();
+            }, 0);
+        });
+
+        input.value = currentLabel();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initSearchableSelects);
