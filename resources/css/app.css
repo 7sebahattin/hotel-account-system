@@ -257,4 +257,26 @@
     .nav-group[open] > summary .nav-group-chevron {
         transform: rotate(180deg);
     }
+
+    /*
+        Liste ekranlarının çökertilebilir filtre paneli — kenar çubuğu
+        gruplarıyla AYNI native <details>/<summary> deseni (Alpine.js kurulu
+        DEĞİLDİR, CLAUDE.md §11.7). Tarayıcının kendi açma/kapama üçgeni
+        gizlenir, kendi ok ikonumuz `open` durumunda döner.
+    */
+    .filter-panel > summary {
+        list-style: none;
+    }
+
+    .filter-panel > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .filter-panel-chevron {
+        transition: transform 150ms ease;
+    }
+
+    .filter-panel[open] > summary .filter-panel-chevron {
+        transform: rotate(180deg);
+    }
 }

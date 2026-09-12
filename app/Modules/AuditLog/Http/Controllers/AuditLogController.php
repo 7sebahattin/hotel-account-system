@@ -7,6 +7,7 @@ namespace App\Modules\AuditLog\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Models\AuditLog;
+use App\Modules\Core\Filters\QueryFilter;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 
@@ -33,6 +34,7 @@ class AuditLogController extends Controller
         return view('audit::index', [
             'logs' => $logs,
             'events' => AuditEvent::cases(),
+            'activeFilterCount' => QueryFilter::countActiveFilters($request),
         ]);
     }
 }

@@ -42,7 +42,9 @@
         @endif
     </div>
 
-    <form method="GET" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <x-ui.filter-panel :count="$filter->activeFilterCount()"
+                       :clear-href="route('cashbook.movements.index')"
+                       :per-page-options="$perPageOptions">
         <div class="sm:col-span-2">
             <x-ui.input label="Ara" name="q" type="search" :value="request('q')"
                         placeholder="Açıklama, alıcı/verici" />
@@ -79,27 +81,7 @@
                 @endforeach
             </x-ui.select>
         @endif
-
-        <div class="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-4">
-            <x-ui.button type="submit">
-                Filtrele
-                @if ($filter->activeFilterCount() > 0)
-                    ({{ $filter->activeFilterCount() }})
-                @endif
-            </x-ui.button>
-            <x-ui.button variant="ghost" :href="route('cashbook.movements.index')">Temizle</x-ui.button>
-
-            <label for="per_page" class="ml-auto flex items-center gap-2 text-sm text-mut">
-                Sayfa başına
-                <select id="per_page" name="per_page" onchange="this.form.submit()"
-                        class="min-h-11 rounded-lg border border-field bg-well px-2 text-tx focus:border-acc">
-                    @foreach ($perPageOptions as $option)
-                        <option value="{{ $option }}" @selected((int) request('per_page', 25) === $option)>{{ $option }}</option>
-                    @endforeach
-                </select>
-            </label>
-        </div>
-    </form>
+    </x-ui.filter-panel>
 
     <x-ui.panel title="Hareketler" class="mt-4">
         @forelse ($movements as $movement)

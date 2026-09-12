@@ -155,7 +155,10 @@ class StatementController extends Controller
     /** Tek firmanın cari ekstresi (`ledger.view`). */
     public function show(Request $request, Company $company): View
     {
-        return view('companies::statements.show', $this->statementData($request, $company));
+        return view('companies::statements.show', [
+            ...$this->statementData($request, $company),
+            'activeFilterCount' => QueryFilter::countActiveFilters($request),
+        ]);
     }
 
     /** Yazdırma görünümü — koyu tema uygulanmaz, beyaz zemin. */

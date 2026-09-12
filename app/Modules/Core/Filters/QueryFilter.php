@@ -173,13 +173,25 @@ abstract class QueryFilter
         return $this->activeFilterCount() > 0;
     }
 
-    /** Aktif filtre sayısı — "Filtrele (2)" gibi göstergeler için. */
+    /** Aktif filtre sayısı — filtre panelinin "N aktif" rozeti için. */
     public function activeFilterCount(): int
+    {
+        return self::countActiveFilters($this->request);
+    }
+
+    /**
+     * Aktif filtre sayısını doğrudan istekten sayar.
+     *
+     * QueryFilter alt sınıfı OLMAYAN ekranlar da (denetim kaydı listesi, cari
+     * ekstre detayı) çökertilebilir filtre panelinin rozetini aynı kuralla
+     * doldurabilsin diye statiktir — mantık kopyalanmaz (CLAUDE.md §4.2/4).
+     */
+    public static function countActiveFilters(Request $request): int
     {
         $ignored = ['page', 'sort', 'direction', 'per_page'];
         $count = 0;
 
-        foreach ($this->request->query() as $key => $value) {
+        foreach ($request->query() as $key => $value) {
             if (in_array($key, $ignored, true) || $value === null || $value === '') {
                 continue;
             }
