@@ -29,16 +29,24 @@ class CompanyListingTest extends TestCase
         return $response->viewData('companies')->pluck('name')->all();
     }
 
+    /** Nötr ama benzersiz e-posta üretmek için sayaç. */
+    private static int $searchableSequence = 0;
+
     /**
      * Arama testleri için firma: ARANABİLİR alanların tamamı nötr sabitlerle
      * doldurulur.
      *
      * Gerekçe: `CompanyFilter::searchable()` name, tax_number, phone,
-     * contact_person ve city alanlarını kapsar; `CompanyFactory` bunları
-     * faker'ın Türkçe listelerinden rastgele doldurur ve o listelerde
-     * 'Çınar', 'Ilgaz' gibi arama terimleriyle çakışan değerler VARDIR.
-     * Böyle bir çakışmada uygulama doğru davranır (gerçekten eşleşen bir
-     * kayıt bulur) ama testin sayım beklentisi rastgele kırılır.
+     * **email**, contact_person ve city alanlarını kapsar; `CompanyFactory`
+     * bunları faker'dan rastgele doldurur ve üretilen değerlerde 'Çınar',
+     * 'Ilgaz' gibi arama terimleriyle çakışan metinler VARDIR. Böyle bir
+     * çakışmada uygulama doğru davranır (gerçekten eşleşen bir kayıt bulur)
+     * ama testin sayım beklentisi rastgele kırılır.
+     *
+     * `email` bu listede ATLANMIŞTI ve rastgele üretilen bir şirket
+     * e-postası ('info@cinar-group…') 'çınar' aramasına Türkçe i katlaması
+     * sonrası eşleşerek testi düzensiz biçimde kırıyordu. Artık o da
+     * sabitlenir — arama mantığı DEĞİŞMEDİ, yalnızca rastgelelik kaldırıldı.
      *
      * @param  array<string, mixed>  $overrides
      */
@@ -51,6 +59,7 @@ class CompanyListingTest extends TestCase
             'contact_person' => 'Ali Veli',
             'city' => 'Ankara',
             'tax_office' => 'Çankaya',
+            'email' => 'firma'.static::$searchableSequence++.'@ornek.test',
         ], $overrides));
     }
 
