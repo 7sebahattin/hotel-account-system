@@ -32,6 +32,9 @@ class CompanyFilter extends QueryFilter
 
     protected function applyFilters(Builder $query): void
     {
+        if (in_array($this->request->query('account_type'), ['company', 'individual'], true)) {
+            $query->where('account_type', $this->request->query('account_type'));
+        }
         if ($this->request->filled('city')) {
             $query->where('city', $this->request->string('city')->value());
         }

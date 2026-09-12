@@ -56,7 +56,7 @@
                             </dd>
                         </div>
                     </dl>
-                    <p class="meaning">{{ $summary->balanceLabel() }}</p>
+                    <p class="meaning">{{ $summary->balanceLabel($company->account_type->value === 'individual' ? 'Kişi' : 'Firma') }}</p>
                 </div>
             @endforeach
         </div>

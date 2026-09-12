@@ -14,7 +14,7 @@
     $primaryItems = [
         ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null, 'icon' => 'home'],
         ['route' => 'cashbook.index', 'label' => 'Kasa', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
-        ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
+        ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
         ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
     ];
 

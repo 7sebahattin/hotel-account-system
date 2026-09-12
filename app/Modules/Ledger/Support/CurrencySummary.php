@@ -24,11 +24,11 @@ final readonly class CurrencySummary
     ) {}
 
     /** Firma bize borçlu mu, biz mi borçluyuz — metinle de ifade edilir. */
-    public function balanceLabel(): string
+    public function balanceLabel(string $accountLabel = 'Firma'): string
     {
         return match (true) {
-            $this->closing->isPositive() => 'Firma bize borçlu',
-            $this->closing->isNegative() => 'Firma alacaklı (fazla tahsilat)',
+            $this->closing->isPositive() => $accountLabel.' bize borçlu',
+            $this->closing->isNegative() => $accountLabel.' alacaklı (fazla tahsilat)',
             default => 'Kapalı',
         };
     }

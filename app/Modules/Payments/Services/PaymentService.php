@@ -12,10 +12,13 @@ use App\Modules\CashBook\Exceptions\NoOpenCashSession;
 use App\Modules\CashBook\Models\CashMovement;
 use App\Modules\CashBook\Models\CashSession;
 use App\Modules\CashBook\Services\CashBookService;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Payments\Enums\AllocationMode;
+use App\Modules\Payments\Enums\PayerType;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
@@ -30,6 +33,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Tahsilat modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -82,12 +86,26 @@ class PaymentService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($data, $user): Payment {
+            app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
             $payment = new Payment;
             $payment->fill($this->fillableOnCreate($data));
+            $payment->payer_type = PayerType::from($data['payer_type'] ?? PayerType::AccountHolder->value);
+            $payment->payer_name = $payment->payer_type === PayerType::Individual
+                ? trim((string) ($data['payer_name'] ?? ''))
+                : (app(CompanyService::class)->namesByIds([(int) $data['company_id']])[(int) $data['company_id']] ?? '');
+            if ($payment->payer_type === PayerType::Individual && ($payment->payer_name === '' || mb_strlen($payment->payer_name) > 200)) {
+                throw ValidationException::withMessages(['payer_name' => 'Ödemeyi yapan kişinin adını girin (en fazla 200 karakter).']);
+            }
+            $payment->allocation_mode = AllocationMode::from($data['allocation_mode'] ?? AllocationMode::OldestFirst->value);
             $payment->status = PaymentStatus::Active;
             $payment->created_by = $user->getKey();
             $payment->updated_by = $user->getKey();
             $this->applyExchangeRate($payment, $data);
+            $target = $data['settlement_currency'] ?? null;
+            if ($target !== null && ($target !== 'TRY' || $payment->currency === Currency::TRY || $payment->exchange_rate_to_try === null || ! $payment->tryEquivalentMoney()?->isPositive())) {
+                throw ValidationException::withMessages(['settlement_currency' => 'TL borç kapama için döviz tahsilatı ve pozitif TL karşılığı olan bir kur girin.']);
+            }
+            $payment->settlement_currency = $target === 'TRY' ? Currency::TRY : null;
 
             $isCash = $payment->payment_method === PaymentMethod::Cash;
             $session = $isCash
@@ -111,6 +129,8 @@ class PaymentService
             $cashMovement = $isCash && $session !== null
                 ? $this->postCashCollection($payment, $session, $user)
                 : null;
+
+            app(PaymentAllocationService::class)->allocate($payment, $data['stay_ids'] ?? [], $user);
 
             $this->auditLogger->log(
                 event: AuditEvent::Created,
@@ -198,6 +218,12 @@ class PaymentService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($payment, $reason, $user): Payment {
+            app(CompanyService::class)->lockAccounts([$payment->company_id]);
+            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $payment->setRawAttributes($fresh->getAttributes(), true);
+            if ($payment->isCancelled()) {
+                throw PaymentAlreadyCancelled::make($payment->id);
+            }
             $active = $this->ledger->activeEntryForSource(Payment::LEDGER_SOURCE_TYPE, $payment->getKey());
             $reversal = $active !== null ? $this->ledger->reverse($active, actor: $user) : null;
 
@@ -211,6 +237,8 @@ class PaymentService
             $payment->cancellation_reason = $reason;
             $payment->updated_by = $user->getKey();
             $payment->save();
+
+            app(PaymentAllocationService::class)->releasePayment($payment->id, $user);
 
             $this->auditLogger->log(
                 event: AuditEvent::Cancelled,
@@ -350,8 +378,9 @@ class PaymentService
     public function systemWideExchangeRateCreditTotalsByCurrency(): array
     {
         $rows = DB::table('payments')
+            ->leftJoinSub(app(PaymentAllocationService::class)->conversionTotalsQuery(), 'conversions', 'conversions.payment_id', '=', 'payments.id')
             ->select('currency')
-            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent - COALESCE(conversions.converted_total, 0)), 0) AS CHAR) as total')
             ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
             ->where('status', PaymentStatus::Active->value)
             ->where('currency', '<>', Currency::TRY->value)
@@ -373,8 +402,9 @@ class PaymentService
     private function exchangeRateCreditQuery(): QueryBuilder
     {
         return DB::table('payments')
+            ->leftJoinSub(app(PaymentAllocationService::class)->conversionTotalsQuery(), 'conversions', 'conversions.payment_id', '=', 'payments.id')
             ->select('company_id', 'currency')
-            ->selectRaw('CAST(COALESCE(SUM(try_equivalent), 0) AS CHAR) as total')
+            ->selectRaw('CAST(COALESCE(SUM(try_equivalent - COALESCE(conversions.converted_total, 0)), 0) AS CHAR) as total')
             ->selectRaw('SUM(CASE WHEN try_equivalent IS NULL THEN 1 ELSE 0 END) as missing')
             ->where('status', PaymentStatus::Active->value)
             ->where('currency', '<>', Currency::TRY->value)
@@ -679,6 +709,12 @@ class PaymentService
     {
         return [
             'company_id' => (int) $payment->company_id,
+            'payer_type' => $payment->payer_type?->value,
+            'payer_name' => $payment->payer_name,
+            'allocation_mode' => $payment->allocation_mode?->value,
+            'settlement_currency' => $payment->settlement_currency?->value,
+            'exchange_rate_to_try' => $payment->exchange_rate_to_try,
+            'try_equivalent' => $payment->try_equivalent,
             'payment_date' => Carbon::parse($payment->payment_date)->toDateString(),
             'amount' => Money::fromDecimal($payment->amount)->toDecimal(),
             'currency' => $payment->currency->value,

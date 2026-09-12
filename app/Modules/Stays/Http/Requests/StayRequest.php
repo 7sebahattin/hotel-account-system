@@ -52,7 +52,8 @@ class StayRequest extends FormRequest
         });
 
         $rules = [
-            'company_id' => ['required', Rule::exists('companies', 'id')->whereNull('deleted_at')],
+            'company_id' => ['nullable', 'integer', Rule::exists('companies', 'id')->whereNull('deleted_at')->where('account_type', 'company')],
+            'individual_account_id' => ['nullable', 'integer', 'prohibited_unless:company_id,null', Rule::exists('companies', 'id')->whereNull('deleted_at')->where('account_type', 'individual')],
             'guest_name' => ['required', 'string', 'max:150'],
             'room_id' => ['nullable', 'integer', $roomExists],
             'check_in_date' => ['required', 'date'],
@@ -95,6 +96,7 @@ class StayRequest extends FormRequest
     {
         return [
             'company_id' => 'firma',
+            'individual_account_id' => 'bireysel hesap',
             'guest_name' => 'misafir adı',
             'room_id' => 'oda',
             'check_in_date' => 'giriş tarihi',

@@ -22,6 +22,29 @@
         </x-slot:actions>
     </x-ui.page-header>
 
+    <x-ui.card title="Ödemenin dağılımı" class="mt-4 p-5">
+        @if ($payment->allocation_mode === null)
+            <p class="text-sm text-mut">Geçmiş tahsilat: konaklama eşleştirmesi henüz yapılmadı. Cari bakiyeye etkisi korunur.</p>
+        @elseif ($payment->isCancelled())
+            <p class="text-sm text-mut">Tahsilat iptal edildi; konaklamalara uygulanan tutarlar geri alındı.</p>
+        @else
+            <ul class="space-y-2">
+                @foreach ($allocations as $allocation)
+                    <li class="flex flex-wrap justify-between gap-2 text-sm">
+                        <a class="text-acc-tx underline" href="{{ route('stays.show', $allocation['stay_id']) }}">#{{ $allocation['stay_id'] }} · {{ $allocation['guest_name'] }}</a>
+                        <span class="tabular-nums text-right">{{ $allocation['amount']->format($allocation['currency']) }}
+                            @if ($allocation['payment_amount'])<span class="block text-xs text-mut">Kullanılan: {{ $allocation['payment_amount']->format($payment->currency) }}</span>@endif
+                        </span>
+                    </li>
+                @endforeach
+            </ul>
+            <p class="mt-3 text-sm tabular-nums">Kullanılabilir avans: {{ $availableAdvance->format($payment->currency) }}</p>
+            @if ($payment->settlement_currency)
+                <p class="mt-2 text-xs text-mut">TL borç, işlemde kaydedilen {{ $payment->exchange_rate_to_try }} kuruyla kapatıldı. Küçük kuruş farkları kalan borç veya döviz avansı olarak korunur.</p>
+            @endif
+        @endif
+    </x-ui.card>
+
     @if ($payment->isCancelled())
         <x-ui.alert tone="danger" class="mt-4">
             Bu tahsilat iptal edilmiştir. Cari hareketi ters kaydedilmiştir; kayıt düzenlenemez
@@ -52,6 +75,12 @@
                 <div>
                     <dt class="text-xs uppercase tracking-wide text-mut">Ödeme yöntemi</dt>
                     <dd class="mt-0.5 text-sm text-tx">{{ $payment->payment_method?->label() ?? '—' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase tracking-wide text-mut">Ödeyen</dt>
+                    <dd class="mt-0.5 text-sm text-tx">{{ $payment->payer_name ?: 'Geçmiş kayıtta belirtilmemiş' }}
+                        @if ($payment->payer_type)<span class="block text-xs text-mut">{{ $payment->payer_type->label() }}</span>@endif
+                    </dd>
                 </div>
                 <div>
                     <dt class="text-xs uppercase tracking-wide text-mut">Referans no</dt>
@@ -106,7 +135,7 @@
                         <span class="text-mut">· {{ $payment->updated_at->format('d.m.Y H:i') }}</span>
                     </dd>
                 </div>
-                @if ($payment->isCancelled())
+    @if ($payment->isCancelled())
                     <div>
                         <dt class="text-xs uppercase tracking-wide text-mut">İptal eden</dt>
                         <dd class="mt-0.5 text-tx">
@@ -120,7 +149,7 @@
             @if ($payment->company)
                 <div class="mt-6">
                     <x-ui.button variant="secondary" :href="route('companies.show', $payment->company)">
-                        Firma kartına git
+                        Cari hesap kartına git
                     </x-ui.button>
                 </div>
             @endif
@@ -130,7 +159,7 @@
     @can('cancel', $payment)
         <x-ui.card title="Tahsilatı iptal et" class="mt-4 p-6">
             <p class="text-sm text-mut">
-                İptal, cari hareketini ters kaydeder ve firmanın borcunu eski hâline döndürür.
+                İptal, cari hareketini ve konaklama dağılımlarını geri alır; borcu yeniden açar.
                 Kayıt silinmez, listede kalır. <strong class="text-tx">Bu işlem geri alınamaz.</strong>
             </p>
 
@@ -139,7 +168,7 @@
                 @csrf @method('PATCH')
 
                 <x-ui.input label="İptal gerekçesi" name="cancellation_reason" required maxlength="255"
-                            placeholder="Örn. yanlış firmaya işlendi" />
+                            placeholder="Örn. yanlış cari hesaba işlendi" />
 
                 <div class="mt-4">
                     <x-ui.button type="submit" variant="danger">Tahsilatı iptal et</x-ui.button>

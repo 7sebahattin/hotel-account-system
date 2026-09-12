@@ -18,6 +18,7 @@ enum LedgerEntryType: string
 {
     case Stay = 'stay';
     case Payment = 'payment';
+    case PaymentAllocation = 'payment_allocation';
     case Reversal = 'reversal';
     case Opening = 'opening';
     case Other = 'other';
@@ -37,6 +38,7 @@ enum LedgerEntryType: string
         return match ($this) {
             self::Stay => 'Konaklama',
             self::Payment => 'Tahsilat',
+            self::PaymentAllocation => 'Dövizle Borç Kapama',
             self::Reversal => 'İptal / Ters Kayıt',
             self::Opening => 'Açılış Bakiyesi',
             self::Other => 'Diğer',
@@ -46,6 +48,6 @@ enum LedgerEntryType: string
     /** Filtre kutusunda seçilebilen türler. */
     public static function filterable(): array
     {
-        return [self::Stay, self::Payment, self::Reversal];
+        return [self::Stay, self::Payment, self::PaymentAllocation, self::Reversal];
     }
 }

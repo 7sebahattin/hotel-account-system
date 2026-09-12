@@ -5,6 +5,7 @@
     <x-ui.page-header :title="$company->name">
         <x-slot:meta>
             <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
+                <span class="text-sm text-mut">{{ $company->account_type->label() }} · #{{ $company->id }}</span>
                 @include('companies::_status', ['company' => $company])
 
                 {{--
@@ -118,9 +119,9 @@
                             {{-- Anlam renge değil metne bağlıdır (CLAUDE.md §11.6). --}}
                             <p class="mt-0.5 text-xs text-mut">
                                 @if ($balance->isPositive())
-                                    Firma bize borçlu
+                                    {{ $company->account_type->value === 'individual' ? 'Kişi bize borçlu' : 'Firma bize borçlu' }}
                                 @elseif ($balance->isNegative())
-                                    Biz firmaya borçluyuz
+                                    {{ $company->account_type->value === 'individual' ? 'Biz kişiye borçluyuz' : 'Biz firmaya borçluyuz' }}
                                 @else
                                     Bakiye kapalı
                                 @endif
@@ -207,7 +208,7 @@
 
         @if ($recentStays->isEmpty())
             <x-ui.empty class="mt-4 border-line bg-transparent">
-                Bu firmaya ait konaklama kaydı yok.
+                Bu cari hesaba ait konaklama kaydı yok.
             </x-ui.empty>
         @else
             <ul class="mt-4">
@@ -263,7 +264,7 @@
 
         @if ($recentPayments->isEmpty())
             <x-ui.empty class="mt-4 border-line bg-transparent">
-                Bu firmaya ait tahsilat kaydı yok.
+                Bu cari hesaba ait tahsilat kaydı yok.
             </x-ui.empty>
         @else
             <ul class="mt-4">

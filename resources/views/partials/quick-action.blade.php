@@ -24,7 +24,7 @@
         ['route' => 'cashbook.movements.create', 'params' => [], 'label' => 'Kasa Hareketi', 'icon' => 'cash', 'permission' => Permission::CashBookOperate->value],
         ['route' => 'payments.create', 'params' => [], 'label' => 'Cari Tahsilat', 'icon' => 'cash', 'permission' => Permission::PaymentsCreate->value],
         ['route' => 'stays.create', 'params' => [], 'label' => 'Yeni Konaklama', 'icon' => 'bed', 'permission' => Permission::StaysCreate->value],
-        ['route' => 'companies.create', 'params' => [], 'label' => 'Yeni Firma', 'icon' => 'building', 'permission' => Permission::CompaniesCreate->value],
+        ['route' => 'companies.create', 'params' => [], 'label' => 'Yeni Cari Hesap', 'icon' => 'building', 'permission' => Permission::CompaniesCreate->value],
         ['route' => 'cashbook.transfers.create', 'params' => [], 'label' => 'Kasa Devri', 'icon' => 'swap', 'permission' => Permission::CashBookOperate->value],
     ];
 

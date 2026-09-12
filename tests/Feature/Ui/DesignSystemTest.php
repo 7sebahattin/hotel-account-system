@@ -33,7 +33,7 @@ class DesignSystemTest extends TestCase
         $personel = $this->userWithRole(RoleName::Personel);
 
         $this->actingAs($admin)->get(route('home'))
-            ->assertSee('Firmalar')
+            ->assertSee('Cari hesaplar')
             ->assertSee('Konaklamalar')
             ->assertSee('Kullanıcılar')
             ->assertSee('Roller / Yetkiler')
@@ -41,7 +41,7 @@ class DesignSystemTest extends TestCase
 
         // Personel yönetim menülerini HİÇ görmez (gizlenmez, render edilmez).
         $this->actingAs($personel)->get(route('home'))
-            ->assertSee('Firmalar')
+            ->assertSee('Cari hesaplar')
             ->assertSee('Konaklamalar')
             ->assertDontSee('Kullanıcılar')
             ->assertDontSee('Roller / Yetkiler')
@@ -208,7 +208,7 @@ class DesignSystemTest extends TestCase
         $response
             ->assertSee('data-bottom-nav', false)
             ->assertSee('aria-label="Alt menü"', false)
-            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+            ->assertSeeInOrder(['Ana Sayfa', 'Kasa', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
     }
 
     #[Test]
@@ -235,7 +235,7 @@ class DesignSystemTest extends TestCase
         // (CLAUDE.md §7.3); bu yüzden birincil sekmeler admin ile aynı kalır.
         $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))
             ->assertSee('data-bottom-nav', false)
-            ->assertSeeInOrder(['Ana Sayfa', 'Firmalar', 'Konaklamalar', 'Tahsilatlar', 'Daha Fazla']);
+            ->assertSeeInOrder(['Ana Sayfa', 'Kasa', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
     }
 
     #[Test]

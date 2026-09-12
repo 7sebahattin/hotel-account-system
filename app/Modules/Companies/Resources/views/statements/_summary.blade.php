@@ -44,7 +44,7 @@
                     </span>
                 </div>
                 {{-- Anlam yalnızca renge bağlanmaz: metin etiketi her zaman yazılır. --}}
-                <p class="mt-1 text-xs text-mut">{{ $summary->balanceLabel() }}</p>
+                <p class="mt-1 text-xs text-mut">{{ $summary->balanceLabel($company->account_type->value === 'individual' ? 'Kişi' : 'Firma') }}</p>
             </div>
         </x-ui.card>
     @endforeach

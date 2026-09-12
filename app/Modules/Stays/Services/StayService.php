@@ -7,10 +7,12 @@ namespace App\Modules\Stays\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Payments\Services\PaymentAllocationService;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
@@ -22,6 +24,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Konaklama modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -58,6 +61,8 @@ class StayService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($data, $user): Stay {
+            $data = $this->resolveAccount($data, $user);
+            app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
             $stay = new Stay;
             $this->applyInput($stay, $data);
             $stay->status = StayStatus::Active;
@@ -66,6 +71,7 @@ class StayService
             $stay->save();
 
             $entry = $this->postDebit($stay, $user);
+            app(PaymentAllocationService::class)->applyAdvancesToStay($stay->id, $user);
 
             $this->auditLogger->log(
                 event: AuditEvent::Created,
@@ -100,6 +106,11 @@ class StayService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($stay, $data, $user): Stay {
+            $this->lockForFinancialChange($stay, $data);
+            if ($stay->isCancelled()) {
+                throw CannotUpdateCancelledStay::make($stay->id);
+            }
+            $data = $this->resolveAccount($data, $user, $stay);
             $before = $this->snapshot($stay);
             $financialBefore = $this->financialSnapshot($stay);
 
@@ -125,6 +136,9 @@ class StayService
             $stay->save();
 
             $newEntry = $financialChanged ? $this->postDebit($stay, $user) : null;
+            if ($financialChanged) {
+                app(PaymentAllocationService::class)->reconcileStay($stay->id, $user);
+            }
 
             $after = $this->snapshot($stay);
             $changed = $this->changedFields($before, $after);
@@ -173,12 +187,18 @@ class StayService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($stay, $user): Stay {
+            $this->lockForFinancialChange($stay);
+            if ($stay->isCancelled()) {
+                throw StayAlreadyCancelled::make($stay->id);
+            }
             $active = $this->ledger->activeEntryForSource(Stay::LEDGER_SOURCE_TYPE, $stay->getKey());
             $reversal = $active !== null ? $this->ledger->reverse($active, actor: $user) : null;
 
             $stay->status = StayStatus::Cancelled;
             $stay->updated_by = $user->getKey();
             $stay->save();
+
+            app(PaymentAllocationService::class)->releaseStay($stay->id, $user);
 
             $this->auditLogger->log(
                 event: AuditEvent::Cancelled,
@@ -442,6 +462,76 @@ class StayService
     }
 
     // ------------------------------------------------------------------ iç
+
+    /** @return array<int, array<string, mixed>> */
+    public function allocationCandidates(int $companyId, Currency $currency): array
+    {
+        $ids = Stay::query()->where('company_id', $companyId)->where('currency', $currency)
+            ->where('status', StayStatus::Active)->orderBy('check_in_date')->orderBy('id')->pluck('id')->all();
+
+        return array_values($this->allocationDetails($ids));
+    }
+
+    /** @param array<int, int> $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function allocationDetails(array $ids): array
+    {
+        $models = Stay::query()->whereIn('id', $ids)->get()->keyBy('id');
+        $result = [];
+        foreach ($ids as $id) {
+            if (! isset($models[$id])) {
+                continue;
+            }
+            $stay = $models[$id];
+            $result[$id] = ['id' => $stay->id, 'company_id' => $stay->company_id,
+                'currency' => $stay->currency->value, 'amount' => $stay->amount,
+                'guest_name' => $stay->guest_name, 'check_in_date' => $stay->check_in_date->toDateString(),
+                'cancelled' => $stay->isCancelled()];
+        }
+
+        return $result;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function lockForFinancialChange(Stay $stay, array $data = []): void
+    {
+        $oldAccount = $stay->company_id;
+        $target = (int) (! empty($data['company_id']) ? $data['company_id'] : ($data['individual_account_id'] ?? $oldAccount));
+        app(CompanyService::class)->lockAccounts([$oldAccount, $target]);
+        $fresh = Stay::query()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
+        if ($fresh->company_id !== $oldAccount) {
+            throw ValidationException::withMessages(['company_id' => 'Konaklamanın cari hesabı değişmiş. Sayfayı yenileyin.']);
+        }
+        $stay->setRawAttributes($fresh->getAttributes(), true);
+        $stay->unsetRelations();
+    }
+
+    /** @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function resolveAccount(array $data, User $user, ?Stay $stay = null): array
+    {
+        if (! empty($data['company_id']) && ! empty($data['individual_account_id'])) {
+            throw ValidationException::withMessages(['individual_account_id' => 'Firma ve bireysel hesap aynı anda seçilemez.']);
+        }
+
+        // Kısmi servis güncellemelerinde mevcut hesap korunur.
+        if ($stay !== null && ! array_key_exists('company_id', $data) && ! array_key_exists('individual_account_id', $data)) {
+            return $data;
+        }
+
+        if (empty($data['company_id'])) {
+            $data['company_id'] = app(CompanyService::class)->individualForStay(
+                ! empty($data['individual_account_id']) ? (int) $data['individual_account_id'] : null,
+                (string) ($data['guest_name'] ?? $stay->guest_name ?? ''),
+                $user,
+                $stay?->company_id,
+            );
+        }
+
+        return $data;
+    }
 
     private function postDebit(Stay $stay, User $user): LedgerEntry
     {

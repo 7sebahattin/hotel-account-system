@@ -28,6 +28,8 @@ class CompanyRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'account_type' => $this->route('company') instanceof Company
+                ? ['prohibited'] : ['sometimes', 'required', 'in:company,individual'],
             'name' => ['required', 'string', 'max:200'],
             'tax_office' => ['nullable', 'string', 'max:100'],
             'tax_number' => ['nullable', 'string', 'max:20'],
@@ -47,7 +49,8 @@ class CompanyRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name' => 'firma ünvanı',
+            'name' => 'ünvan / ad soyad',
+            'account_type' => 'hesap türü',
             'tax_office' => 'vergi dairesi',
             'tax_number' => 'vergi numarası',
             'phone' => 'telefon',

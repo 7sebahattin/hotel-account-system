@@ -6,6 +6,7 @@ namespace App\Modules\Companies\Models;
 
 use App\Models\User;
 use App\Modules\Companies\Database\Factories\CompanyFactory;
+use App\Modules\Companies\Enums\AccountType;
 use App\Modules\Core\Concerns\Auditable;
 use App\Modules\Core\Concerns\HasCreator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property string $name
+ * @property AccountType $account_type
  * @property string|null $tax_office
  * @property string|null $tax_number
  * @property string|null $phone
@@ -37,11 +39,14 @@ use Illuminate\Support\Carbon;
  */
 class Company extends Model
 {
+    protected $attributes = ['account_type' => 'company'];
+
     /** @use HasFactory<CompanyFactory> */
     use Auditable, HasCreator, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'name',
+        'account_type',
         'tax_office',
         'tax_number',
         'phone',
@@ -56,6 +61,7 @@ class Company extends Model
     protected function casts(): array
     {
         return [
+            'account_type' => AccountType::class,
             'is_active' => 'boolean',
         ];
     }

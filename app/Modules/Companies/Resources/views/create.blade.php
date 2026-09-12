@@ -1,8 +1,8 @@
 @extends('layouts.app')
-@section('title', 'Yeni firma')
+@section('title', 'Yeni cari hesap')
 
 @section('content')
-    <x-ui.page-header title="Yeni firma" />
+    <x-ui.page-header title="Yeni cari hesap" />
 
     <form method="POST" action="{{ route('companies.store') }}" class="mt-6 max-w-3xl">
         <x-ui.card class="p-6">

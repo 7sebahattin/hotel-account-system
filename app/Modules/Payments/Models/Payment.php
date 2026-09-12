@@ -12,6 +12,8 @@ use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Core\Support\TurkishNumberToWords;
 use App\Modules\Payments\Database\Factories\PaymentFactory;
+use App\Modules\Payments\Enums\AllocationMode;
+use App\Modules\Payments\Enums\PayerType;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
@@ -32,6 +34,10 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $company_id
+ * @property PayerType|null $payer_type
+ * @property string|null $payer_name
+ * @property AllocationMode|null $allocation_mode
+ * @property Currency|null $settlement_currency
  * @property Carbon $payment_date
  * @property string $amount
  * @property Currency $currency
@@ -81,12 +87,14 @@ class Payment extends Model
      */
     public const IMMUTABLE_FIELDS = [
         'company_id', 'payment_date', 'amount', 'currency', 'payment_method', 'cash_session_id', 'receipt_no',
+        'payer_type', 'payer_name', 'allocation_mode', 'settlement_currency',
     ];
 
     /** Düzeltilebilen tek alanlar. */
     public const EDITABLE_FIELDS = ['reference_no', 'description'];
 
     protected $fillable = [
+        'payer_type', 'payer_name', 'allocation_mode', 'settlement_currency',
         'company_id',
         'payment_date',
         'amount',
@@ -107,6 +115,9 @@ class Payment extends Model
             // Form alanları metin olarak gelir; cari servisine int geçmek
             // zorundayız (bkz. LedgerService::credit imzası).
             'company_id' => 'integer',
+            'payer_type' => PayerType::class,
+            'allocation_mode' => AllocationMode::class,
+            'settlement_currency' => Currency::class,
             'created_by' => 'integer',
             'updated_by' => 'integer',
             'cancelled_by' => 'integer',

@@ -225,7 +225,7 @@ class StayCrudTest extends TestCase
     {
         $this->actingAs($this->userWithRole(RoleName::Admin))
             ->post(route('stays.store'), [])
-            ->assertSessionHasErrors(['company_id', 'guest_name', 'check_in_date', 'check_out_date', 'amount', 'currency']);
+            ->assertSessionHasErrors(['guest_name', 'check_in_date', 'check_out_date', 'amount', 'currency']);
 
         $this->assertSame(0, Stay::query()->count());
     }

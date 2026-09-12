@@ -17,7 +17,7 @@
                          :href="route('statements.print', [$company, ...$criteria->toQuery()])">
                 Yazdır
             </x-ui.button>
-            <x-ui.button variant="ghost" :href="route('companies.show', $company)">Firma kartı</x-ui.button>
+            <x-ui.button variant="ghost" :href="route('companies.show', $company)">Cari hesap kartı</x-ui.button>
         </x-slot:actions>
     </x-ui.page-header>
 

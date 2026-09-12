@@ -59,7 +59,7 @@ class CompanyPaymentsPanelTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('companies.show', $this->company))
             ->assertOk()
-            ->assertSee('Bu firmaya ait tahsilat kaydı yok.');
+            ->assertSee('Bu cari hesaba ait tahsilat kaydı yok.');
     }
 
     #[Test]

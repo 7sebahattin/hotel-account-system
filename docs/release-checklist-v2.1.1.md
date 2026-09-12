@@ -1,5 +1,10 @@
 # Yayın kontrol listesi — Lemon v2.1.1 (develop @ 0185b15)
 
+> **12 Eylül 2026:** Aşağıdaki ilk yayın/boş veritabanı bilgisi artık geçerli
+> değildir. Gerçek kayıtlı sisteme güncelleme için
+> [güncel yol haritasını](guvenli-canli-gecis-yol-haritasi-2026-09-12.md)
+> kullanın. Mevcut bakım, yedek ve mutabakat kapıları atlanmaz.
+
 Bu dosya v2.1.1 hattının (A / A.1 / B / B.1) production'a ilk kez taşınması
 için **tek kaynaktır**. `docs/deploy-lemon.md` genel FTP/CI mimarisini,
 `docs/deploy-cpanel.md` sunucu tarafı komutları anlatır — bu dosya SIRAYI

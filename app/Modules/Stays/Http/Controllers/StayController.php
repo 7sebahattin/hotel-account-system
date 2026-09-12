@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Stays\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Companies\Models\Company;
+use App\Modules\Companies\Enums\AccountType;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Payments\Services\PaymentAllocationService;
 use App\Modules\Rooms\Services\RoomService;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
@@ -26,6 +28,7 @@ class StayController extends Controller
     public function __construct(
         private readonly StayService $stays,
         private readonly RoomService $rooms,
+        private readonly CompanyService $accounts,
     ) {}
 
     public function index(StayFilter $filter): View
@@ -37,6 +40,7 @@ class StayController extends Controller
             ->withQueryString();
 
         return view('stays::index', [
+            'paymentSummaries' => app(PaymentAllocationService::class)->summaries($stays->getCollection()->modelKeys()),
             'stays' => $stays,
             'filter' => $filter,
             'companies' => $this->companyOptions(),
@@ -51,11 +55,13 @@ class StayController extends Controller
         $this->authorize('create', Stay::class);
 
         return view('stays::create', [
-            'companies' => $this->companyOptions(),
+            'companies' => $this->accounts->options(AccountType::Company),
+            'individuals' => $this->accounts->options(AccountType::Individual),
             'rooms' => $this->rooms->optionsForForm(),
             'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
-            'selectedCompanyId' => $request->integer('company_id') ?: null,
+            'selectedCompanyId' => $this->accounts->isIndividual($request->integer('company_id')) ? null : ($request->integer('company_id') ?: null),
+            'selectedIndividualId' => $this->accounts->isIndividual($request->integer('company_id')) ? $request->integer('company_id') : null,
         ]);
     }
 
@@ -64,7 +70,7 @@ class StayController extends Controller
         $stay = $this->stays->create($request->validated(), $request->user());
 
         return redirect()->route('stays.show', $stay)
-            ->with('success', 'Konaklama kaydedildi ve firma carisine işlendi.');
+            ->with('success', 'Konaklama kaydedildi ve cari hesaba işlendi.');
     }
 
     public function show(Stay $stay): View
@@ -72,6 +78,7 @@ class StayController extends Controller
         $this->authorize('view', $stay);
 
         return view('stays::show', [
+            'paymentSummary' => app(PaymentAllocationService::class)->summaries([$stay->id])[$stay->id],
             'stay' => $stay->load(['company', 'room', 'creator', 'updater']),
         ]);
     }
@@ -82,7 +89,10 @@ class StayController extends Controller
 
         return view('stays::edit', [
             'stay' => $stay,
-            'companies' => $this->companyOptions(),
+            'companies' => $this->accounts->options(AccountType::Company, $stay->company_id),
+            'individuals' => $this->accounts->options(AccountType::Individual, $stay->company_id),
+            'selectedCompanyId' => $this->accounts->isIndividual($stay->company_id) ? null : $stay->company_id,
+            'selectedIndividualId' => $this->accounts->isIndividual($stay->company_id) ? $stay->company_id : null,
             'rooms' => $this->rooms->optionsForForm($stay->room_id),
             'currencies' => Currency::active(),
             'pricingModes' => StayPricingMode::cases(),
@@ -122,9 +132,6 @@ class StayController extends Controller
      */
     private function companyOptions(): array
     {
-        return Company::query()
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
+        return $this->accounts->options();
     }
 }

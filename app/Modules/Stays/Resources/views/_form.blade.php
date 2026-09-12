@@ -9,13 +9,23 @@
 
 <div class="grid gap-4 sm:grid-cols-2" data-stay-pricing>
     <div class="sm:col-span-2">
-        <x-ui.select label="Firma" name="company_id" required>
-            <option value="">Seçiniz…</option>
+        <x-ui.select label="Firma (isteğe bağlı)" name="company_id" data-stay-company>
+            <option value="">Bireysel konaklama — firma yok</option>
             @foreach ($companies as $id => $name)
                 <option value="{{ $id }}"
-                    @selected((string) old('company_id', $s->company_id ?? ($selectedCompanyId ?? '')) === (string) $id)>
+                    @selected((string) old('company_id', $selectedCompanyId ?? '') === (string) $id)>
                     {{ $name }}
                 </option>
+            @endforeach
+        </x-ui.select>
+    </div>
+
+    <div class="sm:col-span-2" data-stay-individual>
+        <x-ui.select label="Bireysel hesap" name="individual_account_id"
+                     hint="Önceden gelen kişiyi seçin. Yeni hesap seçerseniz misafir adına ayrı bir cari hesap açılır; aynı isimler birleştirilmez.">
+            <option value="">Yeni bireysel hesap aç</option>
+            @foreach ($individuals as $id => $name)
+                <option value="{{ $id }}" @selected((string) old('individual_account_id', $selectedIndividualId ?? '') === (string) $id)>{{ $name }}</option>
             @endforeach
         </x-ui.select>
     </div>

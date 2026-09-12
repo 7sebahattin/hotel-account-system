@@ -6,7 +6,7 @@ namespace App\Modules\Payments\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\CashBook\Exceptions\CashBookException;
-use App\Modules\Companies\Models\Company;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
 use App\Modules\Payments\Enums\PaymentMethod;
@@ -16,12 +16,15 @@ use App\Modules\Payments\Exceptions\CashSessionNotOwnedByActor;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Filters\PaymentFilter;
+use App\Modules\Payments\Http\Requests\AllocationOptionsRequest;
 use App\Modules\Payments\Http\Requests\CancelPaymentRequest;
 use App\Modules\Payments\Http\Requests\StorePaymentRequest;
 use App\Modules\Payments\Http\Requests\UpdatePaymentRequest;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Services\PaymentAllocationService;
 use App\Modules\Payments\Services\PaymentService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -69,7 +72,16 @@ class PaymentController extends Controller
         }
 
         return redirect()->route('payments.show', $payment)
-            ->with('success', 'Tahsilat kaydedildi ve firma carisine işlendi.');
+            ->with('success', 'Tahsilat kaydedildi ve cari hesaba işlendi.');
+    }
+
+    public function allocationOptions(AllocationOptionsRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+
+        return response()->json(['stays' => app(PaymentAllocationService::class)->options(
+            (int) $data['company_id'], Currency::from($data['currency']),
+        )]);
     }
 
     public function show(Payment $payment): View
@@ -77,6 +89,8 @@ class PaymentController extends Controller
         $this->authorize('view', $payment);
 
         return view('payments::show', [
+            'allocations' => app(PaymentAllocationService::class)->paymentDetails($payment),
+            'availableAdvance' => app(PaymentAllocationService::class)->available($payment),
             'payment' => $payment->load(['company', 'creator', 'updater', 'canceller', 'cashSession']),
         ]);
     }
@@ -141,9 +155,6 @@ class PaymentController extends Controller
      */
     private function companyOptions(): array
     {
-        return Company::query()
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
+        return app(CompanyService::class)->options();
     }
 }

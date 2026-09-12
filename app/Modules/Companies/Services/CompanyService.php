@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Companies\Services;
 
+use App\Models\User;
+use App\Modules\Companies\Enums\AccountType;
 use App\Modules\Companies\Exceptions\CompanyHasLedgerEntries;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Services\LedgerService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Firma modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -22,6 +25,52 @@ class CompanyService
 {
     public function __construct(private readonly LedgerService $ledger) {}
 
+    /** Finansal yazmalarda aynı hesabın işlemleri tek sırada yürür.
+     * @param  array<int, int>  $ids
+     */
+    public function lockAccounts(array $ids): void
+    {
+        Company::query()->whereIn('id', array_unique($ids))->orderBy('id')->lockForUpdate()->get();
+    }
+
+    /** @return array<int, string> */
+    public function options(?AccountType $type = null, ?int $currentId = null): array
+    {
+        return Company::query()
+            ->when($type !== null, fn ($query) => $query->where('account_type', $type))
+            ->when($type !== null, fn ($query) => $query->where(fn ($q) => $q->where('is_active', true)->orWhere('id', $currentId)))
+            ->orderBy('name')->orderBy('id')->get()
+            ->mapWithKeys(fn (Company $account) => [$account->id => $account->account_type === AccountType::Individual
+                ? $account->name.' · #'.$account->id.($account->phone ? ' · '.$account->phone : '')
+                : $account->name])->all();
+    }
+
+    public function isIndividual(int $id): bool
+    {
+        return Company::query()->whereKey($id)->where('account_type', AccountType::Individual)->exists();
+    }
+
+    /** Çağıran konaklama transaction'ı hesabı ve cari hareketini birlikte korur. */
+    public function individualForStay(?int $id, string $name, User $actor, ?int $currentId = null): int
+    {
+        if ($id !== null) {
+            $account = Company::query()->whereKey($id)->lockForUpdate()->first();
+            if ($account === null || $account->account_type !== AccountType::Individual || (! $account->is_active && $id !== $currentId)) {
+                throw ValidationException::withMessages(['individual_account_id' => 'Geçerli, aktif bir bireysel hesap seçin.']);
+            }
+
+            return $account->id;
+        }
+
+        // İsim eşleştirmesi yapılmaz: aynı isimde farklı kişiler olabilir.
+        $account = new Company(['name' => $name, 'account_type' => AccountType::Individual, 'is_active' => true]);
+        $account->created_by = $actor->id;
+        $account->updated_by = $actor->id;
+        $account->save();
+
+        return $account->id;
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -35,6 +84,12 @@ class CompanyService
      */
     public function update(Company $company, array $data): void
     {
+        $type = $data['account_type'] ?? $company->account_type;
+        $typeValue = $type instanceof AccountType ? $type->value : $type;
+        if ($typeValue !== $company->account_type->value) {
+            throw ValidationException::withMessages(['account_type' => 'Hesap türü sonradan değiştirilemez.']);
+        }
+
         DB::transaction(function () use ($company, $data): void {
             $company->update($data);
         });

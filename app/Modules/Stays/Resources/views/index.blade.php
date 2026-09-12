@@ -19,7 +19,7 @@
                         placeholder="Misafir adı, oda, firma" />
         </div>
 
-        <x-ui.select label="Firma" name="company_id">
+        <x-ui.select label="Cari hesap" name="company_id">
             <option value="">Tümü</option>
             @foreach ($companies as $id => $name)
                 <option value="{{ $id }}" @selected((string) request('company_id') === (string) $id)>{{ $name }}</option>
@@ -52,7 +52,7 @@
                 <x-ui.sort-header :filter="$filter" column="nights" align="right">Gece</x-ui.sort-header>
                 <x-ui.sort-header :filter="$filter" column="guest_name">Misafir</x-ui.sort-header>
                 <x-ui.th>Oda</x-ui.th>
-                <x-ui.th>Firma</x-ui.th>
+                <x-ui.th>Cari hesap</x-ui.th>
                 <x-ui.sort-header :filter="$filter" column="amount" align="right">Tutar</x-ui.sort-header>
                 <x-ui.th>Durum</x-ui.th>
                 <x-ui.th>Oluşturan</x-ui.th>
@@ -75,7 +75,9 @@
                         {{ $stay->amountMoney()->format($stay->currency) }}
                         <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
                     </td>
-                    <td class="px-4 py-3">@include('stays::_status', ['stay' => $stay])</td>
+                    <td class="px-4 py-3">@include('stays::_status', ['stay' => $stay])
+                        @include('stays::_payment-status')
+                    </td>
                     <td class="px-4 py-3 text-mut">{{ $stay->creator?->name ?? '—' }}</td>
                 </tr>
             @empty
@@ -118,6 +120,7 @@
 
                         <span class="shrink-0 text-right">
                             <span class="block tabular-nums text-tx">{{ $stay->amountMoney()->format($stay->currency) }}</span>
+                            @include('stays::_payment-status')
                             <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="text-right" />
                         </span>
                     </div>

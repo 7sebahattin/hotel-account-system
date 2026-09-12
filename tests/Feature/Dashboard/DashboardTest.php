@@ -404,7 +404,7 @@ class DashboardTest extends TestCase
             ->assertSee('Hızlı işlem')
             ->assertSee('Tahsilat')
             ->assertSee('Konaklama')
-            ->assertSee('Firma');
+            ->assertSee('Yeni Cari Hesap');
     }
 
     #[Test]
@@ -786,7 +786,7 @@ class DashboardTest extends TestCase
         $this->assertStringContainsString('Kasa Hareketi', (string) $html);
         $this->assertStringContainsString('Cari Tahsilat', (string) $html);
         $this->assertStringContainsString('Yeni Konaklama', (string) $html);
-        $this->assertStringContainsString('Yeni Firma', (string) $html);
+        $this->assertStringContainsString('Yeni Cari Hesap', (string) $html);
         $this->assertStringContainsString('Kasa Devri', (string) $html);
     }
 
@@ -799,6 +799,6 @@ class DashboardTest extends TestCase
 
         $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
         $this->assertStringNotContainsString('Kasa Hareketi', (string) $html);
-        $this->assertStringNotContainsString('Yeni Firma', (string) $html);
+        $this->assertStringNotContainsString('Yeni Cari Hesap', (string) $html);
     }
 }

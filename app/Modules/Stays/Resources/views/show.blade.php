@@ -6,6 +6,7 @@
         <x-slot:meta>
             <p class="mt-1 text-sm text-mut">
                 {{ $stay->company?->name ?? '—' }}
+                · {{ $stay->company?->account_type->label() }} · #{{ $stay->company_id }}
                 @if ($stay->roomLabel()) · Oda <span class="tabular-nums">{{ $stay->roomLabel() }}</span> @endif
             </p>
             <div class="mt-2">@include('stays::_status', ['stay' => $stay])</div>
@@ -25,6 +26,13 @@
             @endcan
         </x-slot:actions>
     </x-ui.page-header>
+
+    <x-ui.card title="Ödeme durumu" class="mt-4 p-5">
+        @include('stays::_payment-status')
+        @if ($paymentSummary['legacy'])
+            <p class="mt-2 text-xs text-mut">Bu hesapta geçmiş tahsilatlar henüz konaklamalarla eşleştirilmedi. Kesin cari bakiye için ekstreyi kullanın.</p>
+        @endif
+    </x-ui.card>
 
     @if ($stay->isCancelled())
         <x-ui.alert tone="danger" class="mt-4">
@@ -102,7 +110,7 @@
             @if ($stay->company)
                 <div class="mt-6">
                     <x-ui.button variant="secondary" :href="route('companies.show', $stay->company)">
-                        Firma kartına git
+                        Cari hesap kartına git
                     </x-ui.button>
                 </div>
             @endif

@@ -1,6 +1,83 @@
 # CLAUDE.md
 
+## Onaylı geliştirme kapsamı — 11 Eylül 2026
+
+Entegrasyon kopyası durum notu: bu çalışma ağacı `codex/canli-entegrasyon`
+dalında, güncel `origin/main` (`ea6c438`) tabanında hazırlanmıştır. K-106
+filtreleri ile bireysel cari/ödeme/döviz geliştirmeleri birleştirilmiştir.
+Tam yerel MariaDB paketi: 847 test, 2.688 doğrulama başarılı; Pint/PHPStan/
+platform kontrolü ve Vite başarılıdır. `8188` birleşmiş yerel önizlemedir.
+Bu bütün geliştirmelerin entegrasyonudur, ilk canlı yayın paketi değildir;
+iki yayın kapsamı henüz ayrılmamıştır. Gerçek yedek provası, geçmiş ödeme
+önizlemesi ve canlı kontrol/onay aşamaları beklenir. Sonuç belgesi:
+`docs/canli-gecis-adim1-entegrasyon-2026-09-12.md`.
+
+12 Eylül 2026 durum notu: kullanıcı Claude'un v2.1.1-E filtre güncellemesini
+ayrıca sunucuya aktardığını teyit etti. GitHub `origin/main` artık `ea6c438`;
+yerel geliştirme hâlâ `a426b3e` tabanındadır. Yeni öncelik güvenli canlı
+geçiş yol haritasıdır: `docs/guvenli-canli-gecis-yol-haritasi-2026-09-12.md`.
+E sürümündeki filtreler korunarak entegrasyon ve gerçek veri kopyasında prova
+yapılmadan yerel geliştirme yüklenmez. Döviz işi yerelde 34 ilgili testi
+geçti; birleşmiş yayın sürümü ve tarayıcı kabulü henüz tamamlanmadı.
+
+Kullanıcı mevcut tasarım ve özellikler korunarak geliştirmeye açık onay verdi.
+Güncel kararlar `docs/onaya-sunulan-gelistirme-plani.md` ve
+`docs/mevcut-tasarimi-koruma-plani.md` içindedir. Aşağıdaki eski V1 sınırlarıyla
+çelişen durumlarda bu dar kapsam geçerlidir:
+
+- Firma seçilmeyen konaklama bireysel hesaba yazılır. Aynı kişi tekrar seçilebilir;
+  aynı isimler otomatik birleştirilmez. Kimlik/pasaport veya kapsamlı CRM eklenmez.
+- Tahsilatın borç sahibi ile ödeyeni ayrı tutulur. Otomatik en eski borçtan veya
+  seçili konaklamalara kısmi/tam dağıtım, avans ve kontrollü iade kapsamdadır.
+- Elle girilen işlem kuruyla farklı para biriminde ödeme, gerçek tahsilat para
+  birimi korunarak borca uygulanabilir. Otomatik kur ve PMS kapsam dışıdır.
+- İptal normal muhasebe dökümünde gizlenir; append-only finansal ve denetim izi
+  korunur. Yalnız admin bağlantısız kayıtları kalıcı silebilir.
+- Personel için masaüstü hızlı giriş, patron için mobil takip önceliklidir.
+  Mevcut Kasa/Cari/Yönetim, makbuz, PWA, filtre ve rapor özellikleri kaldırılmaz.
+- Mevcut girişler gerçek veridir: sıfırlama yapılmaz. Yerel test verisi ayrıdır.
+  Canlı veri geçişi önizleme, bakiye mutabakatı ve kullanıcı kontrolü olmadan yapılmaz.
+
+Yerel geliştirme dalı `codex/cari-gelistirme`, `main`in v2.1.1-D içeren
+`a426b3e` durumundan başlatıldı (`source/develop` bu durumun atasıdır).
+Geliştirme için tekrar onay istenmez; canlı yayın ve eski ödeme dağılımlarının
+uygulanması ayrı kontrol aşamasıdır.
+
+İlk uygulama adımı: `companies.account_type` (`company` / `individual`, varsayılan
+`company`) mevcut kimlikleri ve cari bağlantıları korur. `companies` burada cari
+hesap tablosudur; eski tablolar yeniden adlandırılmaz. Konaklama formunda firma
+boşsa `individual_account_id` ile mevcut kişi seçilir ya da misafir adına yeni
+hesap açılır. Hesap + konaklama + borç tek transaction içindedir. Aynı isimler
+birleştirilmez; hesap türü sonradan değiştirilemez. Bireysel hesap bulunan veri
+tabanında tür kolonunu kaldıran rollback engellenir. `IndividualStayTest` bu
+akışı kapsar; ödeme dağıtımı bu ilk adımda henüz uygulanmış değildir.
+
+İkinci uygulama adımı (12 Eylül 2026): yeni tahsilatlar `payer_type` ve
+`payer_name` ile ödeyeni borç sahibinden ayırır. `allocation_mode` en eski giriş
+tarihi/kimlik sırasını veya seçili konaklamaları belirler. `payment_allocations`
+pozitif tutarlı dağılım ve tekil `reverses_allocation_id` ile ters dağılım tutar;
+UPDATE/DELETE tetikleyicilerle yasaktır. Dağılım ikinci cari/kasa kaydı üretmez.
+Finansal yazmalar önce cari hesap satırını kilitler; eşzamanlı tahsilat ve
+konaklama değişiklikleri aynı hesapta sıraya girer. Bu adım aynı para biriminde
+çalışır. Fazla ödeme seçili cari hesapta avanstır, yeni konaklamada aynı para
+biriminde kullanılır. Konaklama iptali dağılımı avansa döndürür; tahsilat iptali
+dağılımı da geri alır. Eski tahsilatların yeni alanları NULL kalır; otomatik
+geçmiş eşleştirme yapılmaz, ilgili konaklamalarda belirsizlik açıkça gösterilir.
+Dövizle farklı para birimli borcu kapatma ve avans sahipliği aktarımı sonraki
+onaylı adımda uygulanacaktır. Geçmiş veri uygulaması ve canlı yayın yapılmadı.
+
 Bu dosya, bu repoda çalışan Claude Code oturumları için bağlayıcı kılavuzdur.
+Üçüncü uygulama adımı: döviz tahsilatında kullanıcı TL borç kapamayı seçebilir.
+`payments.settlement_currency` hedefi saklar; boş değer tahsilat para birimidir.
+Dağılımın `amount` alanı borç tutarıdır; nullable `payment_amount` dövizden
+kullanılan tutarı, `debt_currency` TL hedefini saklar. Eski satırlar değişmez.
+Her döviz dağılımı `payment_allocation` kaynaklı döviz borç / TL alacak çifti
+üretir. Gerçek tahsilat ve kasa kaydı alındığı para biriminde tek kalır.
+Dağılım çözülürse bu çift de ters kaydedilir. İşlem kuru değişmez; kuruş
+hassasiyetinde borcu aşmayan döviz tutarı kullanılır, fark silinmez.
+Bu adım dövizden TL'ye kapamadır; diğer döviz çiftleri ve avans sahipliği
+aktarımı henüz uygulanmaz. Canlı geçiş yapılmaz.
+
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
 ---

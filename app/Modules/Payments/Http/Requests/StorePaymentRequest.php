@@ -6,6 +6,8 @@ namespace App\Modules\Payments\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Payments\Enums\AllocationMode;
+use App\Modules\Payments\Enums\PayerType;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Models\Payment;
 use Illuminate\Foundation\Http\FormRequest;
@@ -26,6 +28,12 @@ class StorePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'payer_type' => ['sometimes', 'required', Rule::enum(PayerType::class)],
+            'payer_name' => ['nullable', 'required_if:payer_type,individual', 'string', 'max:200'],
+            'allocation_mode' => ['sometimes', 'required', Rule::enum(AllocationMode::class)],
+            'settlement_currency' => ['nullable', Rule::in(['TRY']), 'prohibited_if:currency,TRY'],
+            'stay_ids' => ['required_if:allocation_mode,selected', 'array', 'max:200'],
+            'stay_ids.*' => ['integer', 'distinct', Rule::exists('stays', 'id')->whereNull('deleted_at')],
             'company_id' => ['required', Rule::exists('companies', 'id')->whereNull('deleted_at')],
             'payment_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
@@ -58,7 +66,10 @@ class StorePaymentRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'company_id' => 'firma',
+            'company_id' => 'cari hesap',
+            'payer_type' => 'ödeyen',
+            'payer_name' => 'ödeyen kişinin adı',
+            'stay_ids' => 'konaklama seçimi',
             'payment_date' => 'tahsilat tarihi',
             'amount' => 'tutar',
             'currency' => 'para birimi',

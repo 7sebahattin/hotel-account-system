@@ -1,8 +1,8 @@
 @extends('layouts.app')
-@section('title', 'Firma düzenle')
+@section('title', 'Cari hesap düzenle')
 
 @section('content')
-    <x-ui.page-header :title="$company->name" subtitle="Firma bilgilerini düzenle" />
+    <x-ui.page-header :title="$company->name" subtitle="Cari hesap bilgilerini düzenle" />
 
     <form method="POST" action="{{ route('companies.update', $company) }}" class="mt-6 max-w-3xl">
         @method('PUT')

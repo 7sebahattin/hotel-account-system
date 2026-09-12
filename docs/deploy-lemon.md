@@ -1,5 +1,11 @@
 # Lemon Deploy Hazırlığı — lemon.derspros.com.tr
 
+> **12 Eylül 2026 güncellik notu:** Bu belgenin aşağıdaki ilk kurulum durum
+> bilgileri tarihseldir. Sistem canlıdır ve gerçek kayıt içerir; kullanıcı
+> Claude ile yeni sürüm yayımladığını bildirdi. Sonraki geçişte
+> [güncel yol haritası](guvenli-canli-gecis-yol-haritasi-2026-09-12.md) esas
+> alınır. “Boş production” veya DocumentRoot'un henüz değişmediği varsayılmaz.
+
 > **Durum: hazırlık. Hiçbir deploy yapılmadı.**
 > Bu depodan/CI'dan hosting'e bağlanılmadı, hiçbir dosya yüklenmedi, silinmedi
 > veya değiştirilmedi; production veritabanı oluşturulmadı, cPanel'de hiçbir

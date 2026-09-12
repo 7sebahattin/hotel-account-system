@@ -26,7 +26,7 @@
         [
             'label' => 'Cari',
             'items' => [
-                ['route' => 'companies.index', 'label' => 'Firmalar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
+                ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
                 ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
                 ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
                 // "TAHSİLAT MAKBUZLARI" — mevcut Tahsilatlar'dan AYRI bir

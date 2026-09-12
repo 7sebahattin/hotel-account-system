@@ -67,9 +67,12 @@
 
     <table class="details">
         <tr>
-            <th>Sayın / Firma</th>
-            <td>{{ $payment->company?->name ?? 'Kaynak firma bulunamadı' }}</td>
+            <th>Cari hesap</th>
+            <td>{{ $payment->company?->name ?? 'Kaynak hesap bulunamadı' }}</td>
         </tr>
+        @if ($payment->payer_name)
+            <tr><th>Ödeyen</th><td>{{ $payment->payer_name }} · {{ $payment->payer_type?->label() }}</td></tr>
+        @endif
         <tr>
             <th>Tutar</th>
             <td class="amount">

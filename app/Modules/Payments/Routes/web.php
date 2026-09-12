@@ -15,6 +15,10 @@ Route::middleware('auth')->prefix('payments')->name('payments.')->group(function
         ->middleware('can:'.Permission::PaymentsCreate->value)
         ->name('create');
 
+    Route::get('allocation-options', [PaymentController::class, 'allocationOptions'])
+        ->middleware('can:'.Permission::PaymentsCreate->value)
+        ->name('allocation-options');
+
     Route::post('/', [PaymentController::class, 'store'])
         ->middleware('can:'.Permission::PaymentsCreate->value)
         ->name('store');

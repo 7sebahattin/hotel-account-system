@@ -1,9 +1,9 @@
 @extends('layouts.app')
-@section('title', 'Firmalar')
+@section('title', 'Cari hesaplar')
 
 @section('content')
-    <x-ui.page-header :title="$showTrashed ? 'Silinmiş firmalar' : 'Firmalar'" :count="$companies->total()"
-                      :subtitle="$showTrashed ? null : number_format($activeCount, 0, ',', '.').' aktif firma'">
+    <x-ui.page-header :title="$showTrashed ? 'Silinmiş hesaplar' : 'Cari hesaplar'" :count="$companies->total()"
+                      :subtitle="$showTrashed ? null : number_format($activeCount, 0, ',', '.').' aktif hesap'">
         <x-slot:actions>
             @can('viewTrashed', \App\Modules\Companies\Models\Company::class)
                 <x-ui.button variant="ghost"
@@ -13,7 +13,7 @@
             @endcan
 
             @can('create', \App\Modules\Companies\Models\Company::class)
-                <x-ui.button :href="route('companies.create')">Yeni firma</x-ui.button>
+                <x-ui.button :href="route('companies.create')">Yeni cari hesap</x-ui.button>
             @endcan
         </x-slot:actions>
     </x-ui.page-header>
@@ -35,6 +35,12 @@
             @foreach ($cities as $city)
                 <option value="{{ $city }}" @selected(request('city') === $city)>{{ $city }}</option>
             @endforeach
+        </x-ui.select>
+
+        <x-ui.select label="Hesap türü" name="account_type">
+            <option value="">Tümü</option>
+            <option value="company" @selected(request('account_type') === 'company')>Firma</option>
+            <option value="individual" @selected(request('account_type') === 'individual')>Bireysel</option>
         </x-ui.select>
 
         <x-ui.select label="Durum" name="is_active">
@@ -60,6 +66,7 @@
                 <tr class="border-b border-line last:border-0 hover:bg-well">
                     <td class="px-4 py-3">
                         <a href="{{ route('companies.show', $company) }}" class="text-tx hover:text-acc">{{ $company->name }}</a>
+                        <p class="text-xs text-mut">{{ $company->account_type->label() }} · #{{ $company->id }}</p>
                     </td>
                     <td class="px-4 py-3 tabular-nums text-mut">{{ $company->tax_number ?: '—' }}</td>
                     <td class="px-4 py-3 tabular-nums text-mut">{{ $company->phone ?: '—' }}</td>
@@ -93,6 +100,7 @@
                     </div>
 
                     <dl class="mt-2 space-y-1 text-sm text-mut">
+                        <div>{{ $company->account_type->label() }} · #{{ $company->id }}</div>
                         @if ($company->city)
                             <div><dt class="inline">Şehir:</dt> <dd class="inline text-tx">{{ $company->city }}</dd></div>
                         @endif

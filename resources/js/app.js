@@ -753,3 +753,92 @@ function initPwaInstall() {
 }
 
 document.addEventListener('DOMContentLoaded', initPwaInstall);
+
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('[data-payment-allocation]');
+    if (!form) return;
+    const account = form.elements.company_id;
+    const currency = form.elements.currency;
+    const mode = form.elements.allocation_mode;
+    const settlement = form.elements.settlement_currency;
+    const settlementGroup = form.querySelector('[data-settlement-group]');
+    const syncSettlement = () => {
+        settlementGroup.hidden = currency.value === 'TRY';
+        settlement.disabled = settlementGroup.hidden;
+        if (settlement.disabled) settlement.value = '';
+    };
+    const payer = form.elements.payer_type;
+    const payerGroup = form.querySelector('[data-payer-name]');
+    const selection = form.querySelector('[data-allocation-selection]');
+    const list = form.querySelector('[data-allocation-options]');
+    const message = form.querySelector('[data-allocation-message]');
+    let previous = new Set(JSON.parse(form.dataset.selectedStays || '[]').map(String));
+    let pending;
+    const syncPayer = () => {
+        payerGroup.hidden = payer.value !== 'individual';
+        form.elements.payer_name.disabled = payerGroup.hidden;
+        form.elements.payer_name.required = !payerGroup.hidden;
+    };
+    const refresh = async () => {
+        pending?.abort();
+        selection.hidden = mode.value !== 'selected';
+        selection.disabled = selection.hidden;
+        if (selection.hidden) return;
+        list.replaceChildren();
+        if (!account.value) {
+            message.textContent = 'Önce cari hesap seçin.';
+            return;
+        }
+        const controller = new AbortController();
+        pending = controller;
+        message.textContent = 'Konaklamalar yükleniyor…';
+        const url = new URL(form.dataset.optionsUrl, window.location.href);
+        url.searchParams.set('company_id', account.value);
+        url.searchParams.set('currency', settlement.value || currency.value);
+        try {
+            const response = await fetch(url, {headers: {Accept: 'application/json'}, signal: controller.signal});
+            if (!response.ok) throw new Error('Liste alınamadı');
+            const data = await response.json();
+            if (controller.signal.aborted) return;
+            message.textContent = data.stays.length ? 'Seçilen konaklamalar arasında en eskiden başlanır.' : 'Bu hesap ve para biriminde açık konaklama bulunamadı.';
+            for (const stay of data.stays) {
+                const label = document.createElement('label');
+                label.className = 'flex min-h-11 items-center gap-3 rounded-lg border border-line p-3 text-sm';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'stay_ids[]';
+                checkbox.value = String(stay.id);
+                checkbox.checked = previous.has(checkbox.value);
+                checkbox.addEventListener('change', () => checkbox.checked ? previous.add(checkbox.value) : previous.delete(checkbox.value));
+                const text = document.createElement('span');
+                text.textContent = `#${stay.id} · ${stay.guest_name} · ${stay.check_in_date.split('-').reverse().join('.')} · Kalan ${stay.remaining_formatted} · ${stay.label}`;
+                label.append(checkbox, text);
+                list.append(label);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') message.textContent = 'Liste yüklenemedi. Bağlantınızı kontrol edip listeyi yenileyin.';
+        }
+    };
+    account.addEventListener('change', () => { previous.clear(); refresh(); });
+    currency.addEventListener('change', () => { previous.clear(); syncSettlement(); refresh(); });
+    settlement.addEventListener('change', () => { previous.clear(); refresh(); });
+    mode.addEventListener('change', refresh);
+    payer.addEventListener('change', syncPayer);
+    form.querySelector('[data-allocation-retry]').addEventListener('click', refresh);
+    syncPayer();
+    syncSettlement();
+    refresh();
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const company = document.querySelector('[data-stay-company]');
+    const individual = document.querySelector('[data-stay-individual]');
+    if (!company || !individual) return;
+    const sync = () => {
+        individual.hidden = company.value !== '';
+        individual.querySelector('select').disabled = individual.hidden;
+    };
+    company.addEventListener('change', sync);
+    window.addEventListener('pageshow', sync);
+    sync();
+});
