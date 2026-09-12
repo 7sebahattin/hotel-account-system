@@ -1315,12 +1315,34 @@ olmadığına bakar — modül başına ayrı bir uygulama GEREKMEZ. `<x-ui.empt
 :clear-href="...">` bu bilgiyi kullanarak "hiç kayıt yok" ile "bu filtrelerle eşleşen kayıt
 yok" ekranlarını ayırır ve ikincisine "Filtreleri temizle" bağlantısı ekler.
 
-**Filtre UI deseni bilerek TEK'tir — Gün 12'de yeni bir "drawer" bileşeni AÇILMADI.**
-Tüm liste ekranları (Firmalar, Konaklamalar, Tahsilatlar, Cari Ekstre, Kasa Hareketleri,
-Devir Geçmişi) aynı `<form method="GET" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">`
-düzenini kullanır: mobilde alanlar üst üste dökülür, masaüstünde yan yana sıralanır. Bu,
-kullanıcı talimatının kabul ettiği "mevcut sade panel" seçeneğidir; ayrı bir mobil çekmece
-kasıtlı olarak eklenmedi (tutarlılık + gereksiz soyutlama yasağı, CLAUDE.md §11.3).
+**Filtre UI deseni bilerek TEK'tir — ayrı bir "drawer" bileşeni AÇILMADI.**
+Tüm liste ekranları (Firmalar, Konaklamalar, Tahsilatlar, Cari Ekstre + ekstre detayı,
+Kasa Hareketleri, Devir Geçmişi, Denetim Kaydı) aynı `<x-ui.filter-panel>` bileşenini
+kullanır: mobilde alanlar üst üste dökülür, masaüstünde yan yana sıralanır. Ayrı bir
+mobil çekmece kasıtlı olarak eklenmedi (tutarlılık + gereksiz soyutlama yasağı, §11.3).
+
+**Filtre paneli ÇÖKERTİLEBİLİRDİR ve VARSAYILAN OLARAK KAPALIDIR (v2.1.1-E, K-106).**
+Gün 12'nin hep-açık grid formu, kullanıcı talimatıyla bir `<details>` kabuğuna alındı —
+kapalıyken tek satır (`min-h-11`: filtre ikonu + "Filtreler" + varsa "N aktif" rozeti +
+dönen ok) yer kaplar, açıldığında AYNI `grid gap-3 sm:grid-cols-2 lg:grid-cols-4` düzeni
+görünür. Alan yerleşimi, filtre parametreleri ve sorgu mantığı DEĞİŞMEDİ.
+
+- **Açık/kapalı kararı SUNUCUDA verilir:** aktif filtre varsa panel `open` başlar
+  (aksi hâlde kullanıcı neyin filtrelendiğini göremez ve "Temizle"ye ulaşamazdı).
+  Kenar çubuğu gruplarıyla (§11.4, K-105) AYNI desen: native `<details>/<summary>`,
+  ayrı bir JS durum makinesi YOKTUR (Alpine.js kurulu DEĞİLDİR, §11.7).
+- Gönder/Temizle butonları ve "Sayfa başına" seçici bileşenin kendi alt satırındadır;
+  her ekranda kopyalanmaz (§4.2/4).
+- `hidden` slotu filtre dışı query param'ı taşır (Firmalar'daki `trashed=1`).
+  `:grid="false"` gövdeyi ham render eder — Cari Ekstre DETAYI bunu kullanır, çünkü
+  orada alanlar iki ANLAMLI gruba ayrılır ("bakiyenin kapsamı" / "yalnızca görünümü
+  daraltır") ve düz bir grid bu ayrımı yok ederdi.
+- **İki form bilerek dışarıda:** `users.index`'teki tek kutuluk arama ve `cashbook.day`'deki
+  tarih gezinme formu ZATEN tek satırdır; kabuğa almak yer kazandırmaz, fazladan tıklama ekler.
+
+`QueryFilter::countActiveFilters(Request)` **statiktir**: `QueryFilter` alt sınıfı
+KULLANMAYAN ekranlar (Denetim Kaydı, cari ekstre detayı) da rozeti aynı kuralla doldurur;
+mantık kopyalanmaz.
 
 **Kasa Hareketleri / Devir Geçmişi (Gün 12) — kasa defterinin en önemli filtre alanı.**
 `cash/movements` ve `cash/transfers` çapraz-vardiya, sayfalanan, filtrelenen listelerdir
@@ -1415,7 +1437,11 @@ ve sağa hizalı.
 
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
-`alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`.
+`alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`,
+`filter-panel`.
+
+`filter-panel` (v2.1.1-E) liste ekranlarının çökertilebilir filtre kabuğudur — davranışı
+ve bağlayıcı kuralları §9'dadır.
 
 `fx-note` (v2.1.1-C, v2.1.1-D'de genişletildi) yabancı para birimli bir
 tutarın altında küçük/soluk TL karşılığını gösterir; kur kayıtlı DEĞİLSE hiç
@@ -1559,7 +1585,8 @@ ESC, dışarı tıklama ve `aria-expanded` ile klavye erişilebilirdir.
 
 `resources/js/app.js` sade JavaScript'tir, harici paket yoktur. İçinde üç şey vardır:
 kenar çubuğu çekmecesi, **çift gönderim koruması** ve konaklama formunun ücret
-önizlemesi.
+önizlemesi. Çökertilebilir yüzeyler (kenar çubuğu grupları, liste filtre paneli) JS
+KULLANMAZ — native `<details>/<summary>`dir.
 
 **Alpine.js kurulu DEĞİLDİR** ve bu bilinçlidir; ihtiyaç doğarsa (modal, tutar
 maskesi, dinamik firma arama) kullanıcı onayıyla eklenir. JS ile iş mantığı

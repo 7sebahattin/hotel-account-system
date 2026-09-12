@@ -2338,3 +2338,63 @@ Companies/Http/Controllers/{StatementController,CompanyController}.php`,
 layouts/print.blade.php`, `resources/views/partials/{sidebar,
 sidebar-link}.blade.php`, `resources/css/app.css`, ilgili testler,
 `CLAUDE.md`.
+
+## K-106 · v2.1.1-E: Liste ekranlarının filtre alanı çökertilebilir bir panele alındı
+
+**Bağlam:** Kullanıcı canlı kullanımda (Cari Ekstre ekranının ekran
+görüntüsüyle birlikte) filtre alanının ekranın yarısını kapladığını, açılır/
+kapanır olmasını ve bunun TÜM sayfalarda düzeltilmesini istedi. Gün 12'de
+alınan "filtre UI deseni bilerek TEK'tir, ayrı bir drawer bileşeni
+AÇILMADI" kararı (CLAUDE.md §9) bu turda kullanıcı talimatıyla
+GÜNCELLENMİŞTİR — ama kapsamı DAR tutularak: yeni bir çekmece/mobil
+drawer mekanizması İCAT EDİLMEDİ, var olan grid formu olduğu gibi bir
+`<details>` kabuğunun içine alındı.
+
+**Karar:** Yeni bir ortak bileşen — `<x-ui.filter-panel>`
+(`resources/views/components/ui/filter-panel.blade.php`).
+
+- Kapalıyken TEK satırdır (`min-h-11` özet çubuğu: filtre ikonu +
+  "Filtreler" + varsa "N aktif" rozeti + dönen ok). Açıldığında Gün 12'nin
+  AYNI `grid gap-3 sm:grid-cols-2 lg:grid-cols-4` düzeni görünür — alan
+  yerleşimi, filtre parametreleri ve sorgu mantığı DEĞİŞMEDİ.
+- **Açık/kapalı kararı SUNUCUDA verilir:** aktif filtre varsa panel `open`
+  başlar. Aksi hâlde kullanıcı hangi filtrenin uygulandığını göremez ve
+  "Temizle"ye ulaşamazdı. Kenar çubuğu gruplarıyla (K-105) BİREBİR AYNI
+  desen: native `<details>/<summary>`, JS durum makinesi YOK (Alpine.js
+  kurulu DEĞİLDİR, CLAUDE.md §11.7); tıklama, klavye ve erişilebilirlik
+  tarayıcının kendi davranışıdır.
+- Gönder/Temizle butonları ve "Sayfa başına" seçici bileşenin kendi alt
+  satırındadır — her ekranda kopyalanan ~15 satırlık blok TEK yerde
+  toplandı (CLAUDE.md §4.2/4).
+- `hidden` slotu filtre dışı query param'ları taşır (Firmalar ekranındaki
+  `trashed=1` gibi). `:grid="false"` gövdeyi ham render eder — Cari Ekstre
+  DETAYI bu modu kullanır, çünkü orada alanlar iki ANLAMLI gruba ayrılır
+  ("bakiyenin kapsamı" / "yalnızca görünümü daraltır") ve düz bir grid
+  bu ayrımı yok ederdi.
+
+**Ortak sayaç:** `QueryFilter::activeFilterCount()` mantığı statik
+`QueryFilter::countActiveFilters(Request)` metoduna taşındı. Gerekçe:
+denetim kaydı listesi ve cari ekstre DETAYI birer `QueryFilter` alt sınıfı
+KULLANMAZ; rozetin aynı kuralla dolması için mantık kopyalanmak yerine
+paylaşıldı. `page`/`sort`/`direction`/`per_page` hâlâ sayılmaz —
+sayfalama ve sıralama bir filtre değildir.
+
+**Dokunulmayan iki form (bilinçli):** `users.index`'teki tek kutuluk arama
+ve `cashbook.day`'deki tarih gezinme formu ZATEN tek satırdır; bunları bir
+"Filtreler" kabuğunun arkasına saklamak yer kazandırmaz, yalnızca fazladan
+bir tıklama eklerdi.
+
+**Doğrulama:** Bu ortamda `phpstan/phpstan` paketi yalnızca dist olarak
+(`codeload.github.com`) yayımlandığı ve o host oturumun çıkış politikasınca
+engellendiği için `composer install --dev` TAMAMLANAMADI; `php artisan test`,
+`pint` ve `phpstan` YEREL OLARAK KOŞTURULAMADI (CI'da koşar). Bunun yerine:
+`php artisan view:cache` (tüm Blade şablonları derlendi), `npm run build`
+(CSS üretildi, `.filter-panel` kuralları çıktıda) ve gerçek HTTP
+kernel'ıyla 15 URL'lik bir duman testi — 8 ekranın hepsinde panel render
+edildi, filtresizken KAPALI, filtreliyken AÇIK; `trashed` gizli input'u,
+`per_page` seçimi ve rozet sayısı doğrulandı.
+
+**Etkilenen dosyalar:** `resources/views/components/ui/filter-panel.blade.php`
+(yeni), `resources/css/app.css`, `app/Modules/Core/Filters/QueryFilter.php`,
+`app/Modules/{Companies,Stays,Payments,CashBook,AuditLog}` liste view'ları,
+`AuditLogController`, `StatementController`, `CLAUDE.md`.

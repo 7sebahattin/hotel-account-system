@@ -25,7 +25,11 @@
         <div class="mt-6">@include('companies::statements._summary', ['fx' => $fx])</div>
     @endif
 
-    <form method="GET" class="mt-6 rounded-xl border border-line bg-card p-4">
+    {{-- Grid kapalı: bu ekranın gövdesi iki ANLAMLI gruba ayrılır (bakiyenin
+         kapsamı / yalnızca görünümü daraltanlar), tek bir düz grid değildir. --}}
+    <x-ui.filter-panel :count="$activeFilterCount"
+                       :clear-href="route('statements.show', $company)"
+                       :grid="false">
         <p class="text-xs font-semibold uppercase tracking-wide text-mut">Bakiyenin kapsamı</p>
         <p class="mt-0.5 text-xs text-mut">Bu üç alan hangi hareketlerin hesaba katılacağını belirler.</p>
 
@@ -49,28 +53,23 @@
         <p class="mt-0.5 text-xs text-mut">Bakiye kolonu bunlardan etkilenmez.</p>
 
         <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <x-ui.select label="İşlem türü" name="type">
-            <option value="">Tümü</option>
-            @foreach ($types as $type)
-                <option value="{{ $type->value }}" @selected(request('type') === $type->value)>
-                    {{ $type->label() }}
-                </option>
-            @endforeach
-        </x-ui.select>
+            <x-ui.select label="İşlem türü" name="type">
+                <option value="">Tümü</option>
+                @foreach ($types as $type)
+                    <option value="{{ $type->value }}" @selected(request('type') === $type->value)>
+                        {{ $type->label() }}
+                    </option>
+                @endforeach
+            </x-ui.select>
 
-        <x-ui.input label="Açıklamada ara" name="q" type="search" :value="request('q')" />
+            <x-ui.input label="Açıklamada ara" name="q" type="search" :value="request('q')" />
 
-        <x-ui.select label="Sıralama" name="direction">
-            <option value="asc" @selected(request('direction') !== 'desc')>Eskiden yeniye</option>
-            <option value="desc" @selected(request('direction') === 'desc')>Yeniden eskiye</option>
-        </x-ui.select>
+            <x-ui.select label="Sıralama" name="direction">
+                <option value="asc" @selected(request('direction') !== 'desc')>Eskiden yeniye</option>
+                <option value="desc" @selected(request('direction') === 'desc')>Yeniden eskiye</option>
+            </x-ui.select>
         </div>
-
-        <div class="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
-            <x-ui.button type="submit">Filtrele</x-ui.button>
-            <x-ui.button variant="ghost" :href="route('statements.show', $company)">Temizle</x-ui.button>
-        </div>
-    </form>
+    </x-ui.filter-panel>
 
     @if ($criteria->hasDisplayFilters())
         <x-ui.alert tone="info" class="mt-4">

@@ -5,7 +5,7 @@
     <x-ui.page-header title="Denetim kaydı" :count="$logs->total()"
                       subtitle="Kayıtlar salt okunurdur; değiştirilemez ve silinemez." />
 
-    <form method="GET" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <x-ui.filter-panel :count="$activeFilterCount" :clear-href="route('audit.index')">
         <x-ui.select label="Olay" name="event">
             <option value="">Tümü</option>
             @foreach ($events as $event)
@@ -17,12 +17,7 @@
 
         <x-ui.input label="Başlangıç" name="date_from" type="date" :value="request('date_from')" />
         <x-ui.input label="Bitiş" name="date_to" type="date" :value="request('date_to')" />
-
-        <div class="flex items-end gap-3">
-            <x-ui.button type="submit">Filtrele</x-ui.button>
-            <x-ui.button variant="ghost" :href="route('audit.index')">Temizle</x-ui.button>
-        </div>
-    </form>
+    </x-ui.filter-panel>
 
     <x-ui.table class="mt-4">
         <thead class="border-b border-line">

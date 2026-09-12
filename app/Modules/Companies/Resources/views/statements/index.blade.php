@@ -5,7 +5,10 @@
     <x-ui.page-header title="Cari Ekstre" :count="$companies->total()"
                       subtitle="Ekstresini görmek istediğiniz firmayı seçin." />
 
-    <form method="GET" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <x-ui.filter-panel :count="$filter->activeFilterCount()"
+                       :clear-href="route('statements.index')"
+                       :per-page-options="$perPageOptions"
+                       submit-label="Ara">
         <div class="sm:col-span-2">
             <x-ui.input label="Firma ara" name="q" type="search" :value="request('q')"
                         hint="Ünvan, vergi no, telefon, e-posta, yetkili veya şehir." />
@@ -31,27 +34,7 @@
             <x-ui.checkbox name="has_balance" value="1" :checked="$hasBalanceOnly"
                            label="Yalnızca bakiyesi olan firmalar" />
         </div>
-
-        <div class="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-4">
-            <x-ui.button type="submit">
-                Ara
-                @if ($filter->activeFilterCount() > 0)
-                    ({{ $filter->activeFilterCount() }})
-                @endif
-            </x-ui.button>
-            <x-ui.button variant="ghost" :href="route('statements.index')">Temizle</x-ui.button>
-
-            <label for="per_page" class="ml-auto flex items-center gap-2 text-sm text-mut">
-                Sayfa başına
-                <select id="per_page" name="per_page" onchange="this.form.submit()"
-                        class="min-h-11 rounded-lg border border-field bg-well px-2 text-tx focus:border-acc">
-                    @foreach ($perPageOptions as $option)
-                        <option value="{{ $option }}" @selected((int) request('per_page', 25) === $option)>{{ $option }}</option>
-                    @endforeach
-                </select>
-            </label>
-        </div>
-    </form>
+    </x-ui.filter-panel>
 
     <x-ui.table class="mt-4">
         <thead class="border-b border-line">
