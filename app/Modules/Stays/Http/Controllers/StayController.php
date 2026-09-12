@@ -15,6 +15,8 @@ use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
+use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
+use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Filters\StayFilter;
 use App\Modules\Stays\Http\Requests\StayRequest;
 use App\Modules\Stays\Models\Stay;
@@ -35,18 +37,41 @@ class StayController extends Controller
     {
         $this->authorize('viewAny', Stay::class);
 
-        $stays = $filter->apply(Stay::query()->with(['company', 'room', 'creator']))
-            ->paginate($filter->perPage())
-            ->withQueryString();
+        $query = $filter->apply(Stay::query()->with(['company', 'room', 'creator']));
+        $totals = $this->stays->totalsFor($query);
+
+        $stays = $query->paginate($filter->perPage())->withQueryString();
 
         return view('stays::index', [
             'paymentSummaries' => app(PaymentAllocationService::class)->summaries($stays->getCollection()->modelKeys()),
             'stays' => $stays,
+            'totals' => $totals,
             'filter' => $filter,
             'companies' => $this->companyOptions(),
             'currencies' => Currency::cases(),
             'statuses' => StayStatus::cases(),
             'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
+        ]);
+    }
+
+    /**
+     * Filtrelenmiş konaklama listesinin yazdırma görünümü.
+     *
+     * Ekstre/devir raporlarıyla AYNI ilke (§11): sayfalanmaz, filtrelenen
+     * kayıtların TAMAMI tek seferde gösterilir — yazdırma bir "sayfa" değil,
+     * dönemin bütün dökümüdür.
+     */
+    public function print(StayFilter $filter): View
+    {
+        $this->authorize('viewAny', Stay::class);
+
+        $query = $filter->apply(Stay::query()->with(['company', 'room']));
+        $totals = $this->stays->totalsFor($query);
+
+        return view('stays::print', [
+            'stays' => $query->get(),
+            'totals' => $totals,
+            'filter' => $filter,
         ]);
     }
 
@@ -123,6 +148,24 @@ class StayController extends Controller
 
         return redirect()->route('stays.show', $stay)
             ->with('success', 'Konaklama iptal edildi ve cari hareketi ters kaydedildi.');
+    }
+
+    /**
+     * Kalıcı silme (hard delete) — YALNIZCA Admin, YALNIZCA zaten iptal
+     * edilmiş bir kayıtta (StayPolicy::forceDelete).
+     */
+    public function destroy(Request $request, Stay $stay): RedirectResponse
+    {
+        $this->authorize('forceDelete', $stay);
+
+        try {
+            $this->stays->forceDelete($stay, $request->user());
+        } catch (StayNotCancelled|StayHasLinkedAllocations $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('stays.index')
+            ->with('success', 'Konaklama kaydı veritabanından kalıcı olarak silindi.');
     }
 
     /**
