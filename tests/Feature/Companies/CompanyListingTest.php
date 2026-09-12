@@ -59,7 +59,7 @@ class CompanyListingTest extends TestCase
             'contact_person' => 'Ali Veli',
             'city' => 'Ankara',
             'tax_office' => 'Çankaya',
-            'email' => 'firma'.static::$searchableSequence++.'@ornek.test',
+            'email' => 'firma'.self::$searchableSequence++.'@ornek.test',
         ], $overrides));
     }
 
