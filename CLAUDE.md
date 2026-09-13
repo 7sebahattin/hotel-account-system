@@ -194,6 +194,16 @@ push olduğu için yayını tetikler. (Kullanıcı isterse `.claude/settings.jso
 içine `"permissions": {"allow": ["Bash(git push:*)"]}` ekleyerek doğrudan
 push'u açabilir — bu dosyayı Claude KENDİSİ düzenleyemez, ortam engelliyor.)
 
+**FTPS sertifikası FTP host adıyla EŞLEŞMEZ.** Workflow'daki salt-okunur
+`curl` kontrolleri (bakım öncesi durum kontrolü, finalize bekleme, sunucu
+günlüğü indirme) bu yüzden katı TLS doğrulamasıyla ÇALIŞMAZ — curl 60:
+"no alternative certificate subject name matches target host name". Her
+birinde önce katı denenir, tutmazsa `--insecure`'a düşülür. **Bu geri düşüş
+KALDIRILMAMALIDIR** (14 Eylül 2026'da kaldırıldı ve deploy "Aktarım öncesi
+bakım dosyalarını hazırla" adımında kırıldı). Dosyayı aktaran
+FTP-Deploy-Action'ın TLS davranışı bundan etkilenmez; kimlik bilgileri zaten
+aynı kanaldan gittiği için yeni bir maruziyet doğmaz.
+
 **Sunucu gerçekleri (tekrar keşfetme, üçü de canlıda acı çekilerek bulundu):**
 LiteSpeed + CloudLinux Alt-PHP; cron'u çağıran `lsphp` CLI SAPI DEĞİL
 (`STDOUT`/`STDERR` sabitleri fatal verir), ve `proc_open` + `exec` BİRLİKTE
