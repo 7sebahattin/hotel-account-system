@@ -117,10 +117,29 @@ Kullanıcı isterse `.claude/settings.json` içine
 `"permissions": {"allow": ["Bash(git push:*)"]}` ekleyerek 1–2. adımları tek
 `git push`'a indirebilir.
 
-## Açık konu
+## Sonuç — zincir uçtan uca doğrulandı (13 Eylül 2026, 21:20)
 
-Run #16 ve #17'de işaret dosyası 3 dakikada silinmedi: dosya aktarımı başarılı,
-sunucu tarafı (migrate/seed/cache) koşmadı. FTP listesi okunabildiği için
-bağlantı sorunu değil — ya cPanel cron kaydı koşmuyor ya da finalize bir adımda
-hata veriyor. Yukarıdaki günlük dökümü kesin cevabı verecek. Son başarılı
-finalize: 13 Eylül 2026, 20:30:01–20:30:02 (+03:00), run #15.
+Koşu #18 (`main`'e merge ile tetiklendi) tam otomatik tamamlandı:
+
+| Saat (+03:00) | Olay |
+|---|---|
+| 21:19:29 | FTPS aktarımı bitti, `storage/app/deploy-pending` bırakıldı |
+| 21:20:01 | cPanel cron → `deploy/finalize.php`: optimize:clear → migrate (Nothing to migrate) → RolePermissionSeeder (187 ms) → config/route/view/event cache |
+| 21:20:02 | finalize tamamlandı, işaret dosyası silindi |
+| 21:20:18 | Workflow işaretin silindiğini gördü → **"FİNALİZE TAMAMLANDI"**, koşu yeşil |
+
+Bekleme adımı 43 saniye sürdü. Elle hiçbir adım yapılmadı.
+
+### Tanılama tarihçesi (tekrar yaşanırsa)
+
+20:57 ve 21:12'de bırakılan işaretler ancak 21:20'de işlendi; o aralıkta
+sunucu günlüğüne HİÇ satır düşmedi. Cron koşup finalize hata verseydi günlüğe
+yazardı (daha önce "Could not open input file" ve "Undefined constant STDERR"
+tam olarak böyle görünmüştü). Dolayısıyla kural şudur:
+
+- **Günlükte yeni satır YOK** → cron hiç koşmamış → cPanel → Cron Jobs kontrol.
+- **Günlükte hata satırı VAR** → finalize bir adımda patlamış → hata metni orada.
+
+Bekleme süresi 6 dakikaya çıkarıldı ve zaman aşımı bir BAŞARISIZLIK DEĞİLDİR:
+dosya aktarımı o noktada zaten başarılıdır, cron seyrek koşuyorsa finalize
+sonradan kendiliğinden tamamlanır.
