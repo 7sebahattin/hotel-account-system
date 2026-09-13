@@ -288,11 +288,26 @@ if (($release['managed_maintenance'] ?? '') === '1') {
     $downFile = $appRoot.'/storage/framework/down';
     $down = is_file($downFile) ? json_decode((string) file_get_contents($downFile), true) : null;
     $releaseId = $release['run_id'].'-'.($release['run_attempt'] ?? '1');
-    if (! is_array($down) || ($down['deploy_release_id'] ?? '') !== $releaseId) {
-        err("Bakım modu yayın kimliği eşleşmiyor; bakım kapatılmadı.\n");
-        stopWith($lockHandle, 1);
+
+    if (! is_file($downFile)) {
+        /*
+         * Bakım ZATEN kapalı. Beklenen bir durumdur: cron gecikirse workflow'un
+         * zaman aşımı kurtarması `down` dosyasını FTP ile siler ki site 503'te
+         * kalmasın. Burada kapatılacak bir şey yoktur — bu bir HATA DEĞİLDİR ve
+         * yayının geri kalanı normal şekilde tamamlanır.
+         */
+        out("  Bakım modu zaten kapalı; 'up' çalıştırılmadı.\n");
+    } elseif (! is_array($down) || ($down['deploy_release_id'] ?? '') !== $releaseId) {
+        /*
+         * Bakım BAŞKA bir yayına (ya da bir insana) ait: sahipliği almayız,
+         * kapatmayız. Ama bu yayının kendi adımları başarıyla bitti; işareti
+         * silip başarı kaydını yazmak DOĞRUDUR. Aksi hâlde marker sonsuza dek
+         * kalır, her cron turu aynı hatayı tekrarlar ve yayın asla kapanmazdı.
+         */
+        err("  UYARI: bakım modu başka bir yayına ait; kapatılmadı (elle kontrol edin).\n");
+    } else {
+        runStepOrFail($kernel, 'up', [], $lockHandle);
     }
-    runStepOrFail($kernel, 'up', [], $lockHandle);
 }
 
 $receipt = $appRoot.'/storage/app/deploy-completed.json';
