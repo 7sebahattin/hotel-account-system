@@ -593,6 +593,24 @@ jobs:
           echo "::warning::Finalize 24 kontrolde doğrulanamadı (6 dakika bekleme + ağ süresi)."
           echo "::warning::Dosyalar aktarıldı; sunucu güncellemesinin sonucu incelenmeli."
 
+          # KURTARMA — SİTE BAKIMDA KALMASIN.
+          # Bakım modunu bu yayın açtı ve normalde finalize kapatır. Cron
+          # gecikirse (bu hosting'de yaşandı: işaret 6 dakikadan uzun bekledi)
+          # site aksi hâlde cron gelene kadar 503 gösterirdi. `down` dosyasını
+          # silmek Laravel'in bakım kabuğunu devre dışı bırakır — stub, `down`
+          # yoksa erken döner. Sonradan koşan finalize bunu HATA SAYMAZ
+          # (deploy/finalize.php: "Bakım modu zaten kapalı").
+          echo "Bakım modu kaldırılıyor — site eski sürümle ayakta kalsın…"
+          if curl -sS $curl_opts --max-time 30 \
+               --user "$FTP_USERNAME:$FTP_PASSWORD" \
+               -Q "DELE down" --list-only \
+               "ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR}storage/framework/" >/dev/null 2>&1; then
+            echo "Bakım modu kaldırıldı."
+          else
+            echo "::warning::Bakım modu kaldırılamadı — site bakım ekranında kalmış olabilir."
+            echo "::warning::cPanel Dosya Yöneticisi: lemon-app/storage/framework/down dosyasını silin."
+          fi
+
           # Sunucu günlüğünü BURAYA yaz. Sunucuda terminal erişimi yok ve
           # kullanıcının günlüğü elle bulup yapıştırması, bu projede en çok
           # zaman kaybettiren döngüydü. FTP hesabı /home/<kullanıcı> altına

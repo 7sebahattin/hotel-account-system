@@ -204,6 +204,27 @@ bakım dosyalarını hazırla" adımında kırıldı). Dosyayı aktaran
 FTP-Deploy-Action'ın TLS davranışı bundan etkilenmez; kimlik bilgileri zaten
 aynı kanaldan gittiği için yeni bir maruziyet doğmaz.
 
+**CRON GÜVENİLİR DEĞİL — bilinen ve ÖLÇÜLMÜŞ durum (14 Eylül 2026).** Finalize
+cron'u dakikada bir koşmuyor: 20:57 ve 21:12'de bırakılan işaretler ancak
+21:20'de, 22:32'de bırakılan işaret ise 6 dakikalık bekleme boyunca HİÇ
+işlenmedi (koşu #20 — 24 denemenin hepsi "Finalize bekleniyor"; sunucu
+günlüğüne tek satır düşmedi). Bunun iki sonucu vardır ve ikisi de koda
+işlenmiştir:
+
+1. **Bakım modu riski:** yeni akış aktarımdan ÖNCE siteyi bakıma alır ve
+   bakımı finalize kapatır. Cron gecikirse site 503'te kalır. Bu yüzden
+   workflow, doğrulama zaman aşımına uğradığında `storage/framework/down`
+   dosyasını FTP ile SİLER (site eski sürümle ayakta kalır); koşu yine
+   KIRMIZI biter çünkü yayın doğrulanmamıştır.
+2. **`finalize.php` bunu hata saymaz:** `down` yoksa "zaten kapalı" deyip
+   devam eder; `down` BAŞKA bir yayına aitse sahiplenmez ama yine de işareti
+   silip başarı kaydını yazar. Aksi hâlde marker sonsuza dek kalır ve her
+   cron turu aynı hatayı tekrarlardı (ChatGPT sürümünde bu tuzak vardı).
+
+**Kalıcı çözüm kullanıcıdadır:** cPanel → Cron Jobs → kaydın var/aktif olduğu
+ve sıklığı (`* * * * *`) doğrulanmalı. Depodan/CI'dan cron oluşturulamaz.
+Cron dakikalık koşmuyorsa aktarım öncesi bakım modu bu projede zarar verir.
+
 **Sunucu gerçekleri (tekrar keşfetme, üçü de canlıda acı çekilerek bulundu):**
 LiteSpeed + CloudLinux Alt-PHP; cron'u çağıran `lsphp` CLI SAPI DEĞİL
 (`STDOUT`/`STDERR` sabitleri fatal verir), ve `proc_open` + `exec` BİRLİKTE
