@@ -322,13 +322,22 @@ sırasında `.github/workflows/deploy.yml`, ana FTPS aktarımından SONRA marker
 AYRI ve tek dosyalık bir FTP yüklemesiyle bırakır (storage/ normal aktarımdan
 hariç tutulduğu için).
 
-**Hâlâ eksik olan TEK şey: cPanel'de cron kaydı.** Bunu depodan/CI'dan
-oluşturmak mümkün değildir — cPanel arayüzünden (Cron Jobs) elle eklenmelidir:
+**Cron kaydı 13 Eylül 2026'da kullanıcı tarafından eklendi ve mekanizma
+CANLIDA ÇALIŞIR DURUMDADIR.** Bunu depodan/CI'dan oluşturmak mümkün
+değildir; cPanel arayüzünden (Cron Jobs) elle eklenen satır şudur:
 
 ```bash
 * * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
+
+İlk başarılı otomatik finalize: **13 Eylül 2026, 20:30:01–20:30:02 (+03:00)**.
+Günlük yedi adımı da sırayla gösterdi — `optimize:clear` (altı alt adım) →
+`migrate --force` (**Nothing to migrate**: bu paket yeni bir migration
+İÇERMİYOR, `stays.force_delete` bir YETKİdir ve seeder'dan gelir) →
+`db:seed RolePermissionSeeder` (181 ms) → `config/route/view/event:cache` →
+işaret dosyası silindi. Bir sonraki dakikadan itibaren cron sessiz no-op'a
+döner.
 
 > **PHP çalıştırma ortamı (13 Eylül 2026, canlıda üç turda çözüldü):** bu
 > sunucu **LiteSpeed + CloudLinux Alt-PHP** kullanıyor. Cron satırındaki
@@ -690,7 +699,8 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
 - **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
-- `finalize.php` yazıldı (§6) ama production cron kaydı HÂLÂ elle eklenmedi
+- `finalize.php` yazıldı ve production cron kaydı 13 Eylül 2026'da eklendi (§6);
+  mekanizma canlıda uçtan uca çalıştı — bu madde ARTIK AÇIK DEĞİLDİR
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
 - **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı

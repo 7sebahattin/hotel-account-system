@@ -148,6 +148,10 @@ yüzden artisan komutları ALT SÜREÇ olarak değil, AYNI SÜREÇTE
 yakalanır). Bootstrap'tan ÖNCE `APP_RUNNING_IN_CONSOLE=true` yazılır
 (Laravel'in kendi desteklediği açık kapı) ve süre/bellek limiti gevşetilir.
 Sürüm kapısı MUTLAKTIR (yalnızca 8.3, §2); uygun değilse marker KORUNUR.
+**Mekanizma 13 Eylül 2026 20:30'da canlıda uçtan uca çalıştı:** yedi adım
+sırayla koştu (migrate: "Nothing to migrate" — bu paket migration
+içermiyor, `stays.force_delete` seeder'dan gelen bir YETKİdir) ve işaret
+dosyası silindi. Deploy sonrası elle müdahale artık GEREKMİYOR.
 
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
