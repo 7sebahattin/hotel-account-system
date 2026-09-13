@@ -2398,3 +2398,93 @@ edildi, filtresizken KAPALI, filtreliyken AÇIK; `trashed` gizli input'u,
 (yeni), `resources/css/app.css`, `app/Modules/Core/Filters/QueryFilter.php`,
 `app/Modules/{Companies,Stays,Payments,CashBook,AuditLog}` liste view'ları,
 `AuditLogController`, `StatementController`, `CLAUDE.md`.
+
+---
+
+## K-109 · Kalıcı silinen kaydın ekstre izi, denetim kaydı detayı ve TL karşılığı önizleme hatası
+**Tarih:** 13 Eylül 2026 · **Kullanıcı talimatı** (üç madde, tek turda)
+
+**Bağlam:** Kullanıcı canlıda `stays.force_delete` ile iptal edilmiş bir
+konaklamayı (`stay #14`, "SADSDADS") kalıcı olarak sildi. `stays` satırı
+gerçekten gitti, ama cari ekstrede o kaydın İKİ ledger hareketi (borç + iptal
+ters kaydı) "Kaynak kayıt bulunamadı" etiketiyle görünmeye devam etti; üstelik
+kur anlık görüntüsü artık bulunamadığı için o para biriminin TÜM TL zinciri
+"TL karşılığı eksik veri nedeniyle tam değil" işaretlendi. Kullanıcının
+sözleri: *"kalıcı olarak sildiğim bir veri yok olsun"*, *"admin tarafından
+yapılan işlemler sadece audit de görünsün"*.
+
+### 1. Gizleme, SİLME değil — ledger append-only kalır
+**Karar:** `ledger_entries` üzerinde HİÇBİR satır silinmez veya değiştirilmez
+(CLAUDE.md §6/L1 ihlal EDİLMEDİ; DB tetikleyicileri yerinde durur). Bunun
+yerine cari ekstre, kaynak kaydı ARTIK VAR OLMAYAN ve neti TAM OLARAK SIFIR
+olan hareket gruplarını GÖSTERMEZ.
+
+**Gerekçe:** Talebin lafzı (satırları sil) mimarinin temel değişmeziyle
+çelişiyordu. Ama talebin AMACI — "silinen kaydın izi normal dökümde
+görünmesin, denetimde kalsın" — CLAUDE.md'nin ZATEN sahip olduğu bir ilkeyle
+birebir aynıdır: *"İptal normal muhasebe dökümünde gizlenir; append-only
+finansal ve denetim izi korunur."* Bu yüzden yeni bir ilke icat edilmedi,
+var olan ilke kalıcı silmeye genişletildi.
+
+**Pazarlıksız güvenlik kapısı:** gizleme İKİ koşul birlikte sağlanırsa
+uygulanır — (a) kaynak kaydı yok, (b) o kaynağa ait hareketlerin neti sıfır.
+İkinci koşul olmadan ekstrenin kapanış bakiyesi defterin gerçek bakiyesinden
+(§6/L4) sessizce KOPARDI. Kalıcı silme yalnızca ZATEN İPTAL EDİLMİŞ kayıtta
+mümkün olduğu için (iptal ters kaydı zaten yazmıştır) pratikte net her zaman
+sıfırdır; koşul yine de korunur. Neti sıfır OLMAYAN bir yetim kaynak eskisi
+gibi "Kaynak kayıt bulunamadı" satırı olarak görünmeye devam eder — para
+hiçbir koşulda sessizce kaybolmaz (`neti_sifir_olmayan_yetim_kayit_gizlenmez`).
+
+**Modül sınırı:** `LedgerStatementService::forCompany()` isteğe bağlı bir
+`?callable $resolveExistingSources` alır. Ledger bu çağrıyla da hiçbir modülü
+TANIMAZ (§4.3/3): hangi kimliğin hâlâ var olduğunu ÇAĞIRAN taraf
+(`StatementController`, Companies modülü) söyler. Yeni bir soyutlama katmanı
+açılmadı (§18) — sade bir argüman.
+
+**İki çağrı yerinin ikisi de bağlanır:** `statementData()`nin filtreli çağrısı
+VE `tlEquivalents()`in filtresiz TEMEL çağrısı. İkincisi atlanırsa silinen
+kaydın kur anlık görüntüsü bulunamaz ve para biriminin TL zinciri "eksik"
+işaretlenirdi — oysa hareketler zaten gösterilmiyor.
+
+**Etkilenmeyenler:** bakiye (§6/L4) değişmez, çünkü gizlenen grup zaten sıfır
+nettir. Firma detayı/pano TL toplamları `stays`/`payments` tablolarını
+sorguladığı için silinen kayıt oralarda zaten yoktu.
+
+### 2. Denetim kaydı detay ekranı (`audit.show`)
+**Karar:** Liste satırları kendi detay sayfasına açılır. Ekran SALT
+OKUNURDUR; `AuditLogPolicy::view()` liste ile AYNI `audit.view` yetkisine
+bağlıdır — **yeni yetki AÇILMADI.**
+
+**Gerekçe:** Listedeki "Değişiklik" kolonu yalnızca alan ADLARINI
+gösterebiliyordu. Detay ekranı aynı kaydın eski/yeni DEĞERLERİNİ alan alan
+açar (`AuditLog::changes()`), morph anahtarını Türkçe etikete çevirir
+(`subjectTypeLabel()`) ve IP/adres/tarayıcı bilgisini gösterir. Yeni bir veri
+kapısı açılmaz: listeyi görebilen kullanıcı zaten aynı satırın özetini
+görüyordu. Yazma/düzenleme/silme ucu YOKTUR (§5.6) ve bu testle korunur.
+
+### 3. TL karşılığı önizlemesindeki 100 katlık hata
+**Bağlam:** Kullanıcının ekran görüntüsünde 1 EUR × kur 55 için önizleme
+"≈ 0,55 ₺" yazıyordu.
+
+**Karar/Gerekçe:** `resources/js/app.js`'te hesap ÜÇ KEZ kopyalanmıştı
+(Konaklama, Tahsilat, Makbuz Defteri) ve üçünde de AYNI hata vardı: kur
+ölçeği iki kez bölünüyordu (`/ 100 / 100`). Hesap tek yere alındı ve
+sunucudaki `Core\Support\Money::multiplyByRate()` ile BİREBİR aynı hâle
+getirildi (kur 10.000 ölçeğinde tamsayı, yarım yukarı yuvarlama). Kur
+ayrıştırıcı da artık DÖRT ondalık kabul eder — kolon `DECIMAL(10,4)`'tür ve
+sunucu dört basamağı kabul ederken önizleme ikide kesiyor, geçerli bir kurda
+sessizce boş kalıyordu. Sekiz örnek üzerinde JS ve PHP çıktıları birebir
+karşılaştırılarak doğrulandı.
+
+**Not:** Bu yalnızca ÖNİZLEME hatasıydı. Sunucu tarafı en baştan doğruydu ve
+kullanıcının istediği davranış zaten uygulanıyordu: tutar SEÇİLEN PARA
+BİRİMİNDE saklanır ve cariye o para biriminde yazılır (§6/L5); TL karşılığı
+yalnızca `try_equivalent` olarak, salt bilgi amaçlı durur ve `ledger_entries`e
+HİÇ yazılmaz (`ExchangeRateTest` bunu zaten kilitliyordu).
+
+**Etkilenen dosyalar:** `app/Modules/Ledger/Services/LedgerStatementService.php`,
+`app/Modules/Companies/Http/Controllers/StatementController.php`,
+`app/Modules/AuditLog/{Models/AuditLog,Policies/AuditLogPolicy,Http/Controllers/AuditLogController,Routes/web}.php`,
+`app/Modules/AuditLog/Resources/views/{index,show}.blade.php`,
+`resources/js/app.js`, `tests/Feature/Stays/StayForceDeleteTest.php`,
+`tests/Feature/AuditLog/AuditLogDetailTest.php`, `CLAUDE.md`.

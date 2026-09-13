@@ -33,9 +33,19 @@ class LedgerStatementService
      * Yürüyen bakiye SQL'de değil PHP'de, kronolojik sırada ve para birimi
      * bazında hesaplanır; her satır yalnızca KENDİ para biriminin bakiyesini
      * taşır (CLAUDE.md §6/L5).
+     *
+     * `$resolveExistingSources` isteğe bağlıdır ve verildiğinde kaynak kaydı
+     * ARTIK VAR OLMAYAN, neti SIFIR olan hareket çiftlerini ekstreden düşürür
+     * (bkz. `withoutDeletedSources()`). Ledger bu çağrıyla da hiçbir modülü
+     * TANIMAZ (CLAUDE.md §4.3/3): hangi kimliğin hâlâ var olduğunu çağıran
+     * taraf söyler, servis yalnızca `['stay' => [1, 2], ...]` biçiminde bir
+     * cevap bekler.
      */
-    public function forCompany(int $companyId, StatementCriteria $criteria): Statement
-    {
+    public function forCompany(
+        int $companyId,
+        StatementCriteria $criteria,
+        ?callable $resolveExistingSources = null,
+    ): Statement {
         $carryForwards = $this->carryForwards($companyId, $criteria);
 
         // Bakiye evreni: tarih aralığı + para birimi. Tür/arama filtreleri
@@ -44,6 +54,8 @@ class LedgerStatementService
             ->orderBy('entry_date')
             ->orderBy('id')
             ->get();
+
+        $entries = $this->withoutDeletedSources($entries, $resolveExistingSources);
 
         $running = $carryForwards;
         $debits = [];
@@ -220,6 +232,95 @@ class LedgerStatementService
     }
 
     // ------------------------------------------------------------------ iç
+
+    /**
+     * Kaynak kaydı KALICI olarak silinmiş, neti SIFIR olan hareketleri düşürür.
+     *
+     * Gerekçe (kullanıcı talimatı, 13 Eylül 2026): Admin bir konaklamayı
+     * kalıcı olarak sildiğinde (`stays.force_delete`) o kaydın izi normal
+     * muhasebe dökümünde kalmamalı, YALNIZCA denetim kaydında görünmelidir.
+     *
+     * `ledger_entries` yine de APPEND-ONLY'dir (CLAUDE.md §6/L1): burada
+     * hiçbir satır SİLİNMEZ veya DEĞİŞTİRİLMEZ — yalnızca GÖSTERİMDEN düşer.
+     * Bu, iptal edilmiş kaydın normal dökümde gizlenmesiyle AYNI ilkedir.
+     *
+     * İki koşul BİRLİKTE aranır ve ikincisi pazarlıksızdır:
+     *  1. kaynak kaydı (ör. `stay #14`) artık yok, ve
+     *  2. o kaynağa ait hareketlerin neti bu kapsamda TAM OLARAK SIFIR.
+     *
+     * İkinci koşul olmadan gizleme, ekstrenin gösterdiği kapanış bakiyesini
+     * defterin gerçek bakiyesinden (§6/L4) sessizce KOPARIRDI. Kalıcı silme
+     * yalnızca ZATEN İPTAL EDİLMİŞ bir kayıtta mümkün olduğu için (iptal
+     * ters kaydı zaten yazmıştır) pratikte net her zaman sıfırdır; koşul
+     * yine de korunur — para hiçbir koşulda sessizce kaybolmaz. Neti sıfır
+     * OLMAYAN bir yetim kaynak eskisi gibi "Kaynak kayıt bulunamadı" satırı
+     * olarak görünmeye devam eder.
+     *
+     * @param  Collection<int, LedgerEntry>  $entries
+     * @return Collection<int, LedgerEntry>
+     */
+    private function withoutDeletedSources(Collection $entries, ?callable $resolveExistingSources): Collection
+    {
+        if ($resolveExistingSources === null || $entries->isEmpty()) {
+            return $entries;
+        }
+
+        /** @var array<string, array<int, int>> $referenced */
+        $referenced = [];
+
+        foreach ($entries as $entry) {
+            if ($entry->source_type !== null && $entry->source_id !== null) {
+                $referenced[(string) $entry->source_type][] = (int) $entry->source_id;
+            }
+        }
+
+        if ($referenced === []) {
+            return $entries;
+        }
+
+        $referenced = array_map(
+            fn (array $ids): array => array_values(array_unique($ids)),
+            $referenced,
+        );
+
+        /** @var array<string, array<int, int>> $existing */
+        $existing = $resolveExistingSources($referenced);
+
+        // Yalnızca kaynağı kaybolmuş grupların netini hesapla.
+        $nets = [];
+
+        foreach ($entries as $entry) {
+            $key = $this->sourceKey($entry);
+
+            if ($key === null || in_array((int) $entry->source_id, $existing[(string) $entry->source_type] ?? [], true)) {
+                continue;
+            }
+
+            $nets[$key] = ($nets[$key] ?? Money::zero())->add($entry->signedAmount());
+        }
+
+        $hidden = array_keys(array_filter($nets, fn (Money $net): bool => $net->isZero()));
+
+        if ($hidden === []) {
+            return $entries;
+        }
+
+        return $entries->reject(function (LedgerEntry $entry) use ($hidden): bool {
+            $key = $this->sourceKey($entry);
+
+            return $key !== null && in_array($key, $hidden, true);
+        })->values();
+    }
+
+    /** 'stay:14' — kaynak taşımayan hareketlerde null. */
+    private function sourceKey(LedgerEntry $entry): ?string
+    {
+        if ($entry->source_type === null || $entry->source_id === null) {
+            return null;
+        }
+
+        return $entry->source_type.':'.$entry->source_id;
+    }
 
     /**
      * Tarih aralığından ÖNCEKİ net bakiye (devreden), para birimi bazında.

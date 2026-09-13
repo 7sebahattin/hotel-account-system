@@ -37,4 +37,20 @@ class AuditLogController extends Controller
             'activeFilterCount' => QueryFilter::countActiveFilters($request),
         ]);
     }
+
+    /**
+     * Tek denetim kaydının detayı (kullanıcı talimatı, 13 Eylül 2026).
+     *
+     * Listedeki "Değişiklik" kolonu yalnızca alan ADLARINI gösterebiliyordu;
+     * bu ekran aynı kaydın eski/yeni DEĞERLERİNİ alan alan açar. Salt
+     * okunurdur — yazma, düzenleme ve silme uçları burada da yoktur.
+     */
+    public function show(AuditLog $auditLog): View
+    {
+        $this->authorize('view', $auditLog);
+
+        return view('audit::show', [
+            'log' => $auditLog->load('user'),
+        ]);
+    }
 }

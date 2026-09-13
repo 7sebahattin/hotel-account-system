@@ -173,7 +173,21 @@ class StatementController extends Controller
     private function statementData(Request $request, Company $company): array
     {
         $criteria = StatementCriteria::fromRequest($request);
-        $statement = $this->statements->forCompany($company->getKey(), $criteria);
+
+        // Kaynak varlığı ekstre üretilirken TEK KEZ çözülür ve iki iş için
+        // kullanılır: (1) kalıcı silinmiş kaydın neti sıfır olan hareketlerini
+        // ekstreden düşürmek, (2) kalan satırlara kaynak bağlantısı vermek.
+        $existingSources = [];
+
+        $statement = $this->statements->forCompany(
+            $company->getKey(),
+            $criteria,
+            function (array $referenced) use (&$existingSources): array {
+                $existingSources = $this->existingSources($referenced);
+
+                return $existingSources;
+            },
+        );
 
         return [
             'company' => $company,
@@ -181,7 +195,7 @@ class StatementController extends Controller
             'criteria' => $criteria,
             'currencies' => Currency::cases(),
             'types' => LedgerEntryType::filterable(),
-            'existingSources' => $this->existingSources($statement->rows),
+            'existingSources' => $existingSources,
             'fx' => $this->tlEquivalents($company->getKey(), $criteria),
         ];
     }
@@ -190,27 +204,18 @@ class StatementController extends Controller
      * Hangi kaynak kayıtların hâlâ var olduğu — kaynak tipi başına TEK sorgu.
      *
      * Ledger'ın doğruluğu kaynak kayda bağlı değildir: kayıt silinmiş olsa
-     * bile ekstre satırı geçerlidir. Bu yüzden bağlantı vermeden önce varlığı
-     * toplu olarak sorulur; satır başına sorgu (N+1) atılmaz.
+     * bile ekstre satırı geçerlidir (yalnızca neti sıfır olan yetim çiftler
+     * gösterimden düşer, bkz. `LedgerStatementService::withoutDeletedSources()`).
+     * Bu yüzden varlık toplu olarak sorulur; satır başına sorgu (N+1) atılmaz.
      *
-     * @param  array<int, StatementRow>  $rows
+     * @param  array<string, array<int, int>>  $referenced
      * @return array<string, array<int, int>>
      */
-    private function existingSources(array $rows): array
+    private function existingSources(array $referenced): array
     {
-        $ids = ['stay' => [], 'payment' => []];
-
-        foreach ($rows as $row) {
-            $type = (string) $row->entry->source_type;
-
-            if (isset($ids[$type]) && $row->entry->source_id !== null) {
-                $ids[$type][] = $row->entry->source_id;
-            }
-        }
-
         return [
-            'stay' => $this->stays->existingIds(array_values(array_unique($ids['stay']))),
-            'payment' => $this->payments->existingIds(array_values(array_unique($ids['payment']))),
+            'stay' => $this->stays->existingIds(array_values($referenced['stay'] ?? [])),
+            'payment' => $this->payments->existingIds(array_values($referenced['payment'] ?? [])),
         ];
     }
 
@@ -274,7 +279,15 @@ class StatementController extends Controller
      */
     private function tlEquivalents(int $companyId, StatementCriteria $criteria): array
     {
-        $baseline = $this->statements->forCompany($companyId, new StatementCriteria);
+        // Çözücü BURADA da geçilir: kalıcı silinmiş kaydın hareketleri temel
+        // zincirden de düşmelidir. Aksi hâlde o kaydın kur anlık görüntüsü
+        // bulunamaz ve para biriminin TÜM TL zinciri "eksik veri" işaretlenirdi
+        // — oysa hareketler zaten ekstrede gösterilmiyor.
+        $baseline = $this->statements->forCompany(
+            $companyId,
+            new StatementCriteria,
+            $this->existingSources(...),
+        );
         $snapshots = $this->exchangeRateSnapshots($baseline->rows);
 
         $running = [];

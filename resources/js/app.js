@@ -241,6 +241,59 @@ function initSubmitGuard() {
 
 document.addEventListener('DOMContentLoaded', initSubmitGuard);
 
+/*
+ * Para ve kur biçimlendirme yardımcıları — TEK kaynak.
+ *
+ * Üç form (Konaklama, Tahsilat, Tahsilat Makbuzu Defteri) aynı "TL karşılığı"
+ * önizlemesini gösterir. Hesap üç kez KOPYALANMIŞTI ve üçünde de AYNI hata
+ * vardı: kur ölçeği iki kez bölünüyor, sonuç 100 kat küçük çıkıyordu
+ * (1 EUR × 55 → "0,55 ₺" yerine "55,00 ₺" olmalı). Hesap artık burada TEK
+ * yerdedir ve sunucudaki `Core\Support\Money::multiplyByRate()` ile birebir
+ * aynıdır: kur 10.000 ölçeğinde tamsayıdır, yuvarlama yarım yukarıdır.
+ *
+ * Bu önizleme YALNIZCA bilgi amaçlıdır: kaydedilen tutar her zaman seçilen
+ * PARA BİRİMİNDEDİR (CLAUDE.md §6/L5); TL karşılığı sunucuda yeniden
+ * hesaplanıp yalnızca `try_equivalent` olarak saklanır, cariye hiç yazılmaz.
+ */
+
+/** '2.500,50' / '2500.5' → 250050 kuruş. Geçersizse null. */
+function parseMinorUnits(raw) {
+    const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
+    const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+    if (!match) return null;
+
+    return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
+}
+
+/**
+ * '51,2345' → 512345 (kur × 10.000). Geçersizse null.
+ *
+ * Kur kolonu DECIMAL(10,4)'tür ve sunucu dört ondalık kabul eder; önizleme de
+ * iki basamakta kesmez, aksi hâlde geçerli bir kur girildiğinde sessizce boş
+ * kalırdı.
+ */
+function parseRateScaled(raw) {
+    const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
+    const match = /^(\d+)(?:\.(\d{1,4}))?$/.exec(value);
+    if (!match) return null;
+
+    return parseInt(match[1], 10) * 10000 + parseInt((match[2] ?? '').padEnd(4, '0'), 10);
+}
+
+/** 250050 → '2.500,50' (sembol verilmişse sonuna eklenir). */
+function formatMinorUnits(minor, symbol = '') {
+    const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const fraction = String(minor % 100).padStart(2, '0');
+    const text = `${whole},${fraction}`;
+
+    return symbol === '' ? text : `${text} ${symbol}`;
+}
+
+/** tutar(kuruş) × kur(10.000 ölçeği) → TL kuruş. Money::multiplyByRate() ile aynı. */
+function tryEquivalentMinor(amountMinor, rateScaled) {
+    return Math.floor((amountMinor * rateScaled + 5000) / 10000);
+}
+
 /**
  * Konaklama formu — ücret giriş şekli.
  *
@@ -275,19 +328,7 @@ function initStayPricing() {
         return option?.dataset.symbol || currencySelect?.value || 'TRY';
     };
 
-    // '2.500,50' / '2500.5' → 250050 kuruş. Geçersizse null.
-    const toMinorUnits = (raw) => {
-        const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
-        const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
-        if (!match) return null;
-        return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
-    };
 
-    const formatMinorUnits = (minor, symbol) => {
-        const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        const fraction = String(minor % 100).padStart(2, '0');
-        return `${whole},${fraction} ${symbol}`;
-    };
 
     const nights = () => {
         if (!checkIn?.value || !checkOut?.value) return null;
@@ -301,7 +342,7 @@ function initStayPricing() {
     const renderTotal = () => {
         if (!totalOutput) return;
         const count = nights();
-        const rate = toMinorUnits(rateInput?.value);
+        const rate = parseMinorUnits(rateInput?.value);
         if (count === null || rate === null || rate === 0) {
             totalOutput.textContent = '—';
             return;
@@ -327,15 +368,13 @@ function initStayPricing() {
     // formda görünmemesi kullanıcı için daha dürüsttür.
     const renderExchangeRatePreview = () => {
         if (!exchangeRatePreview) return;
-        const amountMinor = toMinorUnits(amountInput?.value);
-        const rateMinor = toMinorUnits(exchangeRateInput?.value);
-        if (amountMinor === null || rateMinor === null) {
+        const amountMinor = parseMinorUnits(amountInput?.value);
+        const rateScaled = parseRateScaled(exchangeRateInput?.value);
+        if (amountMinor === null || rateScaled === null) {
             exchangeRatePreview.textContent = '';
             return;
         }
-        // rateMinor kuruş cinsinden 'kur × 100'dür (ör. 51,20 → 5120).
-        // TL karşılığı = tutar(kuruş) × kur(yüzde) / 100 / 100 — tamsayı bölme.
-        const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+        const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
         exchangeRatePreview.textContent = `≈ ${formatMinorUnits(equivalentMinor, '₺')} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
     };
 
@@ -380,28 +419,17 @@ function initPaymentExchangeRate() {
     const rateInput = root.querySelector('[data-exchange-rate]');
     const preview = root.querySelector('[data-exchange-rate-preview]');
 
-    const toMinorUnits = (raw) => {
-        const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
-        const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
-        if (!match) return null;
-        return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
-    };
 
-    const formatMinorUnits = (minor) => {
-        const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-        const fraction = String(minor % 100).padStart(2, '0');
-        return `${whole},${fraction}`;
-    };
 
     const renderPreview = () => {
         if (!preview) return;
-        const amountMinor = toMinorUnits(amountInput?.value);
-        const rateMinor = toMinorUnits(rateInput?.value);
-        if (amountMinor === null || rateMinor === null) {
+        const amountMinor = parseMinorUnits(amountInput?.value);
+        const rateScaled = parseRateScaled(rateInput?.value);
+        if (amountMinor === null || rateScaled === null) {
             preview.textContent = '';
             return;
         }
-        const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+        const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
         preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
     };
 
@@ -439,28 +467,17 @@ function initReceiptBookExchangeRate() {
         const preview = root.querySelector('[data-exchange-rate-preview]');
         if (!currencySelect || !group || !rateInput) return;
 
-        const toMinorUnits = (raw) => {
-            const value = String(raw ?? '').trim().replace(/\s/g, '').replace(',', '.');
-            const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value);
-            if (!match) return null;
-            return parseInt(match[1], 10) * 100 + parseInt((match[2] ?? '').padEnd(2, '0'), 10);
-        };
 
-        const formatMinorUnits = (minor) => {
-            const whole = String(Math.trunc(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-            const fraction = String(minor % 100).padStart(2, '0');
-            return `${whole},${fraction}`;
-        };
 
         const renderPreview = () => {
             if (!preview) return;
-            const amountMinor = toMinorUnits(amountInput?.value);
-            const rateMinor = toMinorUnits(rateInput?.value);
-            if (amountMinor === null || rateMinor === null) {
+            const amountMinor = parseMinorUnits(amountInput?.value);
+            const rateScaled = parseRateScaled(rateInput?.value);
+            if (amountMinor === null || rateScaled === null) {
                 preview.textContent = '';
                 return;
             }
-            const equivalentMinor = Math.round((amountMinor * rateMinor) / 100 / 100);
+            const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
             preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı`;
         };
 

@@ -28,6 +28,7 @@
                 <x-ui.th>Kayıt</x-ui.th>
                 <x-ui.th>Değişiklik</x-ui.th>
                 <x-ui.th>IP</x-ui.th>
+                <x-ui.th align="right"><span class="sr-only">İşlemler</span></x-ui.th>
             </tr>
         </thead>
         <tbody>
@@ -50,9 +51,12 @@
                         @endif
                     </td>
                     <td class="px-4 py-3 font-mono text-xs text-mut">{{ $log->ip_address ?? '—' }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <x-ui.button variant="ghost" :href="route('audit.show', $log)">Görüntüle</x-ui.button>
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="px-4 py-10 text-center text-mut">Kayıt bulunamadı.</td></tr>
+                <tr><td colspan="7" class="px-4 py-10 text-center text-mut">Kayıt bulunamadı.</td></tr>
             @endforelse
         </tbody>
     </x-ui.table>
@@ -60,12 +64,14 @@
     <div class="mt-4 space-y-3 lg:hidden">
         @forelse ($logs as $log)
             <x-ui.card>
-                <div class="flex items-start justify-between gap-3">
-                    <span class="text-tx">{{ $log->event->label() }}</span>
-                    <span class="shrink-0 text-xs tabular-nums text-mut">{{ $log->created_at->format('d.m.Y H:i') }}</span>
-                </div>
-                <p class="mt-1 text-sm text-mut">{{ $log->user?->name ?? $log->user_name ?? '—' }}</p>
-                <p class="mt-1 font-mono text-xs break-all text-mut">{{ $log->subjectLabel() }}</p>
+                <a href="{{ route('audit.show', $log) }}" class="block min-h-11">
+                    <div class="flex items-start justify-between gap-3">
+                        <span class="text-tx">{{ $log->event->label() }}</span>
+                        <span class="shrink-0 text-xs tabular-nums text-mut">{{ $log->created_at->format('d.m.Y H:i') }}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-mut">{{ $log->user?->name ?? $log->user_name ?? '—' }}</p>
+                    <p class="mt-1 font-mono text-xs break-all text-mut">{{ $log->subjectLabel() }}</p>
+                </a>
             </x-ui.card>
         @empty
             <x-ui.empty />

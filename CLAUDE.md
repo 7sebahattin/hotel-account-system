@@ -124,7 +124,9 @@ konaklamanın borcu hard-delete ile KALDIRILAMAZ — borç deftere kalıcı yaz�
 ve yalnızca ters kayıtla sıfırlanabilir; hard-delete bu yüzden yalnızca borcu
 zaten sıfırlanmış (İptal edilmiş) bir kaydın artık gereksiz `stays` satırını
 temizler, `ledger_entries` ve `payment_allocations`a HİÇ dokunmaz (ikisi de
-append-only kalır). Bu kayda daha önce bir ödeme dağılımı uygulanmışsa (geçmişte
+append-only kalır). **13 Eylül 2026 eki (K-109):** bu hareketler artık cari
+EKSTREDE de gösterilmez — satırlar deftere yazılı kalır, yalnızca görünümden
+düşer; ayrıntı ve pazarlıksız "neti sıfır" koşulu §8/Ledger'dadır. Bu kayda daha önce bir ödeme dağılımı uygulanmışsa (geçmişte
 serbest bırakılmış olsa bile) `payment_allocations.stay_id` FK kısıtı
 (RESTRICT) silmeyi veritabanı düzeyinde reddeder (`StayHasLinkedAllocations`).
 Patron/Personel için mevcut Düzenle/İptal yetki kapsamı DEĞİŞMEDİ. Firma
@@ -1303,6 +1305,23 @@ finansal hesap yazılmaz. Servis firmayı yalnızca `int $companyId` olarak bili
   İptal / Ters Kayıt / Açılış Bakiyesi / Diğer. Ham `source_type` ana tabloda gösterilmez;
   tanınmayan bir kaynak tipi "Diğer" olur — enum veri yolunu kısıtlamaz, yalnızca etiketler.
 - **Ters kayıt gizlenmez:** ekstrede ayrı satır olarak, rozetle ve `[İPTAL]` açıklamasıyla görünür.
+- **Kaynağı KALICI SİLİNMİŞ, neti SIFIR olan hareket grubu ekstrede GÖSTERİLMEZ**
+  (K-109, 13 Eylül 2026, kullanıcı talimatı: *"kalıcı olarak sildiğim bir veri yok
+  olsun"*, *"admin tarafından yapılan işlemler sadece audit de görünsün"*). Satırlar
+  veritabanında KALIR — `ledger_entries` append-only'dir (§6/L1), hiçbir satır
+  silinmez/değiştirilmez, tetikleyiciler yerinde durur; iz denetim kaydında
+  görünmeye devam eder. Bu, "iptal normal muhasebe dökümünde gizlenir" ilkesinin
+  kalıcı silmeye genişletilmiş hâlidir. **İKİ koşul BİRLİKTE aranır ve ikincisi
+  pazarlıksızdır:** (a) kaynak kaydı artık yok, (b) o kaynağa ait hareketlerin
+  neti TAM OLARAK SIFIR. İkincisi olmadan ekstrenin kapanış bakiyesi defterin
+  gerçek bakiyesinden (§6/L4) sessizce KOPARDI; neti sıfır OLMAYAN bir yetim
+  kaynak eskisi gibi "Kaynak kayıt bulunamadı" satırı olarak görünür. Kararı
+  `LedgerStatementService::withoutDeletedSources()` verir; hangi kimliğin hâlâ
+  var olduğunu ÇAĞIRAN taraf söyler (`?callable $resolveExistingSources`) —
+  Ledger yine hiçbir modülü tanımaz (§4.3/3). Çözücü İKİ çağrıya da geçilir:
+  `statementData()`nin filtreli çağrısı ve `tlEquivalents()`in filtresiz TEMEL
+  çağrısı; ikincisi atlanırsa silinen kaydın kuru bulunamaz ve para biriminin
+  TÜM TL zinciri gereksiz yere "eksik veri" işaretlenir.
 - **Kaynak kayda bağlantı** verilir (`stay`/`payment`). Ledger'ın doğruluğu kaynak kayda
   bağlı DEĞİLDİR: kayıt yoksa satır geçerli kalır ve ekran "Kaynak kayıt bulunamadı" der,
   hata vermez. Varlık kontrolü kaynak tipi başına tek sorgudur (N+1 yok).
@@ -1560,6 +1579,16 @@ ya da ters kaydettiği cari hareketlerin kimliklerini de taşımak zorundadır; 
 ifade edemez. `LedgerEntry` ayrıca değiştirilemez olduğu için `updated`/`deleted` olayı hiç yoktur.
 `old_values`/`new_values` sadece **değişen alanları** içerir. `password`, `remember_token` asla loglanmaz.
 Ekran: tarih/kullanıcı/olay/kayıt tipi filtreli liste, salt okunur.
+
+**Detay ekranı (`audit.show`, K-109, kullanıcı talimatı):** listedeki her satır
+kendi detay sayfasına açılır (masaüstünde "Görüntüle", mobilde kartın TAMAMI
+bağlantıdır, §11.5). Detay eski/yeni DEĞERLERİ alan alan gösterir
+(`AuditLog::changes()`), morph anahtarını Türkçe etikete çevirir
+(`AuditLog::subjectTypeLabel()`) ve IP/adres/tarayıcı bilgisini açar. **Yeni
+yetki AÇILMADI:** `AuditLogPolicy::view()` liste ile AYNI `audit.view`
+yetkisine bağlıdır — listeyi görebilen kullanıcı zaten aynı satırın özetini
+görüyordu. Ekran SALT OKUNURDUR: yazma/düzenleme/silme ucu yoktur (§5.6) ve
+bu `AuditLogDetailTest` ile korunur.
 
 ---
 
@@ -1878,6 +1907,17 @@ talimatı):** konaklama formundaki `company_id` seçimi artık yazarak aranabili
 DOM'dan kaldırılmaz (yalnızca `hidden` olur) ve form değeri HER ZAMAN ondan
 okunur/yazılır; JS çalışmazsa normal açılır liste olarak kalır (progresif
 geliştirme).
+
+**TL karşılığı önizlemesi TEK kaynaktan hesaplanır** (K-109): `parseMinorUnits()`
+/ `parseRateScaled()` / `formatMinorUnits()` / `tryEquivalentMinor()` modül
+düzeyindedir ve üç form (Konaklama, Tahsilat, Makbuz Defteri) bunları PAYLAŞIR.
+Hesap daha önce üç kez KOPYALANMIŞTI ve üçünde de aynı hata vardı — kur ölçeği
+iki kez bölünüyor, sonuç 100 kat küçük çıkıyordu (1 EUR × 55 → "0,55 ₺").
+`tryEquivalentMinor()` sunucudaki `Core\Support\Money::multiplyByRate()` ile
+BİREBİR aynıdır: kur 10.000 ölçeğinde tamsayıdır (kolon `DECIMAL(10,4)` — dört
+ondalık kabul edilir), yuvarlama yarım yukarıdır, kayan nokta kullanılmaz. Bu
+önizleme yalnızca bilgi amaçlıdır; kaydedilen tutar HER ZAMAN seçilen para
+birimindedir (§6/L5) ve TL karşılığı sunucuda yeniden hesaplanır.
 
 **Çift gönderim koruması:** her form gönderiminde submit butonları kilitlenir.
 Kilitleme `setTimeout(0)` ile yapılır — devre dışı bir butonun `name`/`value`

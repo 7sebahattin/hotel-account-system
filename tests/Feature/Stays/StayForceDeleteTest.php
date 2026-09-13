@@ -15,6 +15,7 @@ use App\Modules\Stays\Models\Stay;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -122,6 +123,63 @@ class StayForceDeleteTest extends TestCase
         $this->actingAs($personel)->delete(route('stays.destroy', $stay->fresh()))->assertForbidden();
 
         $this->assertDatabaseHas('stays', ['id' => $stay->id]);
+    }
+
+    /**
+     * Kullanıcı talimatı (13 Eylül 2026): "kalıcı olarak sildiğim bir veri yok
+     * olsun", "admin tarafından yapılan işlemler sadece audit de görünsün".
+     *
+     * Ledger satırları APPEND-ONLY olduğu için veritabanında KALIR (§6/L1) —
+     * ama neti sıfır oldukları ve kaynak kayıt artık var olmadığı için cari
+     * ekstrede GÖSTERİLMEZ. Bakiye ve denetim izi değişmez.
+     */
+    #[Test]
+    public function kalici_silinen_konaklama_cari_ekstrede_gorunmez(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $stay = $this->makeStay();
+        $this->stays->cancel($stay, $admin);
+
+        $this->actingAs($admin)
+            ->get(route('statements.show', $this->company))
+            ->assertOk()
+            ->assertSee('John Smith');
+
+        $this->stays->forceDelete($stay->fresh(), $admin);
+
+        // Satırlar deftere yazılı KALIR — yalnızca gösterimden düşer.
+        $this->assertSame(2, LedgerEntry::query()->where('source_type', 'stay')->count());
+
+        foreach (['statements.show', 'statements.print'] as $route) {
+            $this->actingAs($admin)
+                ->get(route($route, $this->company))
+                ->assertOk()
+                ->assertDontSee('John Smith')
+                ->assertDontSee('Kaynak kayıt bulunamadı');
+        }
+    }
+
+    /**
+     * Güvenlik kapısı: gizleme YALNIZCA neti sıfır olan yetim gruplara
+     * uygulanır. Neti sıfır olmayan bir yetim kayıt (ör. iptal edilmeden
+     * ham SQL ile silinmiş bir satır) gizlenirse ekstrenin kapanış bakiyesi
+     * defterin gerçek bakiyesinden (§6/L4) sessizce KOPARDI.
+     */
+    #[Test]
+    public function neti_sifir_olmayan_yetim_kayit_gizlenmez(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $stay = $this->makeStay();
+
+        // İptal EDİLMEDEN (ters kayıt yazılmadan) kaydı ham SQL ile düşür:
+        // geriye tek yönlü, neti 9.000 olan bir yetim borç hareketi kalır.
+        DB::table('stays')->where('id', $stay->id)->delete();
+
+        $this->actingAs($admin)
+            ->get(route('statements.show', $this->company))
+            ->assertOk()
+            ->assertSee('John Smith')
+            ->assertSee('Kaynak kayıt bulunamadı');
     }
 
     #[Test]
