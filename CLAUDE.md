@@ -153,6 +153,48 @@ sırayla koştu (migrate: "Nothing to migrate" — bu paket migration
 içermiyor, `stays.force_delete` seeder'dan gelen bir YETKİdir) ve işaret
 dosyası silindi. Deploy sonrası elle müdahale artık GEREKMİYOR.
 
+## YAYIN AKIŞI — 13 Eylül 2026'dan itibaren geçerli (yeni oturumlar ÖNCE BUNU OKUSUN)
+
+**"Canlıya al" = `main` dalına push.** Başka hiçbir elle adım YOKTUR: elle
+workflow tetikleme, onay metni yazma, sunucuda migrate/seed/cache koşturma
+KALDIRILDI. Detay ve gerekçe: `docs/k107-otomatik-yayin.md`, `docs/deploy-lemon.md`
+§6/§9, §15 (aşağıda).
+
+```
+main'e push → Actions "Deploy (Lemon)": vendor (8.3) + Vite derlemesi
+            → FTPS aktarımı (/lemon-app/)
+            → storage/app/deploy-pending işareti (ayrı tek dosyalık FTP yüklemesi)
+            → cPanel cron (dakikalık) → deploy/finalize.php:
+              optimize:clear → migrate --force → RolePermissionSeeder → 4× cache
+            → workflow, işaretin silinmesini FTPS ile izler (15 sn × 12) ve
+              SONUCU Actions ekranına yazar; takılırsa sunucudaki
+              lemon-deploy.log'un son 80 satırını da oraya döker
+```
+
+**Claude bu depoda `main`'e Bash ile push EDEMEZ** — uzak oturum ortamı
+`git push origin main` komutunu "production deploy" sayıp blokluyor. Çalışan
+yol: iş dalına (`claude/*`) normal `git push`, sonra GitHub MCP araçlarıyla
+`create_pull_request` + `merge_pull_request`. Merge'in kendisi `main`'e bir
+push olduğu için yayını tetikler. (Kullanıcı isterse `.claude/settings.json`
+içine `"permissions": {"allow": ["Bash(git push:*)"]}` ekleyerek doğrudan
+push'u açabilir — bu dosyayı Claude KENDİSİ düzenleyemez, ortam engelliyor.)
+
+**Sunucu gerçekleri (tekrar keşfetme, üçü de canlıda acı çekilerek bulundu):**
+LiteSpeed + CloudLinux Alt-PHP; cron'u çağıran `lsphp` CLI SAPI DEĞİL
+(`STDOUT`/`STDERR` sabitleri fatal verir), ve `proc_open` + `exec` BİRLİKTE
+kapalı (harici komut çalıştırılamaz → artisan AYNI SÜREÇTE `Kernel::call()`
+ile koşar). Sunucuda terminal erişimi YOK; tanılama yalnızca
+`lemon-deploy.log` üzerinden yapılır ve artık workflow onu kendisi indirir.
+
+**Açık konu (13 Eylül 2026, 21:00 civarı):** ilk otomatik yayınlarda (run #16,
+#17) işaret dosyası 3 dakikada silinmedi — dosya aktarımı BAŞARILI, eksik olan
+sunucu tarafı adımları. FTP listesi okunabildiği için bağlantı sorunu değil;
+ya cPanel cron kaydı artık koşmuyor ya da finalize bir adımda hata veriyor.
+Bir sonraki koşunun Actions çıktısındaki `----- lemon-deploy.log -----` bloğu
+kesin cevabı verir. Son BAŞARILI finalize: 13 Eylül 20:30 (run #15).
+
+---
+
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
 ---
