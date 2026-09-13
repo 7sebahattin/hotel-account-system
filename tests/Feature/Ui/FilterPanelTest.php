@@ -35,8 +35,6 @@ class FilterPanelTest extends TestCase
             'konaklamalar' => ['stays.index', ['status' => 'active']],
             'tahsilatlar' => ['payments.index', ['currency' => 'TRY']],
             'cari ekstre' => ['statements.index', ['currency' => 'EUR']],
-            'kasa hareketleri' => ['cashbook.movements.index', ['type' => 'expense']],
-            'devir geçmişi' => ['cashbook.transfers.index', ['status' => 'pending']],
             'denetim kaydı' => ['audit.index', ['event' => 'login']],
         ];
     }

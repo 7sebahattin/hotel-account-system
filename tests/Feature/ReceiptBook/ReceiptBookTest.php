@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature\ReceiptBook;
 
 use App\Modules\Authorization\Enums\RoleName;
-use App\Modules\CashBook\Models\CashMovement;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -67,7 +67,7 @@ class ReceiptBookTest extends TestCase
 
         $this->assertSame(0, Payment::query()->count());
         $this->assertSame(0, LedgerEntry::query()->count());
-        $this->assertSame(0, CashMovement::query()->count());
+        $this->assertSame(0, DB::table('cash_movements')->count());
     }
 
     #[Test]

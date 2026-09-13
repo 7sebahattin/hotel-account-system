@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  * Tahsilat Makbuzu Defteri kaydı (v2.1.1-C §4) — DOKÜMANTASYON/yazdırma
  * amaçlıdır, muhasebe kaydı DEĞİLDİR.
  *
- * Bu modelin `LedgerService`/`PaymentService`/`CashBookService` ile HİÇBİR
+ * Bu modelin `LedgerService`/`PaymentService` ile HİÇBİR
  * bağlantısı yoktur ve OLAMAZ: bir satırın var olması firma bakiyesini,
  * fiziksel kasayı ya da herhangi bir cari hareketi ETKİLEMEZ.
  *

@@ -1,24 +1,13 @@
 @extends('layouts.app')
 @section('title', 'Pano — '.config('app.name'))
 
-@section('lemon-bar-tabs')
-    @include('dashboard::_view-switch', ['active' => 'finance'])
-@endsection
 
-{{--
-    Finans görünümünde kasa verisi HİÇ YÜKLENMEZ (kullanıcı talimatı §17), bu
-    yüzden Lemon Bar'daki canlı durum metni burada boştur — o veriye zaten
-    sahip olmayan bir ekranda göstermek için ayrı bir sorgu YAZILMAZ.
---}}
 
 @section('content')
     <x-ui.page-header
         title="Pano"
         :subtitle="$today->translatedFormat('d F Y').' · Finans'" />
 
-    <div class="mt-4 md:hidden">
-        @include('dashboard::_view-switch', ['active' => 'finance'])
-    </div>
 
     @if ($summary->isEmpty())
         {{-- Boş kurulum: kullanıcı ne yapacağını buradan öğrenir. --}}

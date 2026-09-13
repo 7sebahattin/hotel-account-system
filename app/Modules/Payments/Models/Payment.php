@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Models;
 
 use App\Models\User;
-use App\Modules\CashBook\Models\CashSession;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Core\Enums\Currency;
@@ -59,7 +58,6 @@ use Illuminate\Support\Carbon;
  * @property-read User|null $creator
  * @property-read User|null $updater
  * @property-read User|null $canceller
- * @property-read CashSession|null $cashSession
  */
 class Payment extends Model
 {
@@ -155,18 +153,6 @@ class Payment extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
-    }
-
-    /**
-     * Tahsilatın OLUŞTURULDUĞU vardiya (varsa) — v2.1.1-A.1.
-     *
-     * Eloquent ilişki tanımı, §4.3/1'in izin verdiği TEK istisnadır (iş
-     * mantığı değil). NULL: oluşturma anında aktör açık bir vardiyayı
-     * yönetmiyordu — zaman damgasından ASLA tahmin edilmez (§8/Payments).
-     */
-    public function cashSession(): BelongsTo
-    {
-        return $this->belongsTo(CashSession::class);
     }
 
     public function canceller(): BelongsTo

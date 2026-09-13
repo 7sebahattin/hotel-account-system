@@ -4,14 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\ReceiptBook\Enums;
 
-/**
- * Makbuz üzerinde gösterilen ödeme şekli işareti — SALT bilgi amaçlıdır.
- *
- * `Payments\Enums\PaymentMethod` ile KASITLI olarak AYRI bir enum'dur: o
- * enum'un `Cash` değeri `CashBookService`'i TETİKLER (v2.1.1-A); bu modül
- * hiçbir muhasebe/kasa etkisi üretmediği için AYNI enum'u paylaşmak yanlış
- * bir bağ ima ederdi (§4.3 modül izolasyonu).
- */
+/** Makbuz üzerindeki ödeme şeklidir; muhasebe tahsilatından bağımsızdır. */
 enum ReceiptPaymentMethod: string
 {
     case Cash = 'cash';

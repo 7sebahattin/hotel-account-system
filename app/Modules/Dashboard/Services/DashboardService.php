@@ -6,22 +6,17 @@ namespace App\Modules\Dashboard\Services;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
-use App\Modules\CashBook\Services\CashBookService;
-use App\Modules\CashBook\Support\CashSessionSummary;
-use App\Modules\CashBook\Support\CashSessionTotals;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Dashboard\Support\CompanyBalanceRow;
 use App\Modules\Dashboard\Support\CurrencyTotals;
 use App\Modules\Dashboard\Support\FinancialSummary;
-use App\Modules\Dashboard\Support\OperationsSummary;
 use App\Modules\Dashboard\Support\PersonnelSummary;
 use App\Modules\Ledger\Services\LedgerStatementService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 
 /**
  * Pano verisini hazırlar. Ekranda hiçbir finansal hesap yapılmaz.
@@ -33,10 +28,7 @@ use Illuminate\Support\Collection;
  * toplamda birleştirilmez. Buradaki her toplam para birimi anahtarlı bir
  * dizidir ve hiçbir yerde birbirine çevrilmez — V1'de kur servisi yoktur.
  *
- * GÜN 11: Admin/Patron panosu artık İKİ ayrı, ayrı sorgulanan görünümdür —
- * `operations()` ("otelde şu an ne oluyor" — kasa) ve `finance()` ("para ve
- * cari hesap durumu" — ledger/firma). Personel hâlâ `personnel()` görür ve
- * ikisine de hiç dokunmaz.
+ * Personel kayıt özeti ile yönetici cari özeti ayrı yetkilendirilir.
  */
 class DashboardService
 {
@@ -45,7 +37,6 @@ class DashboardService
         private readonly CompanyService $companies,
         private readonly StayService $stays,
         private readonly PaymentService $payments,
-        private readonly CashBookService $cashBook,
     ) {}
 
     /**
@@ -125,58 +116,15 @@ class DashboardService
     }
 
     /**
-     * Operasyon görünümü — "Otelde şu anda ne oluyor?" Ledger/firma sorgusu
-     * hiç ÇALIŞMAZ; yalnızca kasa (`CashBookService`) sorgulanır.
-     *
-     * Sorgu bütçesi sabittir: `dashboardSnapshot()` (en fazla 3) + açık
-     * vardiyanın son hareketleri (1) + bekleyen devir kontrolü (1) +
-     * bugünün vardiyaları (1) + toplu özetleri (en fazla 4). Hiçbiri kayıt
-     * sayısıyla büyümez.
-     */
-    public function operations(Carbon $today): OperationsSummary
-    {
-        $cash = $this->cashBook->dashboardSnapshot();
-
-        $recentMovements = $cash !== null
-            ? $this->cashBook->movementsFor($cash->session, 6)
-            : new Collection;
-
-        $pendingOutgoing = null;
-
-        if ($cash !== null) {
-            $latest = $this->cashBook->latestTransferFrom($cash->session);
-            $pendingOutgoing = $latest?->isPending() === true ? $latest : null;
-        }
-
-        $sessionsToday = $this->cashBook->sessionsForDate($today);
-        $summariesToday = $this->cashBook->summariesFor($sessionsToday);
-
-        return new OperationsSummary(
-            cash: $cash,
-            recentMovements: $recentMovements,
-            pendingOutgoingTransfer: $pendingOutgoing,
-            todayTotals: $this->aggregateTodayTotals($summariesToday),
-            hasCountDifferenceToday: (new Collection($summariesToday))->contains(
-                static fn (CashSessionSummary $summary): bool => $summary->hasCountDifference(),
-            ),
-        );
-    }
-
-    /**
      * Personel panosu — firma cari verisi hiç sorgulanmaz (CLAUDE.md §7.4).
      *
-     * Personel yalnızca kendi üretkenliğini ve — sahibiyse — kendi kasasını
-     * görür. İşletmedeki açık vardiyanın VARLIĞI ve sahibi (tutar hariç)
-     * herkese görünürdür (CLAUDE.md §8/Kasa Defteri "Görünürlük").
+     * Yalnızca kendi kayıt adetlerini ve son kayıtlarını görür.
      */
     public function personnel(User $user, Carbon $today): PersonnelSummary
     {
         $userId = (int) $user->getKey();
         $dayStart = $today->copy()->startOfDay()->toDateTimeString();
         $weekStart = $today->copy()->startOfWeek()->toDateTimeString();
-
-        $activeSession = $this->cashBook->activeSession();
-        $ownsActive = $activeSession !== null && $activeSession->opened_by === $userId;
 
         return new PersonnelSummary(
             staysToday: $this->stays->countCreatedBySince($userId, $dayStart),
@@ -185,64 +133,12 @@ class DashboardService
             paymentsThisWeek: $this->payments->countCreatedBySince($userId, $weekStart),
             recentStays: $this->stays->recentCreatedBy($userId, 5),
             recentPayments: $this->payments->recentCreatedBy($userId, 5),
-            activeSession: $activeSession,
-            ownsActiveSession: $ownsActive,
-            mySummary: $ownsActive ? $this->cashBook->summaryFor($activeSession) : null,
-            myRecentMovements: $ownsActive ? $this->cashBook->movementsFor($activeSession, 6) : new Collection,
-            canOpenSession: $this->cashBook->canOpenSession($user),
-            pendingIncomingTransfer: $this->cashBook->pendingTransferFor($user),
         );
     }
 
     public function canSeeFinancials(User $user): bool
     {
         return $user->can(Permission::DashboardFinancial->value);
-    }
-
-    /**
-     * Bugünün vardiyalarındaki gelir/gider tiplerini para birimi bazında
-     * TOPLAR. Yeni bir sorgu YAZMAZ: `summariesFor()`'un zaten hesapladığı
-     * `CashSessionTotals` nesnelerini (para birimi eşleşince) toplar.
-     *
-     * @param  array<int, CashSessionSummary>  $summaries
-     * @return array<string, CashSessionTotals>
-     */
-    private function aggregateTodayTotals(array $summaries): array
-    {
-        /** @var array<string, CashSessionTotals> $totals */
-        $totals = [];
-
-        foreach ($summaries as $summary) {
-            foreach ($summary->totals as $code => $sessionTotals) {
-                $totals[$code] = isset($totals[$code])
-                    ? $this->combineTotals($totals[$code], $sessionTotals)
-                    : $sessionTotals;
-            }
-        }
-
-        $ordered = [];
-
-        foreach (Currency::values() as $code) {
-            if (isset($totals[$code])) {
-                $ordered[$code] = $totals[$code];
-            }
-        }
-
-        return $ordered;
-    }
-
-    private function combineTotals(CashSessionTotals $a, CashSessionTotals $b): CashSessionTotals
-    {
-        return new CashSessionTotals(
-            currency: $a->currency,
-            opening: $a->opening->add($b->opening),
-            roomIncome: $a->roomIncome->add($b->roomIncome),
-            extraIncome: $a->extraIncome->add($b->extraIncome),
-            expense: $a->expense->add($b->expense),
-            cashOut: $a->cashOut->add($b->cashOut),
-            cashIn: $a->cashIn->add($b->cashIn),
-            companyCollection: $a->companyCollection->add($b->companyCollection),
-        );
     }
 
     /**

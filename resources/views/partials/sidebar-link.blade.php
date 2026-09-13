@@ -1,16 +1,7 @@
 @php
     use App\Modules\Core\Support\NavIcons;
 
-    /*
-        Aktif öğe ÜÇ işaretle belirtilir: sol altın şerit, açık zemin ve
-        `aria-current`. Yalnızca renge güvenilmez (CLAUDE.md §11.6).
-
-        `$active` çağıran taraftan (partials/sidebar.blade.php) HAZIR gelir:
-        aktiflik deseni artık TEK yerde tanımlıdır — burada TEKRAR
-        hesaplanmaz (önceki bir bug: bu dosyanın kendi desen listesi
-        'cashbook.index'i 'cashbook.movements.*'/'cashbook.transfers.*'yi de
-        kapsayacak biçimde yanlış tanımlıyordu).
-    */
+    /* Aktiflik çağıran kenar çubuğundan gelir. */
 @endphp
 
 <li>

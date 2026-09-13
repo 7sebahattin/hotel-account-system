@@ -23,6 +23,12 @@ class RolePermissionSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        // Kaldırılan modülün sistem, özel rol ve doğrudan kullanıcı atamalarını temizler.
+        // Spatie model olayları pivotları ve yetki önbelleğini birlikte temizler.
+        Permission::query()->where('guard_name', 'web')->whereIn('name', [
+            'cashbook.view', 'cashbook.operate', 'cashbook.view_all', 'cashbook.manage_categories',
+        ])->get()->each(fn (Permission $permission) => $permission->delete());
+
         foreach (PermissionEnum::values() as $name) {
             Permission::findOrCreate($name, 'web');
         }

@@ -6,7 +6,6 @@ namespace Tests\Feature\Payments;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\RoleName;
-use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Ledger\Services\LedgerService;
@@ -235,8 +234,6 @@ class PaymentAllocationTest extends TestCase
     #[Test]
     public function invalid_cash_allocation_rolls_back_receipt_ledger_and_cash(): void
     {
-        $cash = app(CashBookService::class);
-        $session = $cash->openSession($this->actor);
         $stay = $this->stay(['company_id' => Company::factory()->create()->id]);
         try {
             $this->payment(['payment_method' => 'cash', 'allocation_mode' => 'selected', 'stay_ids' => [$stay->id]]);
@@ -250,13 +247,12 @@ class PaymentAllocationTest extends TestCase
     }
 
     #[Test]
-    public function cash_allocation_creates_only_one_collection(): void
+    public function cash_allocation_does_not_create_cash_movement(): void
     {
-        app(CashBookService::class)->openSession($this->actor);
         $this->stay();
         $this->stay();
         $payment = $this->payment(['amount' => '1500', 'payment_method' => 'cash']);
-        $this->assertSame(1, DB::table('cash_movements')->where('reference_type', 'payment')->where('reference_id', $payment->id)->count());
+        $this->assertSame(0, DB::table('cash_movements')->where('reference_type', 'payment')->where('reference_id', $payment->id)->count());
         $this->assertDatabaseCount('payment_allocations', 2);
         $this->assertDatabaseCount('ledger_entries', 3);
     }

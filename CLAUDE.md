@@ -1,5 +1,17 @@
 # CLAUDE.md
 
+## Onaylı kapsam değişikliği — kasa kaldırma
+
+Kullanıcı kasa kaldırma işini Codex’e, diğer geliştirmeleri Claude’a verdi.
+Bu dal `codex/kasa-kaldirma`, canlı `dcb771d` tabanındadır. Aşağıdaki eski
+kasa zorunlulukları bu çalışma için geçersizdir. Cari, konaklama, tahsilat,
+makbuz ve denetim izi korunur. Nakit dahil tüm tahsilatlar vardiyasız
+çalışır; oluşturma/iptal kasa tablolarına yazmaz. Eski kasa verisi ve
+payments.cash_session_id tarihsel olarak korunur; yeni kayıtta NULL olur.
+Kasa route, servis, ekran ve yetkileri kaldırılır. Migration geçmişi
+korunur, finansal kayıt silinmez. Yeni sistem geliştirmek ve canlıya
+yayınlamak bu görevin parçası değildir. Ayrıntılar docs/kasa-kaldirma.md.
+
 ## Onaylı geliştirme kapsamı — 11 Eylül 2026
 
 13 Eylül 2026 yayın paketi: kullanıcı açıkça “yayınla” dedi. Yedek provasını

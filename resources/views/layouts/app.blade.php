@@ -79,6 +79,5 @@
     </div>
 
     @include('partials.bottom-nav')
-    @include('partials.cash-movement-dialog')
 </body>
 </html>

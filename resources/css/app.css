@@ -172,7 +172,7 @@
         sayfa (bottom sheet) — masaüstü boyutundaki bir modal telefon
         ekranına SIKIŞTIRILMAZ (kullanıcı talimatı §3).
     */
-    .cash-dialog {
+    .app-dialog {
         /*
             `margin: auto` BURADA AÇIKÇA yazılmalıdır. Tarayıcının kendi
             `<dialog>` UA stili normalde `showModal()` açıldığında
@@ -196,13 +196,13 @@
         overflow-y: auto;
     }
 
-    .cash-dialog::backdrop {
+    .app-dialog::backdrop {
         background: var(--color-nav);
         opacity: 0.6;
     }
 
     @media (max-width: 767px) {
-        .cash-dialog {
+        .app-dialog {
             position: fixed;
             inset: auto 0 0 0;
             margin: 0;

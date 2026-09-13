@@ -8,10 +8,6 @@ use App\Models\User;
 use App\Modules\AuditLog\Models\AuditLog;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Authorization\Models\Role;
-use App\Modules\CashBook\Models\CashMovement;
-use App\Modules\CashBook\Models\CashMovementCategory;
-use App\Modules\CashBook\Models\CashSession;
-use App\Modules\CashBook\Models\CashTransfer;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
@@ -33,6 +29,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Eski kurulumların migration geçmişi ve tahsilat FK’leri korunur.
+        $this->loadMigrationsFrom(app_path('Modules/CashBook/Database/Migrations'));
+
         // CLAUDE.md §13: N+1, sessizce yutulan mass assignment ve eksik
         // attribute erişimi geliştirme/testte hata olarak patlar.
         Model::shouldBeStrict(! $this->app->isProduction());
@@ -47,10 +46,6 @@ class AppServiceProvider extends ServiceProvider
             'ledger_entry' => LedgerEntry::class,
             'stay' => Stay::class,
             'payment' => Payment::class,
-            'cash_session' => CashSession::class,
-            'cash_movement' => CashMovement::class,
-            'cash_transfer' => CashTransfer::class,
-            'cash_movement_category' => CashMovementCategory::class,
             'room' => Room::class,
             'receipt_book_entry' => ReceiptBookEntry::class,
         ]);
@@ -63,6 +58,11 @@ class AppServiceProvider extends ServiceProvider
         // silememe" ve "sistem rolünü koruma" gibi kayıt bazlı kurallar admin
         // için hiç çalışmazdı.
         Gate::before(function (User $user, string $ability, array $arguments = []): ?bool {
+            // Kaldırılan yetkiler admin kısayoluyla dahi tekrar açılamaz.
+            if (str_starts_with($ability, 'cashbook.')) {
+                return false;
+            }
+
             $subject = $arguments[0] ?? null;
             $isAuditLog = $subject instanceof AuditLog || $subject === AuditLog::class;
 

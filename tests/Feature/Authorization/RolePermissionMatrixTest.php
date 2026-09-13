@@ -62,10 +62,6 @@ class RolePermissionMatrixTest extends TestCase
             Permission::DashboardFinancial, Permission::ExportExcel,
             Permission::AuditView, Permission::PaymentsCancel,
             Permission::CompaniesDelete, Permission::StaysDelete,
-            // Gün 10: patron kasayı hem işletir hem tüm vardiyaları görür.
-            Permission::CashBookView, Permission::CashBookOperate, Permission::CashBookViewAll,
-            // v2.1.1-B: patron kasa hareket türlerini (kategori) de yönetir.
-            Permission::CashBookManageCategories,
             // Room Registry (K-100): patron oda tanımlarını da yönetir.
             Permission::RoomsManage,
             // v2.1.1-C: patron geçmiş döviz düzeltmesi ve makbuz defterini de yönetir.
@@ -76,7 +72,8 @@ class RolePermissionMatrixTest extends TestCase
             $this->assertContains($expected->value, $granted);
         }
 
-        $this->assertCount(24, $granted);
+        // Kaldırılan dört kasa yetkisi artık rolün parçası değildir.
+        $this->assertCount(20, $granted);
     }
 
     #[Test]
@@ -92,7 +89,6 @@ class RolePermissionMatrixTest extends TestCase
             Permission::CompaniesDelete, Permission::StaysDelete,
             Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
             // Personel kendi kasasını görür ama TÜM vardiyaları göremez.
-            Permission::CashBookViewAll,
             // Room Registry (K-100): oda tanımı yönetimi Admin/Patron'dadır.
             Permission::RoomsManage,
             // v2.1.1-C: geçmiş döviz düzeltmesi Admin/Patron'dadır, personelde YOKTUR.
@@ -116,8 +112,6 @@ class RolePermissionMatrixTest extends TestCase
              * görmez" kuralıyla çelişmez: yasak olan FİRMA cari bakiyesi ve
              * toplam alacaktır; buradaki tutar personelin elindeki paradır.
              */
-            Permission::CashBookView->value,
-            Permission::CashBookOperate->value,
             // v2.1.1-C: personel de tahsilat makbuzu defteri girebilir (PaymentsCreate ile AYNI seviye).
             Permission::ReceiptBookView->value,
             Permission::ReceiptBookCreate->value,

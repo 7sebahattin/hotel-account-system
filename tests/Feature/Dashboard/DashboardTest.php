@@ -6,8 +6,6 @@ namespace Tests\Feature\Dashboard;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\RoleName;
-use App\Modules\CashBook\Enums\CashMovementType;
-use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
@@ -40,8 +38,6 @@ class DashboardTest extends TestCase
 
     private LedgerService $ledger;
 
-    private CashBookService $cash;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -49,7 +45,6 @@ class DashboardTest extends TestCase
 
         $this->actor = $this->userWithRole(RoleName::Admin);
         $this->ledger = app(LedgerService::class);
-        $this->cash = app(CashBookService::class);
     }
 
     private function debit(Company $company, string $amount, Currency $currency, string $date): void
@@ -322,7 +317,7 @@ class DashboardTest extends TestCase
         $response = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'));
 
         $response->assertOk();
-        $response->assertSee('Vardiyam');
+        $response->assertSee('Bugün girdiğim kayıtlar');
         $response->assertSee('Bugün girdiğim kayıtlar');
         $response->assertDontSee('Açık alacak');
         $response->assertDontSee('Net bakiye');
@@ -346,13 +341,13 @@ class DashboardTest extends TestCase
     }
 
     #[Test]
-    public function admin_ve_patron_operasyon_gorunumunu_view_parametresiyle_gorur(): void
+    public function eski_operasyon_baglantisi_admin_ve_patron_icin_cari_panoyu_acar(): void
     {
         foreach ([RoleName::Admin, RoleName::Patron] as $role) {
             $this->actingAs($this->userWithRole($role))->get(route('home', ['view' => 'operations']))
                 ->assertOk()
-                ->assertSee('Şu an')
-                ->assertDontSee('Cari durum');
+                ->assertViewIs('dashboard::finance')
+                ->assertDontSee('Kasa Defteri');
         }
     }
 
@@ -389,7 +384,7 @@ class DashboardTest extends TestCase
             ->get(route('home', ['view' => 'finance']));
 
         $response->assertOk();
-        $response->assertSee('Vardiyam');
+        $response->assertSee('Bugün girdiğim kayıtlar');
         $response->assertDontSee('Cari durum');
         $response->assertDontSee('Açık alacak');
         $response->assertDontSee('9.999,00');
@@ -445,40 +440,11 @@ class DashboardTest extends TestCase
 
     // ------------------------------------------------------- performans
 
-    /**
-     * Kullanıcı talimatı §17: Operasyon görünümündeyken Finans'ın (ledger/
-     * firma) ağır sorguları hiç çalışmamalı.
-     */
-    #[Test]
-    public function operasyon_gorunumu_cari_veya_firma_sorgusu_calistirmaz(): void
-    {
-        $company = Company::factory()->create();
-        $this->debit($company, '1000.00', Currency::TRY, '2026-09-01');
-
-        $admin = $this->userWithRole(RoleName::Admin);
-        $this->actingAs($admin)->get(route('home', ['view' => 'operations']));
-
-        DB::enableQueryLog();
-        DB::flushQueryLog();
-        $this->actingAs($admin)->get(route('home', ['view' => 'operations']))->assertOk();
-        $queries = DB::getRawQueryLog();
-        DB::disableQueryLog();
-
-        foreach (['ledger_entries', 'from `companies`', 'from `stays`', 'from `payments`'] as $needle) {
-            $hits = array_filter(
-                $queries,
-                static fn (array $query): bool => str_contains((string) $query['raw_query'], $needle),
-            );
-            $this->assertSame([], $hits, "Operasyon görünümü '{$needle}' sorgulamamalı.");
-        }
-    }
-
     /** Ters yön: Finans görünümündeyken kasa sorguları hiç çalışmamalı. */
     #[Test]
     public function finans_gorunumu_kasa_sorgusu_calistirmaz(): void
     {
         $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $this->cash->openSession($x, ['TRY' => Money::fromDecimal('1000.00')]);
 
         $admin = $this->userWithRole(RoleName::Admin);
         $this->actingAs($admin)->get(route('home', ['view' => 'finance']));
@@ -539,60 +505,6 @@ class DashboardTest extends TestCase
         $this->assertLessThanOrEqual(17, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 17.");
     }
 
-    #[Test]
-    public function operasyon_gorunumu_sorgu_sayisi_vardiya_sayisiyla_birlikte_buyumez(): void
-    {
-        $admin = $this->userWithRole(RoleName::Admin);
-
-        $measure = function () use ($admin): int {
-            $this->actingAs($admin)->get(route('home', ['view' => 'operations']));
-
-            DB::enableQueryLog();
-            DB::flushQueryLog();
-            $this->actingAs($admin)->get(route('home', ['view' => 'operations']))->assertOk();
-            $count = count(DB::getRawQueryLog());
-            DB::disableQueryLog();
-
-            return $count;
-        };
-
-        /*
-         * Not: sıfır kapanmış vardiya/devir olan bir taban ile karşılaştırma
-         * yapılmaz — Eloquent boş bir eager-load kümesi için sorgu ÇALIŞTIRMAZ
-         * (ör. hiç devir yoksa `toUser`/`fromUser`/`amounts` sorguları hiç
-         * atılmaz), bu da yanlış bir "sorgu arttı" izlenimi verir. Bu yüzden
-         * her iki ölçüm de EN AZ BİR kapanmış vardiya/devir içerir; asıl soru
-         * "1 devirden 4 devire çıkınca sorgu sayısı sabit mi kalıyor" sorusudur.
-         */
-        $owner = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $session = $this->cash->openSession($owner, ['TRY' => Money::fromDecimal('1000.00')]);
-        $this->cash->recordMovement($session, CashMovementType::RoomIncome, Currency::TRY, Money::fromDecimal('500.00'), $owner);
-
-        $next = $this->userWithRole(RoleName::Personel);
-        $transfer = $this->cash->startHandover($session->refresh(), $next, ['TRY' => Money::fromDecimal('1500.00')], $owner);
-        $session = $this->cash->acceptHandover($transfer, $next);
-        $owner = $next;
-
-        $withOneTransfer = $measure();
-
-        // Aynı gün içinde birkaç devir daha yaşansın: kapanan vardiya sayısı artsın.
-        foreach (range(1, 3) as $_) {
-            $next = $this->userWithRole(RoleName::Personel);
-            $transfer = $this->cash->startHandover($session->refresh(), $next, ['TRY' => Money::fromDecimal('1500.00')], $owner);
-            $session = $this->cash->acceptHandover($transfer, $next);
-            $this->cash->recordMovement($session, CashMovementType::ExtraIncome, Currency::TRY, Money::fromDecimal('50.00'), $next);
-            $owner = $next;
-        }
-
-        $withFourTransfers = $measure();
-
-        $this->assertSame(
-            $withOneTransfer,
-            $withFourTransfers,
-            "Sorgu sayısı devir sayısıyla arttı ({$withOneTransfer} → {$withFourTransfers}): N+1 var."
-        );
-    }
-
     // ------------------------------------------------------- mobil dokunma
 
     #[Test]
@@ -642,73 +554,9 @@ class DashboardTest extends TestCase
     // ---------------------------------------------- Operasyon görünümü
 
     #[Test]
-    public function operasyon_gorunumu_acik_vardiya_yokken_kapali_durumu_gosterir(): void
-    {
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
-            ->assertOk()
-            ->assertSee('Kasa Kapalı')
-            ->assertSee('Açık vardiya yok');
-    }
-
-    #[Test]
-    public function operasyon_gorunumu_acik_vardiyanin_beklenen_kasasini_para_birimi_bazinda_gosterir(): void
-    {
-        $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $session = $this->cash->openSession($x, ['TRY' => Money::fromDecimal('7000.00'), 'RUB' => Money::fromDecimal('5000.00')]);
-        $this->cash->recordMovement($session, CashMovementType::RoomIncome, Currency::USD, Money::fromDecimal('150.00'), $x);
-
-        $summary = app(DashboardService::class)->operations(Carbon::today());
-
-        $this->assertNotNull($summary->cash);
-        $this->assertSame('7000.00', $summary->cash->expected['TRY']->toDecimal());
-        $this->assertSame('5000.00', $summary->cash->expected['RUB']->toDecimal());
-        $this->assertSame('150.00', $summary->cash->expected['USD']->toDecimal());
-
-        // Hiçbir global toplam yok: dizi anahtarları dışında birleşik bir
-        // "toplam kasa" alanı üretilmez — üç para birimi ayrı ayrı kalır.
-        $this->assertCount(3, $summary->cash->expected);
-    }
-
-    #[Test]
-    public function ara_kasa_teslimi_bugun_kartinda_gider_olarak_gorunmez(): void
-    {
-        $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $session = $this->cash->openSession($x, ['TRY' => Money::fromDecimal('14000.00')]);
-        $this->cash->recordMovement($session, CashMovementType::CashOut, Currency::TRY, Money::fromDecimal('12000.00'), $x, counterparty: 'Patron');
-
-        $summary = app(DashboardService::class)->operations(Carbon::today());
-
-        $this->assertSame('0.00', $summary->todayTotals['TRY']->expense->toDecimal());
-        $this->assertSame('-12000.00', $summary->todayTotals['TRY']->cashOut->toDecimal());
-
-        $html = $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))->getContent();
-        $this->assertStringNotContainsString('12.000,00 ₺ gider', (string) $html);
-    }
-
-    #[Test]
-    public function operasyon_gorunumu_kasa_farkini_dikkat_gerekenler_altinda_gosterir(): void
-    {
-        $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $session = $this->cash->openSession($x, ['TRY' => Money::fromDecimal('7000.00')]);
-        // Beklenen 7000, sayılan 6900: 100 TRY fark.
-        $this->cash->closeSession($session, ['TRY' => Money::fromDecimal('6900.00')], $x);
-
-        $summary = app(DashboardService::class)->operations(Carbon::today());
-
-        $this->assertTrue($summary->hasCountDifferenceToday);
-        $this->assertTrue($summary->needsAttention());
-
-        $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
-            ->assertOk()
-            ->assertSee('Dikkat gerekenler')
-            ->assertSee('Kasa farkı');
-    }
-
-    #[Test]
     public function sorun_yokken_dikkat_gerekenler_bolumu_hic_gosterilmez(): void
     {
         $x = $this->userWithRole(RoleName::Personel, ['name' => 'X']);
-        $this->cash->openSession($x, ['TRY' => Money::fromDecimal('1000.00')]);
 
         $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
@@ -716,58 +564,6 @@ class DashboardTest extends TestCase
     }
 
     // ---------------------------------------------- Personel — Vardiyam/Kasam
-
-    #[Test]
-    public function personel_kendi_kasasini_tutarlariyla_gorur(): void
-    {
-        $personel = $this->userWithRole(RoleName::Personel, ['name' => 'Ayşe']);
-        $session = $this->cash->openSession($personel, ['EUR' => Money::fromDecimal('300.00')]);
-        $this->cash->recordMovement($session, CashMovementType::RoomIncome, Currency::EUR, Money::fromDecimal('50.00'), $personel);
-
-        $this->actingAs($personel)->get(route('home'))
-            ->assertOk()
-            ->assertSee('Kasam')
-            ->assertSee('350,00 €');
-    }
-
-    #[Test]
-    public function personel_baskasinin_vardiyasinin_tutarini_gormez(): void
-    {
-        $owner = $this->userWithRole(RoleName::Personel, ['name' => 'Sahibi']);
-        $this->cash->openSession($owner, ['TRY' => Money::fromDecimal('12345.00')]);
-
-        $other = $this->userWithRole(RoleName::Personel, ['name' => 'Diğeri']);
-
-        $html = $this->actingAs($other)->get(route('home'))->getContent();
-
-        $this->assertStringContainsString('Sahibi', (string) $html);
-        $this->assertStringNotContainsString('12.345,00', (string) $html);
-    }
-
-    #[Test]
-    public function acik_vardiyasi_olmayan_personel_kasayi_acma_cagrisi_gorur(): void
-    {
-        $personel = $this->userWithRole(RoleName::Personel);
-
-        $this->actingAs($personel)->get(route('home'))
-            ->assertOk()
-            ->assertSee('Açık vardiyanız yok')
-            ->assertSee('Kasayı Aç');
-    }
-
-    #[Test]
-    public function bekleyen_devri_olan_personel_once_bunu_gorur(): void
-    {
-        $owner = $this->userWithRole(RoleName::Personel, ['name' => 'Devreden']);
-        $target = $this->userWithRole(RoleName::Personel, ['name' => 'Hedef']);
-        $session = $this->cash->openSession($owner, ['TRY' => Money::fromDecimal('1000.00')]);
-        $this->cash->startHandover($session, $target, ['TRY' => Money::fromDecimal('1000.00')], $owner);
-
-        $this->actingAs($target)->get(route('home'))
-            ->assertOk()
-            ->assertSee('Kasa devri sizi bekliyor')
-            ->assertSee('Devreden');
-    }
 
     // ------------------------------------------------------- Hızlı işlem
 
@@ -783,11 +579,11 @@ class DashboardTest extends TestCase
     {
         $html = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))->getContent();
 
-        $this->assertStringContainsString('Kasa Hareketi', (string) $html);
+        $this->assertStringNotContainsString('Kasa Hareketi', (string) $html);
         $this->assertStringContainsString('Cari Tahsilat', (string) $html);
         $this->assertStringContainsString('Yeni Konaklama', (string) $html);
         $this->assertStringContainsString('Yeni Cari Hesap', (string) $html);
-        $this->assertStringContainsString('Kasa Devri', (string) $html);
+        $this->assertStringNotContainsString('Kasa Devri', (string) $html);
     }
 
     #[Test]

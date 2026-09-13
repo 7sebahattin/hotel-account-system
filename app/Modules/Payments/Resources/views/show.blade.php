@@ -92,21 +92,6 @@
                         @endif
                     </dd>
                 </div>
-                @if ($payment->cashSession)
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-mut">Kasa vardiyası</dt>
-                        <dd class="mt-0.5 text-sm text-tx">
-                            @can('view', $payment->cashSession)
-                                <a href="{{ route('cashbook.sessions.show', $payment->cashSession) }}"
-                                   class="text-acc-tx underline underline-offset-2 hover:text-tx">
-                                    {{ $payment->cashSession->opened_at->format('d.m.Y H:i') }} · {{ $payment->cashSession->openedBy?->name ?? '—' }}
-                                </a>
-                            @else
-                                {{ $payment->cashSession->opened_at->format('d.m.Y H:i') }}
-                            @endcan
-                        </dd>
-                    </div>
-                @endif
                 <div class="sm:col-span-2">
                     <dt class="text-xs uppercase tracking-wide text-mut">Açıklama</dt>
                     <dd class="mt-0.5 text-sm whitespace-pre-line text-tx">{{ $payment->description ?: '—' }}</dd>

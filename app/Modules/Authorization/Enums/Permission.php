@@ -28,7 +28,7 @@ enum Permission: string
     case StaysUpdate = 'stays.update';
     case StaysDelete = 'stays.delete';
 
-    /** Oda tanımları (Yönetim → Odalar). Görüntüleme ayrı yetki DEĞİLDİR — cashbook.manage_categories ile aynı desen. */
+    /** Oda tanımları (Yönetim → Odalar). Görüntüleme ayrı yetki değildir. */
     case RoomsManage = 'rooms.manage';
 
     case PaymentsView = 'payments.view';
@@ -37,15 +37,6 @@ enum Permission: string
 
     case LedgerView = 'ledger.view';
     case LedgerViewAll = 'ledger.view_all';
-
-    /*
-     * Kasa defteri (Gün 10). Üç yetki yeterlidir; hareket/ters kayıt için ayrı
-     * yetki AÇILMAZ: kayıt bazlı kısıt (kendi açık vardiyası) Policy'dedir.
-     */
-    case CashBookView = 'cashbook.view';
-    case CashBookOperate = 'cashbook.operate';
-    case CashBookViewAll = 'cashbook.view_all';
-    case CashBookManageCategories = 'cashbook.manage_categories';
 
     case DashboardFinancial = 'dashboard.financial';
 
@@ -73,8 +64,6 @@ enum Permission: string
             self::RoomsManage => 'Odalar',
             self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
             self::LedgerView, self::LedgerViewAll => 'Cari Hesap',
-            self::CashBookView, self::CashBookOperate, self::CashBookViewAll,
-            self::CashBookManageCategories => 'Kasa Defteri',
             self::DashboardFinancial => 'Dashboard',
             self::ExportExcel => 'Dışa Aktarma',
             self::AuditView => 'Denetim Kaydı',
@@ -104,10 +93,6 @@ enum Permission: string
             self::PaymentsCancel => 'Tahsilat iptal et',
             self::LedgerView => 'Firma cari ekstresini görüntüle',
             self::LedgerViewAll => 'Tüm firma bakiyelerini ve toplam alacağı görüntüle',
-            self::CashBookView => 'Kasa defterini ve açık vardiyayı görüntüle',
-            self::CashBookOperate => 'Kasa hareketi gir, vardiya aç/kapat, devir yap',
-            self::CashBookViewAll => 'Tüm vardiyaları, günlük defteri ve kasa farklarını görüntüle',
-            self::CashBookManageCategories => 'Kasa hareket türlerini (kategori) yönet',
             self::DashboardFinancial => 'Finansal dashboard kartlarını görüntüle',
             self::ExportExcel => 'Excel dışa aktarma',
             self::AuditView => 'Denetim kaydını görüntüle',

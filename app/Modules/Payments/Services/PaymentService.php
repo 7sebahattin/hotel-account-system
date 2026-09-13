@@ -7,11 +7,6 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
-use App\Modules\CashBook\Enums\CashMovementType;
-use App\Modules\CashBook\Exceptions\NoOpenCashSession;
-use App\Modules\CashBook\Models\CashMovement;
-use App\Modules\CashBook\Models\CashSession;
-use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
@@ -22,12 +17,10 @@ use App\Modules\Payments\Enums\PayerType;
 use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
-use App\Modules\Payments\Exceptions\CashSessionNotOwnedByActor;
 use App\Modules\Payments\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Models\Payment;
-use App\Modules\Payments\Support\ShiftCollectionSummary;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -44,42 +37,19 @@ use Illuminate\Validation\ValidationException;
  * Değişmez: aktif bir tahsilatın **tam olarak bir geçerli alacak hareketi**
  * vardır; iptal edilmiş tahsilatın hiç yoktur.
  *
- * v2.1.1-A: `payment_method = cash` olan tahsilatlar AYRICA fiziksel kasaya
- * (`CashBookService`) bağlı bir `company_collection` hareketi üretir — aynı
- * transaction içinde, `Payment::LEDGER_SOURCE_TYPE` ile izlenebilir biçimde.
- * Kart/banka/çek kanalları kasaya HİÇ dokunmaz. Bu, Payments'ın CashBook'a
- * TEK YÖNLÜ bağımlılığıdır (CLAUDE.md §4.3/1); `CashBookService` Payments'a
- * hiçbir zaman geri bağımlı olmaz.
- *
- * v2.1.1-A.1: `Payment::cash_session_id` hangi vardiyada oluşturulduğunu
- * AÇIKÇA, DEĞİŞMEZ olarak taşır — zaman penceresi çıkarımı YOKTUR. Aktör
- * o an açık bir vardiyayı yönetmiyorsa NULL kalır (tahmin edilmez).
+ * Kasa modülü kaldırılmıştır; tahsilat ve iptal yalnızca cari/dağılım yazar.
  */
 class PaymentService
 {
     public function __construct(
         private readonly LedgerService $ledger,
         private readonly AuditLogger $auditLogger,
-        private readonly CashBookService $cashBook,
     ) {}
 
     /**
      * Tahsilat oluşturur ve firmanın carisine alacak hareketi düşer.
      *
-     * `cash_session_id` (v2.1.1-A.1) oluşturma anında AÇIKÇA belirlenir ve
-     * bir daha ASLA değişmez: aktör o an açık BİR vardiyayı yönetiyorsa
-     * (`opened_by === aktör`) o vardiyaya atanır, aksi hâlde NULL kalır.
-     * Zaman penceresi/tahmin YOKTUR (§8/Payments).
-     *
-     * Nakit kanalda (`payment_method = cash`) bu vardiya ZORUNLUDUR — aynı
-     * anda fiziksel kasaya bir `company_collection` hareketi de yazılır.
-     * Kart/banka/çek/diğer kanallar vardiyasız da girilebilir (mevcut yetki
-     * izin veriyorsa) ve kasaya asla dokunmaz.
-     *
      * @param  array<string, mixed>  $data
-     *
-     * @throws NoOpenCashSession
-     * @throws CashSessionNotOwnedByActor
      */
     public function create(array $data, ?User $actor = null): Payment
     {
@@ -101,11 +71,8 @@ class PaymentService
             $payment->created_by = $user->getKey();
             $payment->updated_by = $user->getKey();
             $this->applyExchangeRate($payment, $data);
-            $isCash = $payment->payment_method === PaymentMethod::Cash;
-            $session = $isCash
-                ? $this->requireOwnedOpenSession($user)
-                : $this->resolveOwnedActiveSession($user);
-            $payment->cash_session_id = $session?->getKey();
+            // Tarihsel vardiya bağlantısı yeni tahsilatlara atanmaz.
+            $payment->cash_session_id = null;
 
             $payment->save();
 
@@ -120,10 +87,6 @@ class PaymentService
 
             $entry = $this->postCredit($payment, $user);
 
-            $cashMovement = $isCash && $session !== null
-                ? $this->postCashCollection($payment, $session, $user)
-                : null;
-
             app(PaymentAllocationService::class)->allocate($payment, $data['stay_ids'] ?? [], $user);
 
             $this->auditLogger->log(
@@ -131,7 +94,6 @@ class PaymentService
                 subject: $payment,
                 newValues: $this->snapshot($payment) + [
                     'ledger_entry_id' => $entry->id,
-                    'cash_movement_id' => $cashMovement?->id,
                 ],
                 user: $user,
             );
@@ -192,16 +154,9 @@ class PaymentService
     /**
      * Tahsilatı iptal eder ve cari hareketini ters kaydeder.
      *
-     * Nakit kanalda, kasaya işlenmiş bağlı hareket de (varsa) ters kaydedilir
-     * — GÜNCEL açık vardiyaya (orijinal vardiya artık kapanmış olsa bile,
-     * CLAUDE.md §22/v2.1.1-A §13: "her iki etki de doğru şekilde ve TAM
-     * OLARAK BİR KEZ sıfırlanır"). Kasa tarafı sıfırlanamıyorsa (açık vardiya
-     * yok) TÜM iptal reddedilir — cari ile kasa ayrışıp yarım kalmaz.
-     *
      * İptal geri alınamaz (V1'de restore akışı yoktur).
      *
      * @throws PaymentAlreadyCancelled
-     * @throws NoOpenCashSession
      */
     public function cancel(Payment $payment, string $reason, ?User $actor = null): Payment
     {
@@ -220,10 +175,6 @@ class PaymentService
             }
             $active = $this->ledger->activeEntryForSource(Payment::LEDGER_SOURCE_TYPE, $payment->getKey());
             $reversal = $active !== null ? $this->ledger->reverse($active, actor: $user) : null;
-
-            $cashReversal = $payment->payment_method === PaymentMethod::Cash
-                ? $this->reverseCashCollection($payment, $reason, $user)
-                : null;
 
             $payment->status = PaymentStatus::Cancelled;
             $payment->cancelled_at = Carbon::now();
@@ -247,7 +198,6 @@ class PaymentService
                     'cancelled_at' => $payment->cancelled_at->toDateTimeString(),
                     'reversed_ledger_entry_id' => $active?->id,
                     'reversal_ledger_entry_id' => $reversal?->id,
-                    'reversal_cash_movement_id' => $cashReversal?->id,
                 ],
                 user: $user,
             );
@@ -523,101 +473,6 @@ class PaymentService
     }
 
     /**
-     * Nakit kanallı tahsilatın fiziksel kasa karşılığını yazar.
-     *
-     * `$session` çağıran tarafından ZATEN çözülmüş ve sahiplik doğrulanmıştır
-     * (`create()`) — burada tekrar sorgulanmaz/doğrulanmaz.
-     *
-     * Açıklamaya makbuz numarası eklenir (§17 izlenebilirlik): Kasa Defteri
-     * ekranları `CashMovement.reference_id`'yi (ham DB id) hiç göstermez,
-     * yalnızca bu insan-okunur metni — `CashBookService` yine de bu metnin
-     * ANLAMINI bilmez, opak bir açıklama string'i olarak saklar.
-     */
-    private function postCashCollection(Payment $payment, CashSession $session, User $user): CashMovement
-    {
-        $description = $payment->ledgerDescription();
-
-        if ($payment->receipt_no !== null) {
-            $description .= ' · '.$payment->receipt_no;
-        }
-
-        return $this->cashBook->recordMovement(
-            session: $session,
-            type: CashMovementType::CompanyCollection,
-            currency: $payment->currency,
-            amount: $payment->amountMoney(),
-            actor: $user,
-            description: $description,
-            counterparty: null,
-            referenceType: Payment::LEDGER_SOURCE_TYPE,
-            referenceId: $payment->getKey(),
-        );
-    }
-
-    /**
-     * Nakit kanallı tahsilatın kasa hareketini (varsa) ters kaydeder.
-     *
-     * GÜNCEL açık vardiyaya yazılır — orijinal hareketin vardiyası bu ana
-     * kadar çoktan kapanmış/devredilmiş olabilir (7/24 işletme gerçeği,
-     * v2.1.1-A §13). Tarihe gidilmez: para BUGÜN düzeltilir, tıpkı gerçek bir
-     * kasada olduğu gibi. Bağlı hareket yoksa (ör. bu özellikten önceki eski
-     * kayıt) sessizce null döner — geriye dönük veri kırılmaz.
-     *
-     * @throws NoOpenCashSession
-     */
-    private function reverseCashCollection(Payment $payment, string $reason, User $user): ?CashMovement
-    {
-        $movement = $this->cashBook->activeMovementForSource(Payment::LEDGER_SOURCE_TYPE, $payment->getKey());
-
-        if ($movement === null) {
-            return null;
-        }
-
-        $session = $this->cashBook->activeSession();
-
-        if ($session === null) {
-            throw NoOpenCashSession::make();
-        }
-
-        return $this->cashBook->reverseMovement(
-            movement: $movement,
-            actor: $user,
-            reason: '[İPTAL] '.$reason,
-            intoSession: $session,
-            allowLinkedSource: true,
-        );
-    }
-
-    /** Kullanıcının kendi açık vardiyası; yoksa/başkasınınsa istisna fırlatır. */
-    private function requireOwnedOpenSession(User $user): CashSession
-    {
-        $session = $this->cashBook->activeSession();
-
-        if ($session === null) {
-            throw NoOpenCashSession::make();
-        }
-
-        if ($session->opened_by !== $user->getKey()) {
-            throw CashSessionNotOwnedByActor::make();
-        }
-
-        return $session;
-    }
-
-    /**
-     * Kullanıcının kendi açık vardiyası — yoksa veya başkasınınsa NULL
-     * (istisna FIRLATMAZ). Nakit dışı kanallar için "atfedebilirsek atfet,
-     * atfedemiyorsak zorlamayalım" davranışı budur (v2.1.1-A.1 §7): Admin/
-     * Patron açık vardiya olmadan da kart/banka tahsilatı girebilmelidir.
-     */
-    private function resolveOwnedActiveSession(User $user): ?CashSession
-    {
-        $session = $this->cashBook->activeSession();
-
-        return $session !== null && $session->opened_by === $user->getKey() ? $session : null;
-    }
-
-    /**
      * Oluşturmada alınabilecek alanlar. `status` ve iptal alanları kullanıcı
      * girdisinden ASLA alınmaz.
      *
@@ -788,72 +643,6 @@ class PaymentService
             ->where('status', PaymentStatus::Active->value)
             ->where('payment_method', $method->value)
             ->whereBetween('payment_date', [$from, $to])
-            ->groupBy('currency')
-            ->orderBy('currency')
-            ->get();
-
-        $totals = [];
-
-        foreach ($rows as $row) {
-            $totals[(string) $row->currency] = Money::fromDecimal((string) $row->total);
-        }
-
-        return $totals;
-    }
-
-    /**
-     * Bir vardiyanın tahsilat KANALI bazında özeti (v2.1.1-A §11,
-     * v2.1.1-A.1 §10 ile EXPLICIT referansa geçirildi).
-     *
-     * "Bu vardiyada kim ne kadar kart/banka tahsilatı aldı" sorusu artık
-     * ZAMAN PENCERESİ ÇIKARIMI DEĞİL — `payments.cash_session_id`'nin
-     * oluşturma anında yazılan, bir daha değişmeyen DEĞERİNE göre sorgulanır.
-     * Aynı kullanıcı vardiya sınırına yakın işlem yapsa bile yanlış vardiyaya
-     * atfedilemez: kolon o an hangi vardiya açıksa (ve aktör sahibiyse) onu
-     * taşır, sorgu zamanında yeniden hesaplanmaz.
-     *
-     * Eski (zaman penceresi tabanlı) sorgu TAMAMEN kaldırıldı — yalnızca bu
-     * mimariden SONRA oluşturulan kayıtlar için doğru sonuç verirdi ve yanlış
-     * bir kesinlik hissi yaratırdı.
-     *
-     * SABİT sayıda sorgudur: `totalsFor()` (1 grup sorgu) + kart + banka
-     * (2 grup sorgu) = 3, vardiya kayıt sayısıyla büyümez.
-     */
-    public function shiftCollectionSummary(CashSession $session): ShiftCollectionSummary
-    {
-        $cashTotals = $this->cashBook->totalsFor($session);
-
-        $cashCollections = array_filter(
-            array_map(
-                static fn ($totals) => $totals->companyCollection,
-                $cashTotals,
-            ),
-            static fn (Money $money): bool => ! $money->isZero(),
-        );
-
-        return new ShiftCollectionSummary(
-            session: $session,
-            cashCollections: $cashCollections,
-            creditCardCollections: $this->collectionTotalsForSession($session, PaymentMethod::CreditCard),
-            bankTransferCollections: $this->collectionTotalsForSession($session, PaymentMethod::BankTransfer),
-            cashTotals: $cashTotals,
-        );
-    }
-
-    /**
-     * Bir vardiyaya EXPLICIT olarak atanmış (`cash_session_id`), TEK bir
-     * kanaldan yazılan tahsilat tutarları. Zaman/kullanıcı çıkarımı YOKTUR.
-     *
-     * @return array<string, Money>
-     */
-    private function collectionTotalsForSession(CashSession $session, PaymentMethod $method): array
-    {
-        $rows = DB::table('payments')
-            ->selectRaw('currency')
-            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
-            ->where('status', PaymentStatus::Active->value)
-            ->where('payment_method', $method->value)
-            ->where('cash_session_id', $session->getKey())
             ->groupBy('currency')
             ->orderBy('currency')
             ->get();

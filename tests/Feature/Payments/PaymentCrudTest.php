@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature\Payments;
 
 use App\Modules\Authorization\Enums\RoleName;
-use App\Modules\CashBook\Services\CashBookService;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Enums\PaymentMethod;
@@ -163,7 +162,6 @@ class PaymentCrudTest extends TestCase
     public function form_alanlari_metin_olarak_gelse_de_cari_hareketi_dogar(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);
-        app(CashBookService::class)->openSession($admin);
 
         $this->actingAs($admin)->post(route('payments.store'), [
             'company_id' => (string) $this->company->id,

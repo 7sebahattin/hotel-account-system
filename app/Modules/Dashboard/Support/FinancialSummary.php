@@ -11,10 +11,7 @@ use Illuminate\Support\Collection;
 /**
  * Finans görünümünün tüm verisi (Gün 11 — Admin/Patron "Finans" sekmesi).
  *
- * Cari hesap ve firma verisi burada, fiziksel kasa verisi DEĞİL: kasa artık
- * Operasyon görünümündedir (`OperationsSummary`). "Son cari hareketler" paneli
- * de kaldırıldı — aynı bilgi zaten "Son tahsilatlar" ve ekstre ekranında var,
- * tekrar tek bir panoda iki kez gösterilmez (kullanıcı talimatı §14).
+ * Cari hesap ve firma verisini taşır.
  *
  * @phpstan-type TopCompanies array<string, array<int, CompanyBalanceRow>>
  */

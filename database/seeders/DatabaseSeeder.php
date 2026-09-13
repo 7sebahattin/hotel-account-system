@@ -7,7 +7,6 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Modules\Authorization\Database\Seeders\RolePermissionSeeder;
 use App\Modules\Authorization\Enums\RoleName;
-use App\Modules\CashBook\Database\Seeders\CashMovementCategorySeeder;
 use App\Modules\Users\Services\UserService;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -33,9 +32,6 @@ class DatabaseSeeder extends Seeder
     {
         // Yetkiler ve rol matrisi (CLAUDE.md §7.2 / §7.3)
         $this->call(RolePermissionSeeder::class);
-
-        // Varsayılan kasa hareket türleri (v2.1.1-B §4) — idempotent.
-        $this->call(CashMovementCategorySeeder::class);
 
         $email = trim((string) config('hotel.seed.admin_email'));
         $name = trim((string) config('hotel.seed.admin_name'));

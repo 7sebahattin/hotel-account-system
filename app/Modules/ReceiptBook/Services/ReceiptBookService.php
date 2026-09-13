@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  * Tahsilat Makbuzu Defteri'nin dışa açık tek kapısı (CLAUDE.md §4.3).
  *
  * KRİTİK (v2.1.1-C §4): bu servis `Ledger\Services\LedgerService`,
- * `Payments\Services\PaymentService`, `CashBook\Services\CashBookService`'i
+ * `Payments\Services\PaymentService`'i
  * HİÇ import ETMEZ ve ÇAĞIRMAZ. Bir makbuzun kaydedilmesi:
  *   - firma cari bakiyesini DEĞİŞTİRMEZ,
  *   - bir `Payment` kaydı OLUŞTURMAZ,

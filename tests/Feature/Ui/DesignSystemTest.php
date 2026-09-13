@@ -60,40 +60,11 @@ class DesignSystemTest extends TestCase
     #[Test]
     public function aktif_menu_ogesi_isaretlenir(): void
     {
-        $this->actingAs($this->userWithRole(RoleName::Admin))
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
             ->get(route('companies.index'))
             ->assertSee('aria-current="page"', false);
-    }
-
-    /**
-     * Kullanıcı bildirimi: "Kasa Hareketleri"/"Devir Geçmişi"'ndeyken "Kasa
-     * Defteri" de yanlışlıkla aktif görünüyordu — `sidebar-link.blade.php`'nin
-     * eski deseni `cashbook.index`i `cashbook.movements.*`/`cashbook.
-     * transfers.*`yi de kapsayacak biçimde tanımlıyordu. Her rota artık
-     * YALNIZCA kendi sayfasında `aria-current` taşır.
-     */
-    #[Test]
-    public function kasa_hareketlerinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
-    {
-        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
-            ->get(route('cashbook.movements.index'))
-            ->getContent();
-
-        $this->assertLinkActive($html, route('cashbook.movements.index'), true);
-        $this->assertLinkActive($html, route('cashbook.index'), false);
-        $this->assertLinkActive($html, route('cashbook.transfers.index'), false);
-    }
-
-    #[Test]
-    public function devir_gecmisinde_yalniz_kendi_menu_ogesi_aktif_olur(): void
-    {
-        $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
-            ->get(route('cashbook.transfers.index'))
-            ->getContent();
-
-        $this->assertLinkActive($html, route('cashbook.transfers.index'), true);
-        $this->assertLinkActive($html, route('cashbook.index'), false);
-        $this->assertLinkActive($html, route('cashbook.movements.index'), false);
+        $this->assertLinkActive((string) $response->getContent(), route('companies.index'), true);
+        $this->assertLinkActive((string) $response->getContent(), route('stays.index'), false);
     }
 
     /** Bir <a href="…">…</a> bloğunun `aria-current="page"` taşıyıp taşımadığını doğrular. */
@@ -118,12 +89,11 @@ class DesignSystemTest extends TestCase
     public function aktif_sayfanin_grubu_acik_baslar_digerleri_kapali_kalir(): void
     {
         $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
-            ->get(route('cashbook.movements.index'))
+            ->get(route('companies.index'))
             ->getContent();
 
         // "Kasa" grubunun <details> bloğu 'open' taşır, "Cari"/"Yönetim" taşımaz.
-        $this->assertDetailsOpen($html, 'Kasa', true);
-        $this->assertDetailsOpen($html, 'Cari', false);
+        $this->assertDetailsOpen($html, 'Cari', true);
         $this->assertDetailsOpen($html, 'Yönetim', false);
     }
 
@@ -131,11 +101,11 @@ class DesignSystemTest extends TestCase
     public function baska_gruba_gecince_onceki_grup_kapanir(): void
     {
         $html = (string) $this->actingAs($this->userWithRole(RoleName::Admin))
-            ->get(route('companies.index'))
+            ->get(route('users.index'))
             ->getContent();
 
-        $this->assertDetailsOpen($html, 'Cari', true);
-        $this->assertDetailsOpen($html, 'Kasa', false);
+        $this->assertDetailsOpen($html, 'Cari', false);
+        $this->assertDetailsOpen($html, 'Yönetim', true);
     }
 
     /** İlgili grup başlığını taşıyan <details> bloğunun `open` özniteliği taşıyıp taşımadığını doğrular. */
@@ -208,7 +178,7 @@ class DesignSystemTest extends TestCase
         $response
             ->assertSee('data-bottom-nav', false)
             ->assertSee('aria-label="Alt menü"', false)
-            ->assertSeeInOrder(['Ana Sayfa', 'Kasa', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
+            ->assertSeeInOrder(['Ana Sayfa', 'Konaklamalar', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
     }
 
     #[Test]
@@ -235,7 +205,7 @@ class DesignSystemTest extends TestCase
         // (CLAUDE.md §7.3); bu yüzden birincil sekmeler admin ile aynı kalır.
         $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))
             ->assertSee('data-bottom-nav', false)
-            ->assertSeeInOrder(['Ana Sayfa', 'Kasa', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
+            ->assertSeeInOrder(['Ana Sayfa', 'Konaklamalar', 'Cari hesaplar', 'Tahsilatlar', 'Daha Fazla']);
     }
 
     #[Test]

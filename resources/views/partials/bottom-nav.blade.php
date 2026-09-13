@@ -2,18 +2,10 @@
     use App\Modules\Authorization\Enums\Permission;
     use App\Modules\Core\Support\NavIcons;
 
-    /*
-        Mobil (< 768px) BİRİNCİL gezinme burasıdır — kenar çubuğu/çekmece
-        artık birincil değil, "Daha Fazla" ile açılan İKİNCİL menüdür.
-
-        Gün 10 itibarıyla sıra: Ana Sayfa, Kasa, Firmalar, Tahsilatlar +
-        Daha Fazla. Konaklamalar "Daha Fazla" çekmecesine taşındı (Gün 9.6'da
-        planlanan hedef sıra): kasa defteri günde onlarca kez, konaklama listesi
-        ise çok daha seyrek açılır.
-    */
+    /* Mobil birincil gezinme. */
     $primaryItems = [
         ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null, 'icon' => 'home'],
-        ['route' => 'cashbook.index', 'label' => 'Kasa', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
+        ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
         ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
         ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
     ];
@@ -27,15 +19,12 @@
 
     $patterns = [
         'home' => ['home'],
-        'cashbook.index' => ['cashbook.*'],
+        'stays.index' => ['stays.*'],
         'companies.index' => ['companies.*'],
         'payments.index' => ['payments.*'],
     ];
 
-    // "Daha Fazla" çekmecesinde yaşayan ekranlar: kendi ekranı yoksa da
-    // sekmenin aktif göründüğü tek yer burası olmalı. Konaklamalar Gün 10'da
-    // buraya taşındı.
-    $moreActive = request()->routeIs('stays.*', 'statements.*', 'users.*', 'roles.*', 'audit.*');
+    $moreActive = request()->routeIs('statements.*', 'users.*', 'roles.*', 'audit.*');
 
     $columnCount = count($visiblePrimary) + 1;
 @endphp

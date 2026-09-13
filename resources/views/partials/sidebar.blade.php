@@ -15,15 +15,6 @@
             ],
         ],
         [
-            'label' => 'Kasa',
-            'items' => [
-                ['route' => 'cashbook.index', 'label' => 'Kasa Defteri', 'can' => Permission::CashBookView->value, 'icon' => 'safe'],
-                ['route' => 'cashbook.movements.index', 'label' => 'Kasa Hareketleri', 'can' => Permission::CashBookView->value, 'icon' => 'cash'],
-                ['route' => 'cashbook.transfers.index', 'label' => 'Devir Geçmişi', 'can' => Permission::CashBookView->value, 'icon' => 'swap'],
-                ['route' => 'cashbook.day', 'label' => 'Günlük Defter', 'can' => Permission::CashBookViewAll->value, 'icon' => 'log'],
-            ],
-        ],
-        [
             'label' => 'Cari',
             'items' => [
                 ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
@@ -42,7 +33,6 @@
                 ['route' => 'users.index', 'label' => 'Kullanıcılar', 'can' => Permission::UsersView->value, 'icon' => 'users'],
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
                 ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
-                ['route' => 'cashbook.categories.index', 'label' => 'Kasa Hareket Türleri', 'can' => Permission::CashBookManageCategories->value, 'icon' => 'log'],
                 ['route' => 'fx-correction.index', 'label' => 'Geçmiş Döviz Düzeltme', 'can' => Permission::FxCorrectHistorical->value, 'icon' => 'log'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
@@ -71,18 +61,9 @@
         açık başlayacağına karar vermek için de kullanılır — bu yüzden burada,
         gruplama mantığının yanında durur.
 
-        BUG (kullanıcı bildirdi): önceden 'cashbook.index' deseni
-        'cashbook.movements.*'/'cashbook.transfers.*'yi de kapsıyordu, bu
-        yüzden Kasa Hareketleri/Devir Geçmişi'ndeyken "Kasa Defteri" de
-        yanlışlıkla aktif görünüyordu. Her rota artık YALNIZCA kendi alt
-        ekranlarını kapsar.
     */
     $patterns = [
         'home' => ['home'],
-        'cashbook.index' => ['cashbook.index', 'cashbook.sessions.*'],
-        'cashbook.movements.index' => ['cashbook.movements.*'],
-        'cashbook.transfers.index' => ['cashbook.transfers.*'],
-        'cashbook.day' => ['cashbook.day'],
         'companies.index' => ['companies.*'],
         'stays.index' => ['stays.*'],
         'payments.index' => ['payments.*'],
@@ -91,7 +72,6 @@
         'users.index' => ['users.*'],
         'roles.index' => ['roles.*'],
         'rooms.index' => ['rooms.*'],
-        'cashbook.categories.index' => ['cashbook.categories.*'],
         'fx-correction.index' => ['fx-correction.*'],
         'audit.index' => ['audit.*'],
     ];
@@ -118,7 +98,7 @@
             @endphp
 
             {{--
-                Kasa/Cari/Yönetim: koyu renkli, tıklanabilir üst başlık — alt
+                Cari/Yönetim: koyu renkli, tıklanabilir üst başlık — alt
                 öğeler VARSAYILAN OLARAK KAPALI. Aktif sayfanın grubu sunucu
                 tarafında `open` ile başlar ve o grupta kaldığı sürece (her
                 sayfa yüklemesinde yeniden hesaplanan `$groupActive` sayesinde)

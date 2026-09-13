@@ -64,7 +64,7 @@
         kullanıcı tıkladığında `fetch()` ile yüklenir.
     --}}
     @can('create', \App\Modules\ReceiptBook\Models\ReceiptBookEntry::class)
-        <dialog id="makbuz-dialog" class="cash-dialog" aria-labelledby="makbuz-dialog-baslik">
+        <dialog id="makbuz-dialog" class="app-dialog" aria-labelledby="makbuz-dialog-baslik">
             <div data-receipt-dialog-content></div>
         </dialog>
     @endcan
