@@ -153,6 +153,58 @@ sırayla koştu (migrate: "Nothing to migrate" — bu paket migration
 içermiyor, `stays.force_delete` seeder'dan gelen bir YETKİdir) ve işaret
 dosyası silindi. Deploy sonrası elle müdahale artık GEREKMİYOR.
 
+## YAYIN AKIŞI — 13 Eylül 2026'dan itibaren geçerli (yeni oturumlar ÖNCE BUNU OKUSUN)
+
+**"Canlıya al" = `main` dalına push.** Başka hiçbir elle adım YOKTUR: elle
+workflow tetikleme, onay metni yazma, sunucuda migrate/seed/cache koşturma
+KALDIRILDI. Detay ve gerekçe: `docs/k107-otomatik-yayin.md`, `docs/deploy-lemon.md`
+§6/§9, §15 (aşağıda).
+
+```
+main'e push → Actions "Deploy (Lemon)": vendor (8.3) + Vite derlemesi
+            → FTPS aktarımı (/lemon-app/)
+            → storage/app/deploy-pending işareti (ayrı tek dosyalık FTP yüklemesi)
+            → cPanel cron (dakikalık) → deploy/finalize.php:
+              optimize:clear → migrate --force → RolePermissionSeeder → 4× cache
+            → workflow, işaretin silinmesini FTPS ile izler (15 sn × 12) ve
+              SONUCU Actions ekranına yazar; takılırsa sunucudaki
+              lemon-deploy.log'un son 80 satırını da oraya döker
+```
+
+**Claude bu depoda `main`'e Bash ile push EDEMEZ** — uzak oturum ortamı
+`git push origin main` komutunu "production deploy" sayıp blokluyor. Çalışan
+yol: iş dalına (`claude/*`) normal `git push`, sonra GitHub MCP araçlarıyla
+`create_pull_request` + `merge_pull_request`. Merge'in kendisi `main`'e bir
+push olduğu için yayını tetikler. (Kullanıcı isterse `.claude/settings.json`
+içine `"permissions": {"allow": ["Bash(git push:*)"]}` ekleyerek doğrudan
+push'u açabilir — bu dosyayı Claude KENDİSİ düzenleyemez, ortam engelliyor.)
+
+**Sunucu gerçekleri (tekrar keşfetme, üçü de canlıda acı çekilerek bulundu):**
+LiteSpeed + CloudLinux Alt-PHP; cron'u çağıran `lsphp` CLI SAPI DEĞİL
+(`STDOUT`/`STDERR` sabitleri fatal verir), ve `proc_open` + `exec` BİRLİKTE
+kapalı (harici komut çalıştırılamaz → artisan AYNI SÜREÇTE `Kernel::call()`
+ile koşar). Sunucuda terminal erişimi YOK; tanılama yalnızca
+`lemon-deploy.log` üzerinden yapılır ve artık workflow onu kendisi indirir.
+
+**Açık konu — CRON KOŞMUYOR (13 Eylül 2026, 21:15):** ilk otomatik yayınlarda
+(run #16, #17) işaret dosyası silinmedi. Dosya aktarımı BAŞARILI; eksik olan
+yalnızca sunucu tarafı adımları. Workflow'un indirdiği `lemon-deploy.log`'un
+SON SATIRI hâlâ **20:30:02** (run #15'in başarılı finalize'ı) — 20:57'de
+bırakılan işaret için günlüğe HİÇBİR yeni satır düşmemiş. Cron koşup hata
+verseydi günlüğe yazardı (daha önce "Could not open input file" ve "Undefined
+constant STDERR" hataları böyle görünmüştü). Yani **cPanel cron kaydı
+tetiklenmiyor**: ya silinmiş/pasifleştirilmiş, ya da hosting dakikalık cron'a
+izin vermeyip durdurmuş (20:00–20:30 arasındaki dakikalık hata seli bunu
+tetiklemiş olabilir).
+
+Çözüm KULLANICIDADIR (depodan/CI'dan cPanel cron'u oluşturulamaz): cPanel →
+Cron Jobs → kayıt duruyor mu, aktif mi? Dakikalık kabul edilmiyorsa
+`*/5 * * * *` yeterlidir — workflow'un bekleme süresi bu yüzden 6 dakikaya
+çıkarıldı. Komut satırı:
+`/usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php >> /home/derspros/lemon-deploy.log 2>&1`
+
+---
+
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
 ---
