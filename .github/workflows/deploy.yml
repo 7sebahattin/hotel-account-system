@@ -493,13 +493,16 @@ jobs:
             curl_opts="--ssl-reqd --insecure"
           fi
 
-          for attempt in $(seq 1 12); do
+          # 24 × 15 sn = 6 dakika. Dakikalık cron için fazlasıyla yeterli; cron
+          # `*/5` gibi daha seyrek bir aralığa çekilmek zorunda kalırsa (bazı
+          # paylaşımlı hosting'ler dakikalık cron'a izin vermez) hâlâ yetişir.
+          for attempt in $(seq 1 24); do
             listing="$(list_dir 2>/dev/null || echo '__HATA__')"
 
             if [ "$listing" = "__HATA__" ]; then
-              echo "Dizin listelenemedi (deneme $attempt/12) — tekrar denenecek."
+              echo "Dizin listelenemedi (deneme $attempt/24) — tekrar denenecek."
             elif printf '%s\n' "$listing" | grep -qx 'deploy-pending'; then
-              echo "Finalize bekleniyor… (deneme $attempt/12)"
+              echo "Finalize bekleniyor… (deneme $attempt/24)"
             else
               echo "FİNALİZE TAMAMLANDI: işaret dosyası sunucuda silinmiş."
               echo "Sunucuda sırasıyla cache temizliği → migrate → yetki seed'i → cache kurulumu koştu."
@@ -509,8 +512,9 @@ jobs:
             sleep 15
           done
 
-          echo "::warning::Finalize 3 dakika içinde tamamlanmadı — işaret dosyası hâlâ duruyor."
+          echo "::warning::Finalize 6 dakika içinde tamamlanmadı — işaret dosyası hâlâ duruyor."
           echo "::warning::Dosya aktarımı BAŞARILI oldu; eksik olan yalnızca migrate/seed/cache adımlarıdır."
+          echo "::warning::Günlükte YENİ satır yoksa cron HİÇ koşmamıştır (cPanel → Cron Jobs kontrol edin)."
 
           # Sunucu günlüğünü BURAYA yaz. Sunucuda terminal erişimi yok ve
           # kullanıcının günlüğü elle bulup yapıştırması, bu projede en çok

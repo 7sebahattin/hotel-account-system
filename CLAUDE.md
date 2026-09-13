@@ -186,12 +186,22 @@ kapalı (harici komut çalıştırılamaz → artisan AYNI SÜREÇTE `Kernel::ca
 ile koşar). Sunucuda terminal erişimi YOK; tanılama yalnızca
 `lemon-deploy.log` üzerinden yapılır ve artık workflow onu kendisi indirir.
 
-**Açık konu (13 Eylül 2026, 21:00 civarı):** ilk otomatik yayınlarda (run #16,
-#17) işaret dosyası 3 dakikada silinmedi — dosya aktarımı BAŞARILI, eksik olan
-sunucu tarafı adımları. FTP listesi okunabildiği için bağlantı sorunu değil;
-ya cPanel cron kaydı artık koşmuyor ya da finalize bir adımda hata veriyor.
-Bir sonraki koşunun Actions çıktısındaki `----- lemon-deploy.log -----` bloğu
-kesin cevabı verir. Son BAŞARILI finalize: 13 Eylül 20:30 (run #15).
+**Açık konu — CRON KOŞMUYOR (13 Eylül 2026, 21:15):** ilk otomatik yayınlarda
+(run #16, #17) işaret dosyası silinmedi. Dosya aktarımı BAŞARILI; eksik olan
+yalnızca sunucu tarafı adımları. Workflow'un indirdiği `lemon-deploy.log`'un
+SON SATIRI hâlâ **20:30:02** (run #15'in başarılı finalize'ı) — 20:57'de
+bırakılan işaret için günlüğe HİÇBİR yeni satır düşmemiş. Cron koşup hata
+verseydi günlüğe yazardı (daha önce "Could not open input file" ve "Undefined
+constant STDERR" hataları böyle görünmüştü). Yani **cPanel cron kaydı
+tetiklenmiyor**: ya silinmiş/pasifleştirilmiş, ya da hosting dakikalık cron'a
+izin vermeyip durdurmuş (20:00–20:30 arasındaki dakikalık hata seli bunu
+tetiklemiş olabilir).
+
+Çözüm KULLANICIDADIR (depodan/CI'dan cPanel cron'u oluşturulamaz): cPanel →
+Cron Jobs → kayıt duruyor mu, aktif mi? Dakikalık kabul edilmiyorsa
+`*/5 * * * *` yeterlidir — workflow'un bekleme süresi bu yüzden 6 dakikaya
+çıkarıldı. Komut satırı:
+`/usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php >> /home/derspros/lemon-deploy.log 2>&1`
 
 ---
 
