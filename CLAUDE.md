@@ -1972,11 +1972,33 @@ workflow'un `guard` işi başka her hedefi fail-closed reddeder.
 
 - Genel ilkeler: `docs/deploy-github-actions.md`
 - **Hedefe özel kurulum, dizin mimarisi kararı ve blocker'lar: `docs/deploy-lemon.md`**
-- Workflow: `.github/workflows/deploy.yml` — yalnızca elle tetiklenir, varsayılanı
-  `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan gerçek aktarım yapamaz.
+- Workflow: `.github/workflows/deploy.yml` — `main` dalına push OTOMATİK canlı
+  yayın yapar (13 Eylül 2026, kullanıcı talimatı); elle tetiklemenin varsayılanı
+  hâlâ `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan hiçbir yol gerçek
+  aktarım yapamaz.
 
 `develop` → Lemon (kabul/staging), `main` → production; ayrı hedefler, ayrı veritabanı.
-**Otomatik push deployment hiçbir dal için etkin değildir.**
+
+**`main` için OTOMATİK push deployment ETKİNDİR (13 Eylül 2026 — kullanıcı
+talimatıyla değiştirildi; önceki kural "hiçbir dal için etkin değildir"di).**
+Gerekçe: kullanıcı her yayın için elle workflow tetikleyip onay metni yazmaktan
+ve sunucuda elle komut koşturmaktan yoruldu; bu turda "canlıya al = main'e
+push" akışı istendi. Kural artık şudur:
+
+- `main`e push → derleme (vendor + Vite) → FTPS aktarımı → finalize işareti →
+  cPanel cron'u `deploy/finalize.php` ile migrate/seed/cache adımlarını en geç
+  1 dakika içinde koşturur. Elle hiçbir adım yoktur.
+- **Hedef kilitleri GEVŞETİLMEDİ:** `DEPLOY_ENABLED=true` ve
+  `LEMON_APP_DIR == /lemon-app/` her iki yolda da aranır (hesapta başka canlı
+  siteler vardır). Otomatik yolda ARANMAYAN tek şey `confirm_target`'tır —
+  o bir İNSAN onayıdır ve otomatik akışta yazacak insan yoktur.
+- Yalnızca sunucuya aktarılan dosyalar tetikler: tek başına `docs/`, `tests/`,
+  `.claude/` veya `*.md` değişen bir push aktarım yapmaz (`paths-ignore`).
+- `develop` için otomatik deployment HÂLÂ YOKTUR.
+- Aktarımdan sonra workflow, işaret dosyasının silinmesini FTPS ile izleyerek
+  finalize'ın gerçekten bittiğini raporlar — sunucu günlüğüne bakmak
+  gerekmez. **Yeni bir HTTP ucu AÇILMADI**: internete açık migrate/deploy ucu
+  yasağı (aşağıdaki kural) aynen geçerlidir.
 
 > **PHP sürümü blocker'ı ÇÖZÜLDÜ** — bkz. §2 ve `docs/kararlar.md` K-060.
 > Bağımlılıklar `config.platform.php = "8.3.0"` ile PHP 8.3'e kilitlendi;

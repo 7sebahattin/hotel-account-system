@@ -1,11 +1,22 @@
 name: Deploy (Lemon)
 
 # ============================================================================
-# BU WORKFLOW BU HÂLİYLE GERÇEK DEPLOY YAPAMAZ.
+# ÜÇ ÇALIŞMA BİÇİMİ VARDIR.
 #
-# İKİ ÇALIŞMA BİÇİMİ VARDIR VE KİLİTLER YALNIZCA İKİNCİSİNE UYGULANIR:
+#   push → main  (OTOMATİK CANLI YAYIN — 13 Eylül 2026, kullanıcı talimatı)
+#     • `main` dalına her push/merge gerçek aktarımı KENDİLİĞİNDEN başlatır.
+#       Elle tetikleme, onay metni yazma ve sunucuda elle komut YOKTUR:
+#       aktarımdan sonra finalize işareti bırakılır, cPanel cron'u en geç
+#       1 dakika içinde migrate/seed/cache adımlarını koşturur (§6).
+#     • İki kilit HÂLÂ geçerlidir ve GEVŞETİLMEMİŞTİR: `DEPLOY_ENABLED=true`
+#       ve `LEMON_APP_DIR == EXPECTED_DIR`. Bunlar aktarımın YANLIŞ YERE
+#       yazmasını engeller — hesapta başka canlı siteler vardır.
+#     • `confirm_target` yalnızca ELLE tetiklemede anlamlıdır (insan onayı);
+#       otomatik akışta yazacak bir insan yoktur, bu yüzden ARANMAZ.
+#     • Yalnızca sunucuya AKTARILAN dosyalar tetikler: tek başına docs/,
+#       tests/, .claude/ veya *.md değişen bir push aktarım yapmaz.
 #
-#   mode = dry-run  (varsayılan)  → GÜVENLİ, HER ZAMAN ÇALIŞTIRILABİLİR
+#   mode = dry-run  (ELLE tetiklemenin VARSAYILANI) → GÜVENLİ
 #     • DEPLOY_ENABLED GEREKMEZ
 #     • confirm_target GEREKMEZ (yazılırsa yalnızca bilgilendirme amaçlı bakılır)
 #     • FTPS bağlantısı kurulur, hedef ve aktarım planı doğrulanır
@@ -16,12 +27,11 @@ name: Deploy (Lemon)
 #       oluşturabilir. Boş bir dizinden ibarettir, dosya yazılmaz, silinmez.
 #       Hedefimiz (/lemon-app/) zaten mevcut olduğu için pratikte no-op'tur.
 #
-#   mode = deploy   (gerçek aktarım) → DÖRT KİLİT BİRDEN AÇILMALI
-#     1. Yalnızca `workflow_dispatch` ile elle tetiklenir. push/PR tetiklemesi YOKTUR.
-#     2. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
-#        Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
-#     3. `confirm_target` alanına hedef alan adı birebir yazılmalı.
-#     4. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
+#   mode = deploy   (ELLE gerçek aktarım) → ÜÇ KİLİT BİRDEN AÇILMALI
+#     1. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
+#     2. `confirm_target` alanına hedef alan adı birebir yazılmalı —
+#        insan tetiklediği için bilinçli onay aranır.
+#     3. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
 #
 #   Karar iki kez, birbirinden bağımsız hesaplanır (guard işi + aktarım işi).
 #   İkisi aynı sonuca varmazsa iş durur. Fail-closed: 'true' dışındaki her
@@ -39,6 +49,16 @@ name: Deploy (Lemon)
 # ============================================================================
 
 on:
+  # OTOMATİK CANLI YAYIN: `main`e her push/merge canlıya çıkar.
+  # Sunucuya HİÇ AKTARILMAYAN dosyalar (belgeler, testler, ajan yapılandırması)
+  # tek başına değiştiyse boşuna aktarım yapılmaz.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'tests/**'
+      - '.claude/**'
+      - '**.md'
   workflow_dispatch:
     inputs:
       mode:
@@ -144,12 +164,33 @@ jobs:
       - name: Çalışma biçimine karar ver
         id: decide
         env:
+          EVENT: ${{ github.event_name }}
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm_target }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
           APP_DIR: ${{ vars.LEMON_APP_DIR }}
         run: |
           set -u
+
+          # ------------------------------------------- OTOMATİK (push → main)
+          # İnsan onayı (confirm_target) ARANMAZ: yazacak bir insan yoktur.
+          # Hedef kilitleri (DEPLOY_ENABLED + LEMON_APP_DIR) GEÇERLİDİR.
+          if [ "$EVENT" = "push" ]; then
+            fail=0
+            if [ "${ENABLED:-}" != "true" ]; then
+              echo "::error::Otomatik canlı yayın kapalı: DEPLOY_ENABLED repository variable'ı 'true' değil."
+              fail=1
+            fi
+            if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+              echo "::error::LEMON_APP_DIR beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+              fail=1
+            fi
+            [ "$fail" -eq 0 ] || exit 1
+
+            echo "live=true" >> "$GITHUB_OUTPUT"
+            echo "Çalışma biçimi: OTOMATİK CANLI YAYIN (main'e push)."
+            exit 0
+          fi
 
           # ---------------------------------------------------------- DRY-RUN
           if [ "$MODE" != "deploy" ]; then
@@ -296,6 +337,7 @@ jobs:
       - name: Çalışma biçimini bağımsız doğrula
         id: mode
         env:
+          EVENT: ${{ github.event_name }}
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm_target }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
@@ -304,7 +346,17 @@ jobs:
         run: |
           set -u
           live=false
-          if [ "$MODE" = "deploy" ] \
+
+          # Otomatik akış (main'e push): insan onayı aranmaz, hedef kilitleri kalır.
+          if [ "$EVENT" = "push" ] \
+             && [ "${ENABLED:-}" = "true" ] \
+             && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
+            live=true
+          fi
+
+          # Elle akış: üç kilit birden.
+          if [ "$EVENT" != "push" ] \
+             && [ "$MODE" = "deploy" ] \
              && [ "${ENABLED:-}" = "true" ] \
              && [ "$CONFIRM" = "$TARGET_DOMAIN" ] \
              && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
@@ -402,17 +454,75 @@ jobs:
           dangerous-clean-slate: false
           log-level: standard
 
+      # Sunucu tarafının GERÇEKTEN bittiğini buradan görürüz: finalize başarıyla
+      # tamamlandığında `deploy/finalize.php` işaret dosyasını SİLER. Dizini
+      # FTPS ile listeleyip dosyanın kaybolmasını bekliyoruz.
+      #
+      # Bu kontrol sunucuya YENİ BİR UÇ AÇMAZ (CLAUDE.md §15: internete açık
+      # migrate/deploy ucu KESİNLİKLE yoktur) — yalnızca zaten var olan FTP
+      # hesabıyla bir dizin listesi okur. Amacı, "cron çalıştı mı, hata mı
+      # verdi" sorusunu sunucu günlüğüne bakmadan cevaplamaktır.
+      - name: Finalize sonucunu bekle (işaret dosyası silindi mi)
+        if: steps.mode.outputs.live == 'true'
+        continue-on-error: true
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+        run: |
+          # pipefail ŞART: listeleme bir boru hattından geçiyor. Olmazsa curl'ün
+          # hatası `tr`nin başarısıyla maskelenir, BOŞ çıktı "işaret dosyası
+          # silinmiş" gibi okunur ve başarısız bir finalize BAŞARILI raporlanırdı.
+          set -uo pipefail
+
+          url="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR}storage/app/"
+          curl_opts="--ssl-reqd"
+
+          # FTP listesi CRLF ile gelir; `\r` temizlenmezse satır eşleşmesi tutmaz.
+          list_dir() {
+            curl -sS $curl_opts --list-only --max-time 30 \
+                 --user "$FTP_USERNAME:$FTP_PASSWORD" "$url" | tr -d '\r'
+          }
+
+          # Paylaşımlı hosting'de FTPS sertifikası doğrulanamayabilir. Yalnızca
+          # BU salt-okunur kontrol için doğrulama gevşetilir; aktarımın kendisi
+          # (FTP-Deploy-Action) bundan etkilenmez.
+          if ! list_dir >/dev/null 2>&1; then
+            curl_opts="--ssl-reqd --insecure"
+          fi
+
+          for attempt in $(seq 1 12); do
+            listing="$(list_dir 2>/dev/null || echo '__HATA__')"
+
+            if [ "$listing" = "__HATA__" ]; then
+              echo "Dizin listelenemedi (deneme $attempt/12) — tekrar denenecek."
+            elif printf '%s\n' "$listing" | grep -qx 'deploy-pending'; then
+              echo "Finalize bekleniyor… (deneme $attempt/12)"
+            else
+              echo "FİNALİZE TAMAMLANDI: işaret dosyası sunucuda silinmiş."
+              echo "Sunucuda sırasıyla cache temizliği → migrate → yetki seed'i → cache kurulumu koştu."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "::warning::Finalize 3 dakika içinde tamamlanmadı — işaret dosyası hâlâ duruyor."
+          echo "::warning::Muhtemel nedenler: cPanel cron kaydı kapalı, ya da bir adım hata verdi."
+          echo "::warning::Sunucudaki /home/derspros/lemon-deploy.log dosyası tam hatayı yazar."
+          echo "::warning::Dosya aktarımı BAŞARILI oldu; eksik olan yalnızca migrate/seed/cache adımlarıdır."
+
       - name: Özet
         run: |
           if [ "${{ steps.mode.outputs.live }}" = "true" ]; then
             echo "Gerçek aktarım tamamlandı, finalize işareti bırakıldı."
-            echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
-            echo "(zaten ayarlıysa bir şey yapılmaz)."
-            echo "cPanel cron kuruluysa (docs/deploy-lemon.md §6) deploy/finalize.php işareti"
-            echo "görüp migrate/seed/cache adımlarını en geç 1 dakika içinde otomatik çalıştırır;"
-            echo "kurulu DEĞİLSE bu adımlar elle çalıştırılmalıdır. Ardından docs/deploy-lemon.md"
-            echo "§7 doğrulaması koşulmalıdır."
+            echo "Sunucu tarafı (migrate/seed/cache) cPanel cron'u + deploy/finalize.php ile"
+            echo "en geç 1 dakika içinde otomatik koşar; sonucu bir önceki adım raporlar."
+            echo "Elle yapılacak bir şey YOKTUR."
           else
             echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya oluşturulmadı, değiştirilmedi veya silinmedi."
-            echo "Gerçek aktarım için: DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
+            echo "Gerçek aktarım: main dalına push (otomatik) ya da"
+            echo "elle DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
           fi
