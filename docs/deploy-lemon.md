@@ -470,9 +470,12 @@ uygulanır. Güvenli doğrulamayı engellemek kilidin amacı değildir.
 | Hedef ve aktarım planı | doğrulanır ve raporlanır | doğrulanır |
 | Dosya oluşturma / değiştirme / silme | **yok** | var |
 
-Her iki biçimde de ortak: yalnızca `workflow_dispatch` ile elle tetiklenir —
-`push`/`pull_request` tetiklemesi **yoktur**, `main` veya `develop`'a merge
-hiçbir şey başlatmaz.
+**Üçüncü biçim — OTOMATİK (13 Eylül 2026, kullanıcı talimatı):** `main` dalına
+her push/merge gerçek aktarımı kendiliğinden başlatır. Kilitlerden
+`DEPLOY_ENABLED` ve `LEMON_APP_DIR` aynen aranır; `confirm_target` ARANMAZ
+(insan onayıdır, otomatik akışta yazacak insan yoktur). Tek başına `docs/`,
+`tests/`, `.claude/` veya `*.md` değişen bir push aktarım yapmaz
+(`paths-ignore`). `develop` ve `pull_request` tetiklemesi **hâlâ yoktur**.
 
 ### Karar iki kez, bağımsız hesaplanır
 
@@ -537,10 +540,15 @@ Lemon şu anda **ilk kabul/staging ortamı** olarak kullanılacak.
 
 Gerçek production ortamı geldiğinde: `main` → production, `develop` → Lemon.
 
-**Otomatik push deployment hiçbir dal için etkinleştirilmedi ve sizin onayınız
-olmadan etkinleştirilmeyecek.** Onay verdiğinizde bile önerim, `develop` için
-`push` tetikleyicisi yerine `workflow_dispatch`'te kalmaktır: paylaşımlı
-hostingde geri alma maliyeti yüksektir.
+**GÜNCELLENDİ (13 Eylül 2026):** kullanıcı talimatıyla `main` dalı için otomatik
+push deployment ETKİNLEŞTİRİLDİ — "canlıya al = main'e push". Gerekçe: her yayın
+için elle tetikleme + onay metni + sunucuda elle komut zinciri, geliştirme hızını
+belirgin biçimde düşürüyordu. `develop` için otomatik deployment HÂLÂ YOKTUR ve
+önerim orada `workflow_dispatch`'te kalmaktır.
+
+Bilinen ödünç: `main`e giren hatalı bir commit doğrudan canlıya çıkar. Geri
+alma yolu, düzeltmeyi `main`e push etmektir (ileri düzeltme) — paylaşımlı
+hostingde dosya düzeyinde geri alma maliyetlidir, bkz. §13.
 
 ---
 
