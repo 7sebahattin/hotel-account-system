@@ -398,10 +398,26 @@ jobs:
         run: |
           set -euo pipefail
           base="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR}"
+
+          # Bu hosting'in FTPS sertifikası FTP HOST ADIYLA EŞLEŞMİYOR; katı
+          # doğrulama curl 60 verir ("no alternative certificate subject name
+          # matches target host name"). Önce katı denenir, tutmazsa YALNIZCA bu
+          # salt-okunur curl çağrıları için doğrulama gevşetilir. Dosyayı
+          # aktaran FTP-Deploy-Action'ın TLS davranışı bundan ETKİLENMEZ ve
+          # kimlik bilgileri zaten aynı kanaldan gidiyor — yeni bir maruziyet
+          # doğmaz. Bu geri düşüş 13 Eylül'de çalışan sürümde vardı, sonradan
+          # kaldırılınca deploy bu adımda kırıldı.
+          curl_opts="--ssl-reqd"
           list_dir() {
-            curl --fail -sS --ssl-reqd --list-only --max-time 30 \
+            curl --fail -sS $curl_opts --list-only --max-time 30 \
               --user "$FTP_USERNAME:$FTP_PASSWORD" "$1" | tr -d '\r'
           }
+
+          if ! list_dir "${base}storage/app/" >/dev/null 2>&1; then
+            curl_opts="--ssl-reqd --insecure"
+            echo "FTPS sertifikası doğrulanamadı; salt-okunur kontroller için doğrulama gevşetildi."
+          fi
+
           pending="$(list_dir "${base}storage/app/")"
           framework="$(list_dir "${base}storage/framework/")"
           if printf '%s\n' "$pending" | grep -qx 'deploy-pending'; then
@@ -545,6 +561,16 @@ jobs:
             curl -sS $curl_opts --list-only --max-time 30 \
                  --user "$FTP_USERNAME:$FTP_PASSWORD" "$url" | tr -d '\r'
           }
+
+          # Sertifika/host adı uyuşmazlığı (bu hosting'de durum budur) katı
+          # doğrulamayı başarısız yapar; yalnızca bu salt-okunur kontroller için
+          # gevşetilir — bakım adımıyla AYNI gerekçe. Bu geri düşüş olmadan
+          # 24 denemenin hepsi "Dizin listelenemedi" ile geçer ve yayın
+          # gerçekte tamamlanmış olsa bile BAŞARISIZ raporlanır.
+          if ! list_dir >/dev/null 2>&1; then
+            curl_opts="--ssl-reqd --insecure"
+            echo "FTPS sertifikası doğrulanamadı; salt-okunur kontroller için doğrulama gevşetildi."
+          fi
 
           for attempt in $(seq 1 24); do
             if ! listing="$(list_dir 2>/dev/null)"; then
