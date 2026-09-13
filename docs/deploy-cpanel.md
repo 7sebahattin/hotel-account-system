@@ -71,7 +71,7 @@ nedenle depodan kaldırılmıştır.
    bkz. `docs/kararlar.md` K-102). Ayrıca bayat cache yeni `.env`
    değerlerini de görmezden bırakabilir.
 6. `php artisan migrate --force`
-7. **`php artisan db:seed --class=RolePermissionSeeder --force`** — HER
+7. **`php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`** — HER
    deploy'da, migrate'ten hemen sonra, ATLANMAZ. Gerekçe: kodda yeni bir
    `Permission` case'i eklenip deploy edildiğinde, bu adım koşulmazsa
    production'da "There is no permission named X for guard web" hatası

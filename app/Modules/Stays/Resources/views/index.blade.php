@@ -5,6 +5,8 @@
     <x-ui.page-header title="Konaklamalar"
                       :subtitle="number_format($stays->total(), 0, ',', '.').' konaklama kaydı'">
         <x-slot:actions>
+            <x-ui.button variant="secondary" :href="route('stays.print', request()->query())">Yazdır</x-ui.button>
+
             @can('create', \App\Modules\Stays\Models\Stay::class)
                 <x-ui.button :href="route('stays.create')">Yeni konaklama</x-ui.button>
             @endcan
@@ -56,6 +58,7 @@
                 <x-ui.sort-header :filter="$filter" column="amount" align="right">Tutar</x-ui.sort-header>
                 <x-ui.th>Durum</x-ui.th>
                 <x-ui.th>Oluşturan</x-ui.th>
+                <x-ui.th>İşlemler</x-ui.th>
             </tr>
         </thead>
         <tbody>
@@ -79,10 +82,13 @@
                         @include('stays::_payment-status')
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $stay->creator?->name ?? '—' }}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <x-ui.button variant="ghost" :href="route('stays.show', $stay)">Görüntüle</x-ui.button>
+                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="px-4 py-10 text-center text-sm text-mut">
+                    <td colspan="10" class="px-4 py-10 text-center text-sm text-mut">
                         @if ($filter->hasActiveFilters())
                             Bu filtrelerle eşleşen kayıt bulunamadı.
                             <a href="{{ route('stays.index') }}"
@@ -95,6 +101,26 @@
             @endforelse
         </tbody>
     </x-ui.table>
+
+    @if ($totals->isNotEmpty())
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            @foreach ($totals as $code => $t)
+                <x-ui.card class="p-4">
+                    <p class="text-xs uppercase tracking-wide text-mut">{{ $code }} toplamı</p>
+                    <p class="mt-1 tabular-nums text-lg text-tx">{{ $t['total']->format($t['currency']) }}</p>
+                    <p class="mt-1 text-xs text-mut">
+                        {{ number_format($t['count'], 0, ',', '.') }} konaklama · bu filtreyle
+                    </p>
+                    @if ($t['cancelledCount'] > 0)
+                        <p class="mt-1 text-xs text-mut">
+                            Aktif: {{ $t['activeTotal']->format($t['currency']) }}
+                            · İptal ({{ $t['cancelledCount'] }}): {{ $t['cancelledTotal']->format($t['currency']) }}
+                        </p>
+                    @endif
+                </x-ui.card>
+            @endforeach
+        </div>
+    @endif
 
     {{-- Mobil: yalnızca hızlı okunması gereken alanlar --}}
     <div class="mt-4 space-y-3 lg:hidden">

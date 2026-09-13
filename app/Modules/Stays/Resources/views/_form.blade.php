@@ -9,7 +9,8 @@
 
 <div class="grid gap-4 sm:grid-cols-2" data-stay-pricing>
     <div class="sm:col-span-2">
-        <x-ui.select label="Firma (isteğe bağlı)" name="company_id" data-stay-company>
+        <x-ui.select label="Firma (isteğe bağlı)" name="company_id" data-stay-company data-searchable-select
+                     hint="Yazarak arayabilirsiniz.">
             <option value="">Bireysel konaklama — firma yok</option>
             @foreach ($companies as $id => $name)
                 <option value="{{ $id }}"

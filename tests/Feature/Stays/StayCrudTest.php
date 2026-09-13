@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Stays;
 
+use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
@@ -249,8 +250,16 @@ class StayCrudTest extends TestCase
         $this->assertSame(StayStatus::Active, Stay::query()->firstOrFail()->status);
     }
 
+    /**
+     * Kalıcı silme (hard delete), kullanıcı talimatıyla eklenen DAR bir
+     * istisnadır (bkz. StayForceDeleteTest): yalnızca `stays.force_delete`
+     * yetkisiyle (yalnızca Admin'e atanır) ve yalnızca ZATEN iptal edilmiş
+     * bir kayıtta çalışır — genel kural hâlâ geçerlidir, konaklama SERBESTÇE
+     * silinemez. Bu test, ucun TEK ve BEKLENEN rotadan ibaret kaldığını,
+     * genel bir "silme" kapısına DÖNÜŞMEDİĞİNİ doğrular.
+     */
     #[Test]
-    public function hard_delete_ucu_yoktur(): void
+    public function hard_delete_ucu_yalnizca_dar_bir_istisnadir(): void
     {
         $this->assertTrue(Schema::hasColumn('stays', 'deleted_at'));
 
@@ -258,6 +267,14 @@ class StayCrudTest extends TestCase
             ->filter(fn ($route) => str_contains($route->uri(), 'stays')
                 && in_array('DELETE', $route->methods(), true));
 
-        $this->assertCount(0, $deleteRoutes, 'Konaklama silinmez, iptal edilir');
+        $this->assertCount(1, $deleteRoutes, 'Tek DELETE ucu: kalıcı silme (stays.destroy)');
+
+        $route = $deleteRoutes->first();
+        $this->assertSame('stays.destroy', $route->getName());
+        $this->assertContains(
+            'can:'.Permission::StaysForceDelete->value,
+            $route->middleware(),
+            'Bu uç yalnızca dar force_delete yetkisiyle korunmalı, genel stays.delete ile DEĞİL',
+        );
     }
 }

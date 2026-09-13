@@ -38,11 +38,14 @@ değillerdir ve doğrulama adımının değeri sızdırmadan kontrol etmesine iz
 
 ## 3. Deploy edilen ve edilmeyen dosyalar
 
-**Gönderilir:** uygulama kodu, `vendor/`, `public/build/`, `config/`, `database/migrations/`, `resources/views/`, `lang/`
+**Gönderilir:** uygulama kodu, `vendor/`, `public/build/`, `config/`,
+`database/migrations/`, `resources/views/`, `lang/`, **`deploy/`**
+(`finalize.php` sunucuda çalışabilsin diye — bkz. §6; Laravel kökü zaten
+DocumentRoot'un dışında olduğu için bu dizin web'den erişilemez).
 
 **Gönderilmez (`exclude`):**
 ```
-.git*, .github/, .claude/, tests/, node_modules/, docs/, deploy/,
+.git*, .github/, .claude/, tests/, node_modules/, docs/,
 .env*, storage/**, bootstrap/cache/**, phpunit.xml, pint.json,
 package*.json, composer.json, composer.lock, vite.config.js, README.md, CLAUDE.md
 ```
@@ -73,7 +76,7 @@ Herhangi biri 200 dönerse deploy **geri alınır**.
 
 ## 6. KARAR VERİLDİ: cPanel cron + işaret dosyası
 
-`php artisan migrate --force`, `db:seed --class=RolePermissionSeeder --force`,
+`php artisan migrate --force`, `db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`,
 `config:cache`, `route:cache`, `view:cache` ve `event:cache` sunucuda çalışmak
 zorundadır. SSH yoksa iki seçenek vardır:
 
@@ -94,7 +97,7 @@ HTTP ucu **oluşturulmayacaktır.** Akış:
    atlanır). Bu, gerçek bir üretim olayının BİREBİR kök nedenidir (Room
    Registry modülü — bkz. `docs/kararlar.md` K-102).
 4. Gerekiyorsa `php artisan migrate --force` çalıştırır.
-5. **Ardından `php artisan db:seed --class=RolePermissionSeeder --force`
+5. **Ardından `php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`
    çalıştırır — atlanamaz.** Gerekçe: koddaki yeni bir `Permission` case'i
    deploy edilip bu adım koşulmazsa production "There is no permission
    named X for guard web" hatası verir (gerçek üretim olayı — tam sıra ve
@@ -106,8 +109,10 @@ HTTP ucu **oluşturulmayacaktır.** Akış:
 9. **Başarısızsa** işaret dosyası korunur ve hata günlüğe yazılır (bir sonraki
    cron tekrar dener; sorun görünür kalır).
 
-Bu bölüm yalnızca mimari karardır — `finalize.php` ve deploy workflow'u
-**henüz yazılmamıştır** ve deploy fazına kadar yazılmayacaktır.
+**Güncel durum (12 Eylül 2026 devir notu):** `finalize.php` yazıldı
+(`deploy/finalize.php`) ve deploy workflow'u marker'ı gerçek aktarımdan sonra
+AYRI bir FTP yüklemesiyle bırakıyor — bkz. `docs/deploy-lemon.md` §6. Geriye
+kalan tek adım cPanel'de cron kaydının elle eklenmesidir (aynı bölüm).
 
 <details><summary>Değerlendirilen seçenekler</summary>
 
