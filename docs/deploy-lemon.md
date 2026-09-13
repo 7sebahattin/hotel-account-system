@@ -317,7 +317,7 @@ Planlanan cron satırı:
 **`finalize.php` yazıldı** (12 Eylül 2026 devir notu, `deploy/finalize.php`) —
 yukarıdaki beş özelliğin hepsini taşır (marker yoksa no-op, `flock()` ile
 eşzamanlılık kilidi, her adımın çıktı/çıkış kodu günlüğe yazılır, başarısızlıkta
-marker SİLİNMEZ, `PHP_SAPI !== 'cli'` ise hemen çıkar). Gerçek bir deploy
+marker SİLİNMEZ, HTTP isteği bağlamında çağrılırsa 404 ile reddeder). Gerçek bir deploy
 sırasında `.github/workflows/deploy.yml`, ana FTPS aktarımından SONRA marker'ı
 AYRI ve tek dosyalık bir FTP yüklemesiyle bırakır (storage/ normal aktarımdan
 hariç tutulduğu için).
@@ -330,19 +330,43 @@ oluşturmak mümkün değildir — cPanel arayüzünden (Cron Jobs) elle eklenme
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
 
-> **PHP binary yolu (12 Eylül 2026 devir notu):** bu sunucu **LiteSpeed**
-> kullanıyor; PHP 8.3 binary'si `/usr/local/bin/lsphp`dır. Daha önce burada
-> yazılı olan cPanel/EasyApache adlandırması (`/usr/local/bin/ea-php83`)
-> BU SUNUCUDA YOKTUR ve cron'da
-> `jailshell: /usr/local/bin/ea-php83: No such file or directory` hatası verir.
-> Yol, `PHP_BINARY`/`PHP_VERSION` yazdıran geçici bir betikle doğrulandı
-> (`/usr/local/bin/lsphp`, 8.3.33) ve betik SİLİNDİ.
+> **PHP binary yolu (13 Eylül 2026):** bu sunucu **LiteSpeed + CloudLinux
+> Alt-PHP** kullanıyor. Cron satırındaki binary `/usr/local/bin/lsphp`tir
+> (gerçekte `/opt/alt/php83/usr/bin/lsphp`e çözülür, PHP 8.3.33). Daha önce
+> burada yazılı olan cPanel/EasyApache adlandırması
+> (`/usr/local/bin/ea-php83`) BU SUNUCUDA YOKTUR ve cron'da
+> `jailshell: /usr/local/bin/ea-php83: No such file or directory` verir.
 >
-> `finalize.php` ayrıca kendi içinde bir **PHP sürümü kapısı** taşır: 8.3
-> dışında bir sürümle çağrılırsa hiçbir şey yapmadan durur, işaret dosyasını
-> KORUR ve günlüğe hangi binary'nin hangi sürümü verdiğini yazar (CLAUDE.md
-> §2 — sürüm kilidi). LiteSpeed'de `lsphp` çözümü web isteği ile cron
-> arasında farklılaşabildiği için bu kapı bilinçli olarak eklenmiştir.
+> **`lsphp` bir CLI binary'si DEĞİLDİR** (SAPI `litespeed`). Canlıda üç ayrı
+> hata bunu ortaya çıkardı ve `finalize.php` üçüne karşı da sertleştirildi:
+>
+> 1. `STDOUT`/`STDERR` SABİTLERİ yalnızca CLI SAPI'de tanımlıdır —
+>    "Undefined constant STDERR" fatal hatası alındı. Çıktı artık HER ZAMAN
+>    `php://stdout` / `php://stderr` akışlarıyla yazılır.
+> 2. "CLI değilse çık" kontrolü meşru cron çalışmasını da reddediyordu.
+>    Ayırt edici ölçüt SAPI değil, GERÇEK bir HTTP isteği bağlamının varlığıdır
+>    (`REQUEST_METHOD`/`HTTP_HOST`) — kontrol buna çevrildi.
+> 3. `artisan`ı çalıştıracak binary artık SINANARAK seçilir
+>    (`resolvePhpBinary()`): aday listesi + `/opt/alt/php83/usr/bin/*php*`
+>    taraması, her aday GERÇEK bir sınama dosyası ve GERÇEK bir argümanla
+>    çalıştırılır. `-r` seçeneği CGI/LSAPI binary'lerinde desteklenmediği için
+>    sınama dosya üzerinden yapılır; argüman taşınmıyorsa aday
+>    `-d register_argc_argv=1` ile TEKRAR denenir (bu ini CLI dışı SAPI'lerde
+>    varsayılan olarak kapalıdır ve argümansız bir `artisan`, `migrate --force`
+>    yerine sessizce `artisan list` koştururdu).
+>
+> **Sürüm kapısı MUTLAKTIR:** 8.3 dışında bir sürüm asla seçilmez (CLAUDE.md
+> §2 — sürüm kilidi). Gerçek bir CLI binary'si bulunursa o tercih edilir;
+> bulunamazsa `lsphp` gibi CLI olmayan bir 8.3 binary'si SON ÇARE olarak
+> kullanılır — bu durumda `APP_RUNNING_IN_CONSOLE=true` (Laravel'in kendi
+> desteklediği açık kapı, `Application::runningInConsole()`) geçilir ve
+> `max_execution_time=0` / `memory_limit=512M` ile uzun bir migrate'in web
+> SAPI limitlerine takılması engellenir. Hiçbir aday uygun değilse script
+> durur, işaret dosyasını KORUR ve **denenen her adayı gerekçesiyle** günlüğe
+> yazar (sunucuda terminal erişimi olmadığı için tanılama günlükten yapılır).
+>
+> `proc_open` paylaşımlı hosting'de kapatılmış olabilir; bu durumda `exec()`
+> ikinci yol olarak kullanılır, ikisi de kapalıysa bu AÇIKÇA günlüğe düşer.
 
 Cron kurulana kadar marker dosyası sunucuda bırakılır ama hiç kimse onu
 işlemez — bu durumda migrate/seed/cache adımları GEÇİCİ olarak elle

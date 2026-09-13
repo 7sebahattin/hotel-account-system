@@ -133,8 +133,19 @@ aktarımdan SONRA bu marker'ı AYRI ve tek dosyalık bir FTP yüklemesiyle
 bırakır (`storage/` normal aktarımdan hariç tutulduğu için). Gerçek MySQL'e
 karşı elle doğrulandı: cache temizleme → migrate → yetki seed'i → cache
 yeniden kurma sırası ve başarısızlıkta marker'ın korunması beklendiği gibi
-çalışıyor. **Hâlâ eksik olan TEK şey:** cPanel'de cron kaydının elle
-eklenmesi — bu depodan/CI'dan yapılamaz.
+çalışıyor. cPanel cron kaydı 13 Eylül 2026'da kullanıcı tarafından eklendi.
+
+Canlı sunucu **LiteSpeed + CloudLinux Alt-PHP**tir ve cron'u çağıran
+`lsphp` bir **CLI binary'si DEĞİLDİR** (SAPI `litespeed`). Script buna göre
+sertleştirildi (detay `docs/deploy-lemon.md` §6): çıktı `php://stdout`/
+`php://stderr` ile yazılır (CLI'a özgü `STDOUT`/`STDERR` sabitleri fatal
+verirdi), web'den çağrılma kontrolü SAPI adına değil GERÇEK bir HTTP isteği
+bağlamına bakar, ve `artisan`ı çalıştıracak binary artık SINANARAK seçilir
+(`resolvePhpBinary()` — gerçek bir sınama dosyası + gerçek bir argümanla;
+argüman taşınmıyorsa `-d register_argc_argv=1` ile tekrar denenir). Sürüm
+kapısı MUTLAKTIR (yalnızca 8.3, §2); gerçek CLI binary'si yoksa `lsphp` son
+çare olarak `APP_RUNNING_IN_CONSOLE=true` ile kullanılır. Hiçbir aday uygun
+değilse marker KORUNUR ve denenen her aday gerekçesiyle günlüğe yazılır.
 
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
