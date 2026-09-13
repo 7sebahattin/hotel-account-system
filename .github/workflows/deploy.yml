@@ -368,12 +368,50 @@ jobs:
             README.md
             CLAUDE.md
 
+      # storage/ normal aktarımdan HARİÇ TUTULUR (kullanıcı verisi kazara
+      # ezilmesin diye) — bu yüzden finalize tetikleyicisi AYRI, tek dosyalık
+      # bir FTP yüklemesiyle bırakılır. cPanel'deki dakikalık cron +
+      # deploy/finalize.php (docs/deploy-lemon.md §6) bu dosyayı görünce
+      # migrate/seed/cache adımlarını sunucuda çalıştırır. Ayrı `state-name`
+      # kullanılır — ana aktarımla AYNI durum dosyasını paylaşmak, iki
+      # farklı local-dir içeriği yüzünden FTP-Deploy-Action'ın "silinmiş"
+      # sanıp dosya kaldırmaya çalışmasına yol açardı.
+      - name: Finalize işaretini hazırla
+        if: steps.mode.outputs.live == 'true'
+        run: |
+          mkdir -p marker
+          {
+            echo "commit=${{ github.sha }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > marker/deploy-pending
+
+      - name: Finalize işaretini bırak (deploy/finalize.php tetikleyicisi)
+        if: steps.mode.outputs.live == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftps
+          local-dir: ./marker/
+          server-dir: ${{ vars.LEMON_APP_DIR }}storage/app/
+          state-name: .ftp-deploy-lemon-app-marker.json
+          dry-run: ${{ steps.mode.outputs.live != 'true' }}
+          dangerous-clean-slate: false
+          log-level: standard
+
       - name: Özet
         run: |
           if [ "${{ steps.mode.outputs.live }}" = "true" ]; then
-            echo "Gerçek aktarım tamamlandı."
+            echo "Gerçek aktarım tamamlandı, finalize işareti bırakıldı."
             echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
-            echo "(zaten ayarlıysa bir şey yapılmaz) ve docs/deploy-lemon.md §7 doğrulaması koşulmalı."
+            echo "(zaten ayarlıysa bir şey yapılmaz)."
+            echo "cPanel cron kuruluysa (docs/deploy-lemon.md §6) deploy/finalize.php işareti"
+            echo "görüp migrate/seed/cache adımlarını en geç 1 dakika içinde otomatik çalıştırır;"
+            echo "kurulu DEĞİLSE bu adımlar elle çalıştırılmalıdır. Ardından docs/deploy-lemon.md"
+            echo "§7 doğrulaması koşulmalıdır."
           else
             echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya oluşturulmadı, değiştirilmedi veya silinmedi."
             echo "Gerçek aktarım için: DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"

@@ -123,6 +123,19 @@ getirildi (`resources/js/app.js`, `initSearchableSelects()`) — §11.7'deki
 gerçek form değeri her zaman `<select>`in kendisinden okunur, kullanıcı
 yazdığı serbest metinle var olmayan bir kayda asla "bağlanamaz".
 
+Deploy finalize script'i yazıldı (12 Eylül 2026 devir notu, `deploy/
+finalize.php`, bkz. `docs/deploy-lemon.md` §6): daha önce yalnızca mimari
+karar olarak dokümante edilen cron+işaret dosyası akışı artık gerçek koddur
+— marker yoksa no-op, `flock()` ile eşzamanlılık kilidi, her adımın çıktısı
+günlüğe yazılır, herhangi bir adım BAŞARISIZ olursa marker SİLİNMEZ (bir
+sonraki cron baştan dener). `.github/workflows/deploy.yml`, gerçek bir
+aktarımdan SONRA bu marker'ı AYRI ve tek dosyalık bir FTP yüklemesiyle
+bırakır (`storage/` normal aktarımdan hariç tutulduğu için). Gerçek MySQL'e
+karşı elle doğrulandı: cache temizleme → migrate → yetki seed'i → cache
+yeniden kurma sırası ve başarısızlıkta marker'ın korunması beklendiği gibi
+çalışıyor. **Hâlâ eksik olan TEK şey:** cPanel'de cron kaydının elle
+eklenmesi — bu depodan/CI'dan yapılamaz.
+
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
 ---

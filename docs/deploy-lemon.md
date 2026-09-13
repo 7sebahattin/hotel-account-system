@@ -314,14 +314,26 @@ Planlanan cron satırı:
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
 
-**`finalize.php` bu turda YAZILMADI** ve production cron kurulmadı — talimat
-gereği yalnızca tasarım dokümante edildi. Yazıldığında taşıması gerekenler:
+**`finalize.php` yazıldı** (12 Eylül 2026 devir notu, `deploy/finalize.php`) —
+yukarıdaki beş özelliğin hepsini taşır (marker yoksa no-op, `flock()` ile
+eşzamanlılık kilidi, her adımın çıktı/çıkış kodu günlüğe yazılır, başarısızlıkta
+marker SİLİNMEZ, `PHP_SAPI !== 'cli'` ise hemen çıkar). Gerçek bir deploy
+sırasında `.github/workflows/deploy.yml`, ana FTPS aktarımından SONRA marker'ı
+AYRI ve tek dosyalık bir FTP yüklemesiyle bırakır (storage/ normal aktarımdan
+hariç tutulduğu için).
 
-- işaret dosyası yoksa hiçbir şey yapmadan çıkmak (cron her dakika koşar)
-- eşzamanlı iki çalıştırmayı engelleyen kilit
-- `migrate --force` çıktısını ve çıkış kodunu günlüğe yazmak
-- **başarısızlıkta işaret dosyasını silmemek**
-- yalnızca CLI'dan çalışabilmek (`php_sapi_name() === 'cli'` değilse çıkmak)
+**Hâlâ eksik olan TEK şey: cPanel'de cron kaydı.** Bunu depodan/CI'dan
+oluşturmak mümkün değildir — cPanel arayüzünden (Cron Jobs) elle eklenmelidir:
+
+```bash
+* * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
+          >> /home/derspros/lemon-deploy.log 2>&1
+```
+
+Cron kurulana kadar marker dosyası sunucuda bırakılır ama hiç kimse onu
+işlemez — bu durumda migrate/seed/cache adımları GEÇİCİ olarak elle
+çalıştırılabilir (§15'teki sırayla); cron kurulduktan sonra bir daha hiç elle
+müdahale gerekmez.
 
 ---
 
@@ -636,7 +648,7 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
 - **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
-- `finalize.php` ve production cron yazılmadı (§6)
+- `finalize.php` yazıldı (§6) ama production cron kaydı HÂLÂ elle eklenmedi
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
 - **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı
