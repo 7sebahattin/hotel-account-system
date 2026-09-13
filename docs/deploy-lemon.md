@@ -310,7 +310,7 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
 Planlanan cron satırı:
 
 ```bash
-* * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
+* * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
 
@@ -326,9 +326,23 @@ hariç tutulduğu için).
 oluşturmak mümkün değildir — cPanel arayüzünden (Cron Jobs) elle eklenmelidir:
 
 ```bash
-* * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
+* * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
+
+> **PHP binary yolu (12 Eylül 2026 devir notu):** bu sunucu **LiteSpeed**
+> kullanıyor; PHP 8.3 binary'si `/usr/local/bin/lsphp`dır. Daha önce burada
+> yazılı olan cPanel/EasyApache adlandırması (`/usr/local/bin/ea-php83`)
+> BU SUNUCUDA YOKTUR ve cron'da
+> `jailshell: /usr/local/bin/ea-php83: No such file or directory` hatası verir.
+> Yol, `PHP_BINARY`/`PHP_VERSION` yazdıran geçici bir betikle doğrulandı
+> (`/usr/local/bin/lsphp`, 8.3.33) ve betik SİLİNDİ.
+>
+> `finalize.php` ayrıca kendi içinde bir **PHP sürümü kapısı** taşır: 8.3
+> dışında bir sürümle çağrılırsa hiçbir şey yapmadan durur, işaret dosyasını
+> KORUR ve günlüğe hangi binary'nin hangi sürümü verdiğini yazar (CLAUDE.md
+> §2 — sürüm kilidi). LiteSpeed'de `lsphp` çözümü web isteği ile cron
+> arasında farklılaşabildiği için bu kapı bilinçli olarak eklenmiştir.
 
 Cron kurulana kadar marker dosyası sunucuda bırakılır ama hiç kimse onu
 işlemez — bu durumda migrate/seed/cache adımları GEÇİCİ olarak elle

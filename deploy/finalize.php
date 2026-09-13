@@ -7,8 +7,13 @@ declare(strict_types=1);
  *
  * cPanel cron'da dakikada bir çalışır:
  *
- *   * * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
+ *   * * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
  *             >> /home/derspros/lemon-deploy.log 2>&1
+ *
+ * (Binary yolu hosting'e göre değişir — bu sunucu LiteSpeed kullanıyor ve
+ * PHP 8.3 CLI binary'si `/usr/local/bin/lsphp`dır, cPanel/EasyApache'in
+ * `ea-phpXX` adlandırmasıyla KARIŞTIRILMAMALIDIR. Doğrulama: PHP_BINARY
+ * ve PHP_VERSION'ı yazdıran geçici bir betikle, 12 Eylül 2026 devir notu.)
  *
  * GitHub Actions deploy işi, gerçek bir aktarım tamamlandığında
  * `storage/app/deploy-pending` işaret dosyasını AYRI bir FTP yüklemesiyle
@@ -46,6 +51,29 @@ $lockFile = __DIR__.'/finalize.lock';
 // İşaret dosyası yoksa yapacak bir şey yok — cron her dakika koşar, bu normal.
 if (! is_file($markerFile)) {
     exit(0);
+}
+
+/*
+ * PHP sürümü kapısı (CLAUDE.md §2 — sürüm 8.3'e KİLİTLİDİR).
+ *
+ * `vendor/` ağacı CI'da 8.3 platformuyla çözülür; cron yanlışlıkla başka bir
+ * sürümün binary'siyle kurulursa (LiteSpeed'de `lsphp` çözümü web isteği ile
+ * cron arasında farklılaşabilir) migrate/seed sessizce değil, FATAL hatayla
+ * patlardı. Burada durur, işaret dosyasına DOKUNMAZ ve ne yapılması gerektiğini
+ * yazar — cron satırı düzeltildikten sonra bir sonraki tur kaldığı yerden devam eder.
+ *
+ * Kontrol, işaret dosyası kontrolünden SONRADIR: aksi hâlde bekleyen bir deploy
+ * olmadığı hâlde her dakika günlüğe hata basardı.
+ */
+if (! str_starts_with(PHP_VERSION, '8.3.')) {
+    fwrite(STDERR, sprintf(
+        "%s — DURDURULDU: bu script PHP 8.3 ile çalışmalı, mevcut sürüm %s (%s).\n".
+        "Cron satırındaki PHP binary yolunu 8.3 veren binary ile değiştirin; işaret dosyası KORUNDU.\n",
+        date('c'),
+        PHP_VERSION,
+        PHP_BINARY,
+    ));
+    exit(1);
 }
 
 $lockHandle = fopen($lockFile, 'c');
