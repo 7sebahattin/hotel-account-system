@@ -111,6 +111,37 @@ PHP);
         $this->assertFileDoesNotExist($this->fixture.'/storage/app/deploy-completed.json');
     }
 
+    /**
+     * Bakım sayfasına gömülü tetikleyici (K-108) finalize'ı bir HTTP isteği
+     * bağlamında çağırır. İki şey kanıtlanır: (1) `LEMON_FINALIZE_EMBEDDED`
+     * beyan edildiğinde HTTP reddi devreye girmez, (2) çıktı stdout'a —
+     * yani ziyaretçinin sayfasına — DEĞİL, günlük dosyasına yazılır.
+     */
+    #[Test]
+    public function embedded_trigger_finalizes_in_http_context_and_writes_to_the_log_not_the_response(): void
+    {
+        $log = $this->fixture.'/lemon-deploy.log';
+        $process = new Process([PHP_BINARY, '-r', implode('', [
+            '$_SERVER["REQUEST_METHOD"]="GET";',
+            '$_SERVER["HTTP_HOST"]="lemon.example";',
+            'define("LEMON_FINALIZE_EMBEDDED", true);',
+            'define("LEMON_FINALIZE_LOG", '.var_export($log, true).');',
+            'require '.var_export($this->fixture.'/deploy/finalize.php', true).';',
+        ])], $this->fixture, [
+            'FINALIZE_FIXTURE' => $this->fixture, 'FINALIZE_FAIL' => '',
+            'APP_CONFIG_CACHE' => false, 'APP_SERVICES_CACHE' => false,
+            'APP_PACKAGES_CACHE' => false, 'APP_ROUTES_CACHE' => false, 'APP_EVENTS_CACHE' => false,
+        ]);
+        $process->setTimeout(30)->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getOutput().$process->getErrorOutput());
+        $this->assertSame('', $process->getOutput(), 'Gömülü modda hiçbir şey yanıt gövdesine yazılmamalı');
+        $this->assertStringContainsString('finalize tamamlandı', (string) file_get_contents($log));
+        $this->assertFileDoesNotExist($this->fixture.'/storage/app/deploy-pending');
+        $this->assertFileDoesNotExist($this->fixture.'/storage/framework/down');
+        $this->assertFileExists($this->fixture.'/storage/app/deploy-completed.json');
+    }
+
     #[Test]
     public function malformed_marker_and_http_requests_do_not_boot_the_application(): void
     {

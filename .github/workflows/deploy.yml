@@ -429,7 +429,18 @@ jobs:
             exit 1
           fi
           mkdir -p maintenance
-          cp release/vendor/laravel/framework/src/Illuminate/Foundation/Console/stubs/maintenance-mode.stub maintenance/maintenance.php
+          # Bakım sayfası = TEK SEFERLİK finalize tetikleyicisi + Laravel'in
+          # kendi bakım stub'ı (K-108). Tetikleyici önce gelir: bekleyen bir
+          # yayın varsa ilk ziyaret finalize'ı koşturur, `artisan up` bu dosyayı
+          # silince tetikleyici de yok olur. Cron YEDEK olarak kalır.
+          # `tail -n +2` stub'ın kendi `<?php` satırını atar — iki dosya tek
+          # geçerli PHP dosyasında birleşir.
+          {
+            cat release/deploy/maintenance-trigger.php
+            echo
+            tail -n +2 release/vendor/laravel/framework/src/Illuminate/Foundation/Console/stubs/maintenance-mode.stub
+          } > maintenance/maintenance.php
+          php -l maintenance/maintenance.php
           # artisan up bu dosyayı siler; sync durum dosyasına rağmen her yayında yeniden gönderilmeli.
           printf '\n// Deploy %s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> maintenance/maintenance.php
           python3 - <<'PY'

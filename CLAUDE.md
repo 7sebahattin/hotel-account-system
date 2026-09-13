@@ -204,6 +204,27 @@ bakım dosyalarını hazırla" adımında kırıldı). Dosyayı aktaran
 FTP-Deploy-Action'ın TLS davranışı bundan etkilenmez; kimlik bilgileri zaten
 aynı kanaldan gittiği için yeni bir maruziyet doğmaz.
 
+**FİNALİZE ARTIK CRON'A BAĞIMLI DEĞİL (K-108, 14 Eylül 2026 — kullanıcı
+onayıyla açılan §15 istisnası).** Deploy, bakım modunu açarken
+`storage/framework/maintenance.php` dosyasını ZATEN kendisi yüklüyor; o dosya
+artık `deploy/maintenance-trigger.php` + Laravel'in kendi stub'ı olarak
+üretilir. Bekleyen bir yayın işareti varsa **bakım süresince gelen ilk istek**
+finalize zincirini koşturur; `artisan up` hem `down` hem `maintenance.php`
+dosyasını sildiği için tetikleyici **kendini yok eder**. Cron YEDEK olarak
+kalır — hangisi önce davranırsa finalize'ı o çalıştırır, `flock` ikisinin
+çakışmasını önler.
+
+**Bu, §15'in yasakladığı "internete açık migrate ucu" DEĞİLDİR ve öyle bir
+uca dönüştürülmemelidir:** ortada URL/route/token YOKTUR; çalışmasının ön
+koşulu yalnızca FTP erişimi olan deploy hattının bırakabildiği işaret
+dosyasıdır. Ziyaretçi migration BAŞLATAMAZ, yalnızca zaten bekleyen işi öne
+çeker. Gömülü modda çıktı yanıt gövdesine değil `lemon-deploy.log`'a yazılır
+(`LEMON_FINALIZE_LOG`), HTTP reddi yalnızca `LEMON_FINALIZE_EMBEDDED` ile
+atlanır, 60 saniyelik soğuma penceresi başarısız bir finalize'ın her istekte
+yeniden denenmesini engeller. Başarıda ziyaretçi 302 ile aynı adrese döner;
+başarısızlıkta boş sayfa değil normal bakım ekranını görür. Üç yol da yerelde
+gerçek isteklerle doğrulandı (`tests/Unit/DeployFinalizeTest`).
+
 **CRON GÜVENİLİR DEĞİL — bilinen ve ÖLÇÜLMÜŞ durum (14 Eylül 2026).** Finalize
 cron'u dakikada bir koşmuyor: 20:57 ve 21:12'de bırakılan işaretler ancak
 21:20'de, 22:32'de bırakılan işaret ise 6 dakikalık bekleme boyunca HİÇ

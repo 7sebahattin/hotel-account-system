@@ -158,3 +158,73 @@ Workflow yalnız işaretin kaybolmasına güvenmez; başarı kaydındaki commit,
 run_id ve run_attempt eşleşmesini de arar. FTPS listeleme/sertifika hatası
 başarı sayılmaz. Kalıcı finalize cron'u korunur. Ayrıntı ve kurtarma notları:
 `docs/claude-karsilastirma-2026-09-13.md`.
+
+---
+
+# K-108 · Finalize artık cron'a bağımlı değil: bakım sayfasına gömülü tetikleyici
+
+**Tarih:** 14 Eylül 2026 · **Talimat:** kullanıcı (açık onay — "evet, yaz")
+
+## Sorun
+
+Bu hosting'in cron'u güvenilmez. Ölçülen: 20:57 ve 21:12'de bırakılan
+işaretler 21:20'de; 22:32'de bırakılan işaret ancak **01:31'de** işlendi
+(~3 saat). Yeni akış aktarımdan ÖNCE siteyi bakıma aldığı için site, cron
+uyanana kadar bakım ekranında kaldı. Kullanıcının ifadesi: "her defasında
+cron açmak yorucu ve sıkıcı; tek seferlik ilk girişte oluşan bir script çok
+iyi olurdu."
+
+## Çözüm
+
+Deploy, bakım modunu açarken `storage/framework/maintenance.php` dosyasını
+zaten KENDİSİ yüklüyor. Bu dosya artık şöyle üretilir:
+
+```
+maintenance.php = deploy/maintenance-trigger.php + Laravel bakım stub'ı
+```
+
+Bakım süresince gelen **ilk istek** tetikleyiciyi çalıştırır; bekleyen bir
+işaret varsa finalize zinciri koşar ve `artisan up` hem `down` hem
+`maintenance.php` dosyasını siler — tetikleyici **kendini yok eder**.
+
+Cron YEDEK olarak kalır; hangisi önce davranırsa finalize'ı o koşturur,
+`flock` çakışmayı önler.
+
+## Neden §15'i çiğnemez
+
+§15 "internete açık `/migrate`, `/deploy`, `/artisan` benzeri bir HTTP ucu"
+yasaklar. Burada:
+
+- **URL/route/token YOK** — dışarıdan çağrılabilecek bir adres oluşmaz.
+- Çalışmasının ÖN KOŞULU, yalnızca FTP erişimi olan deploy hattının
+  bırakabildiği `storage/app/deploy-pending` dosyasıdır. Ziyaretçi migration
+  BAŞLATAMAZ; yalnızca ZATEN BEKLEYEN işi öne çeker.
+- İş bitince tetikleyici dosya silinir; kalıcı bir yüzey kalmaz.
+
+## Uygulama ayrıntıları
+
+| Konu | Karar |
+|---|---|
+| HTTP reddi | `finalize.php` HTTP bağlamını reddetmeye devam eder; yalnızca `LEMON_FINALIZE_EMBEDDED` sabiti tanımlıysa geçer. Bu sabiti ancak sunucudaki dosya tanımlayabilir. |
+| Çıktı | Gömülü modda `php://stdout` YANIT GÖVDESİDİR; bu yüzden `LEMON_FINALIZE_LOG` ile doğrudan `lemon-deploy.log`'a yazılır (cron'un yazdığı AYNI dosya). |
+| Soğuma | Başarısız finalize işareti korur; 60 sn'lik `storage/app/finalize-attempt` damgası her isteğin aynı migrate'i yeniden denemesini engeller. `flock` zaten eşzamanlıyı eler. |
+| Başarı | Ziyaretçi aynı adrese 302 ile döner (tek istekte iki kez Laravel başlatılmaz). POST/PUT için 302 yerine `Retry-After: 1` + 503. |
+| Başarısızlık | Ziyaretçi boş sayfa değil, `down` içindeki bakım şablonunu görür. |
+| Bakım zaten kapalıysa | `up` atlanır ve geride kalan `maintenance.php` silinir — aksi hâlde her istekte gereksiz yüklenirdi. |
+
+## Doğrulama
+
+Üç yol da yerelde gerçek istek simülasyonuyla koşturuldu: (1) başarı —
+zincir koştu, yanıt gövdesine hiçbir şey sızmadı, işaret silindi, bakım
+kalktı, başarı kaydı yazıldı; (2) `migrate` hatası — ziyaretçi bakım
+şablonunu gördü, işaret ve bakım korundu, ikinci istek soğuma penceresine
+takıldı; (3) bakım önceden kaldırılmış — `up` atlandı, bakım kabuğu silindi,
+yayın normal tamamlandı. CI'da `tests/Unit/DeployFinalizeTest` gömülü yolu
+ayrıca kilitler.
+
+## Bilinen sınır
+
+Tetikleyici yalnızca site ZİYARET EDİLDİĞİNDE çalışır. Kimse girmezse
+finalize, cron uyanana kadar bekler — ama bu durumda zaten kimse etkilenmiyor
+demektir. Workflow'un 6 dakikalık doğrulaması yine de kırmızı biter ve
+gerekirse bakımı kaldırır.

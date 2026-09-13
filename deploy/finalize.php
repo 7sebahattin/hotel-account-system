@@ -68,19 +68,32 @@ declare(strict_types=1);
  */
 function out(string $message): void
 {
-    $stream = fopen('php://stdout', 'w');
-    if ($stream !== false) {
-        fwrite($stream, $message);
-        fclose($stream);
-    }
+    lemonFinalizeWrite('php://stdout', $message);
 }
 
 function err(string $message): void
 {
-    $stream = fopen('php://stderr', 'w');
-    if ($stream !== false) {
-        fwrite($stream, $message);
-        fclose($stream);
+    lemonFinalizeWrite('php://stderr', $message);
+}
+
+/*
+ * GÖMÜLÜ modda (bakım sayfasından çağrıldığında) `php://stdout` HTTP
+ * YANITININ GÖVDESİDİR — oraya yazmak ziyaretçinin sayfasını bozar. Bu yüzden
+ * `LEMON_FINALIZE_LOG` tanımlıysa çıktı doğrudan o günlük dosyasına eklenir
+ * (cron yolunun yazdığı AYNI dosya; iki yol tek günlükte birleşir).
+ */
+function lemonFinalizeWrite(string $stream, string $message): void
+{
+    if (defined('LEMON_FINALIZE_LOG')) {
+        @file_put_contents((string) constant('LEMON_FINALIZE_LOG'), $message, FILE_APPEND | LOCK_EX);
+
+        return;
+    }
+
+    $handle = fopen($stream, 'w');
+    if ($handle !== false) {
+        fwrite($handle, $message);
+        fclose($handle);
     }
 }
 
@@ -91,8 +104,15 @@ function err(string $message): void
  * (`lsphp`) ile koşuyor, yani `PHP_SAPI !== 'cli'` kontrolü meşru cron
  * çalışmasını da reddederdi. Ayırt edici ölçüt SAPI değil, GERÇEK bir HTTP
  * isteği bağlamının varlığıdır: cron çalışmasında `REQUEST_METHOD` yoktur.
+ *
+ * TEK İSTİSNA — bakım sayfasına gömülü tetikleyici (`deploy/maintenance-
+ * trigger.php`): o dosya bu script'i BİLEREK bir HTTP isteği içinde çağırır
+ * ve bunu `LEMON_FINALIZE_EMBEDDED` sabitiyle beyan eder. Bu sabiti yalnızca
+ * sunucudaki dosya sistemi üzerinden çalışan kod tanımlayabilir; dışarıdan
+ * bir istekle tanımlanamaz, dolayısıyla internete açık bir uç DOĞMAZ.
  */
-if (isset($_SERVER['REQUEST_METHOD']) || isset($_SERVER['HTTP_HOST'])) {
+if (! defined('LEMON_FINALIZE_EMBEDDED')
+    && (isset($_SERVER['REQUEST_METHOD']) || isset($_SERVER['HTTP_HOST']))) {
     http_response_code(404);
     exit(1);
 }
@@ -297,14 +317,25 @@ if (($release['managed_maintenance'] ?? '') === '1') {
          * yayının geri kalanı normal şekilde tamamlanır.
          */
         out("  Bakım modu zaten kapalı; 'up' çalıştırılmadı.\n");
+
+        /*
+         * `up` çalışmadığı için bakım kabuğu (`maintenance.php`) geride kalır
+         * ve her istekte gereksiz yere yüklenirdi (K-108'de bu dosya finalize
+         * tetikleyicisini de taşır). Temizliğini burada yaparız.
+         */
+        $shell = $appRoot.'/storage/framework/maintenance.php';
+        if (is_file($shell) && ! @unlink($shell)) {
+            err("  UYARI: bakım kabuğu silinemedi: {$shell}\n");
+        }
     } elseif (! is_array($down) || ($down['deploy_release_id'] ?? '') !== $releaseId) {
         /*
-         * Bakım BAŞKA bir yayına (ya da bir insana) ait: sahipliği almayız,
-         * kapatmayız. Ama bu yayının kendi adımları başarıyla bitti; işareti
-         * silip başarı kaydını yazmak DOĞRUDUR. Aksi hâlde marker sonsuza dek
-         * kalır, her cron turu aynı hatayı tekrarlar ve yayın asla kapanmazdı.
+         * Bakım BAŞKA bir yayına (ya da bir insana) ait: sahipliğini almayız,
+         * kapatmayız ve bu yayını BAŞARILI SAYMAYIZ — işaret korunur, durum
+         * insan tarafından incelenir (`DeployFinalizeTest::
+         * other_maintenance_owner_is_not_reopened` bu davranışı kilitler).
          */
-        err("  UYARI: bakım modu başka bir yayına ait; kapatılmadı (elle kontrol edin).\n");
+        err("Bakım modu yayın kimliği eşleşmiyor; bakım kapatılmadı.\n");
+        stopWith($lockHandle, 1);
     } else {
         runStepOrFail($kernel, 'up', [], $lockHandle);
     }
