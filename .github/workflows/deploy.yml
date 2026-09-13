@@ -510,9 +510,18 @@ jobs:
           done
 
           echo "::warning::Finalize 3 dakika içinde tamamlanmadı — işaret dosyası hâlâ duruyor."
-          echo "::warning::Muhtemel nedenler: cPanel cron kaydı kapalı, ya da bir adım hata verdi."
-          echo "::warning::Sunucudaki /home/derspros/lemon-deploy.log dosyası tam hatayı yazar."
           echo "::warning::Dosya aktarımı BAŞARILI oldu; eksik olan yalnızca migrate/seed/cache adımlarıdır."
+
+          # Sunucu günlüğünü BURAYA yaz. Sunucuda terminal erişimi yok ve
+          # kullanıcının günlüğü elle bulup yapıştırması, bu projede en çok
+          # zaman kaybettiren döngüydü. FTP hesabı /home/<kullanıcı> altına
+          # chroot'lu olduğu için günlük, uygulama dizininin KARDEŞİDİR.
+          log_url="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR%lemon-app/}lemon-deploy.log"
+          echo "----- lemon-deploy.log (son 80 satır) -----"
+          curl -sS $curl_opts --max-time 60 \
+               --user "$FTP_USERNAME:$FTP_PASSWORD" "$log_url" 2>&1 \
+            | tr -d '\r' | tail -n 80 || echo "(günlük okunamadı)"
+          echo "----- günlük sonu -----"
 
       - name: Özet
         run: |
