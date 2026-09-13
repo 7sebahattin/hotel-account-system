@@ -10,17 +10,6 @@ declare(strict_types=1);
  *   * * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
  *             >> /home/derspros/lemon-deploy.log 2>&1
  *
- * Cron'u çağıran binary CLI OLMAK ZORUNDA DEĞİLDİR (bu sunucuda LiteSpeed'in
- * `lsphp`'si kullanılıyor ve SAPI'si `cli` değil, `litespeed`). Script bu
- * duruma göre yazılmıştır:
- *
- *   - Çıktıyı `php://stdout`/`php://stderr` akışlarıyla yazar; CLI'a özgü
- *     STDOUT/STDERR SABİTLERİNİ KULLANMAZ (bu sunucuda gerçekten fatal verdi).
- *   - `artisan` komutlarını, kendi bulduğu ve GERÇEKTEN SINAYARAK doğruladığı
- *     bir PHP 8.3 binary'siyle çalıştırır (`resolvePhpBinary()`). Gerçek bir
- *     CLI binary'si varsa o tercih edilir; yoksa bizi çağıran `lsphp` gibi
- *     CLI olmayan bir binary son çare olarak kullanılır (aşağıya bakınız).
- *
  * GitHub Actions deploy işi, gerçek bir aktarım tamamlandığında
  * `storage/app/deploy-pending` işaret dosyasını AYRI bir FTP yüklemesiyle
  * bırakır (storage/ normal aktarımdan HARİÇ TUTULUR — kullanıcı verisi
@@ -40,6 +29,28 @@ declare(strict_types=1);
  * Herhangi bir adım BAŞARISIZ olursa script hemen durur, işaret dosyasını
  * SİLMEZ (bir sonraki cron çalıştırması baştan dener) ve hatayı günlüğe
  * (stdout/stderr → cron yönlendirmesiyle lemon-deploy.log) yazar.
+ *
+ * ────────────────────────────────────────────────────────────────────────
+ * NEDEN ALT SÜREÇ (`php artisan ...`) DEĞİL, AYNI SÜREÇTE?
+ *
+ * Bu sunucuda (LiteSpeed + CloudLinux Alt-PHP) cron'u çağıran `lsphp`
+ * yapılandırmasında **`proc_open` VE `exec` birlikte devre dışıdır**
+ * (`disable_functions`). Yani bu script harici bir komut ÇALIŞTIRAMAZ —
+ * "doğru PHP binary'sini bulma" sorunu değildir, hiçbir binary çağrılamaz.
+ * Bu yüzden artisan komutları Laravel'in konsol çekirdeği ile AYNI SÜREÇTE
+ * çalıştırılır (`Kernel::call()`).
+ *
+ * İki şey elle telafi edilir:
+ *  - `APP_RUNNING_IN_CONSOLE=true`: Laravel konsolda olduğunu normalde
+ *    PHP_SAPI'den anlar; bu ortam değişkeni framework'ün KENDİ desteklediği
+ *    açık kapıdır (`Application::runningInConsole()`), SAPI `litespeed`
+ *    olduğu için gereklidir. Bootstrap'TAN ÖNCE yazılır.
+ *  - süre/bellek limiti: web SAPI'lerinde sıfır değildir; uzun bir migrate
+ *    ortasında kesilme riskini kaldırmak için gevşetilir.
+ *
+ * Sürüm kapısı: CLAUDE.md §2 uygulamayı 8.3'e KİLİTLER ve `vendor/` ağacı
+ * CI'da 8.3 platformuyla çözülür. Aynı süreçte koştuğumuz için "hangi
+ * binary" sorusu yoktur; kontrol doğrudan bu sürecin PHP sürümünedir.
  *
  * İnternete açık bir uç DEĞİLDİR: Laravel kökü DocumentRoot'un (public/)
  * DIŞINDADIR (Mimari A), bu script web'den hiçbir şekilde ERİŞİLEMEZ. Ek
@@ -109,311 +120,143 @@ if (! flock($lockHandle, LOCK_EX | LOCK_NB)) {
     exit(0);
 }
 
-$startedAt = date('c');
-out("{$startedAt} — deploy-pending bulundu, finalize başlıyor.\n");
-
 /**
- * Bir komutu çalıştırır; çıktı ve çıkış kodunu döner.
+ * Kilidi bırakır ve verilen çıkış koduyla durur. İşaret dosyasına DOKUNMAZ:
+ * hata yolunda marker KORUNUR, bir sonraki cron baştan dener.
  *
- * `proc_open` paylaşımlı hosting'de `disable_functions` ile kapatılmış
- * olabilir; bu yüzden `exec()` ikinci yol olarak durur. İkisi de kapalıysa
- * bu bilgi AÇIKÇA günlüğe düşer (sessizce "binary bulunamadı" demek, gerçek
- * nedeni gizlerdi — ilk sürümde tam olarak bu oldu).
- *
- * @param  array<int, string>  $command
- * @param  array<string, string>  $env  komuta EKLENECEK ortam değişkenleri
- * @return array{output: string, exitCode: int}
+ * @param  resource  $lockHandle
  */
-function run(array $command, string $cwd, array $env = []): array
+function stopWith($lockHandle, int $exitCode): never
 {
-    if (function_exists('proc_open')) {
-        $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-
-        // Boş $env geçilirse ortam OLDUĞU GİBİ miras alınır (null); dolu ise
-        // mevcut ortamla BİRLEŞTİRİLİR — proc_open verilen diziyi ortamın
-        // TAMAMI sayar, yalnızca eklenenleri geçmek PATH'i bile silerdi.
-        $processEnv = $env === [] ? null : array_merge(getenv(), $env);
-
-        $process = proc_open($command, $descriptors, $pipes, $cwd, $processEnv);
-
-        if (is_resource($process)) {
-            $stdout = stream_get_contents($pipes[1]);
-            $stderr = stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $exitCode = proc_close($process);
-
-            return ['output' => trim($stdout."\n".$stderr), 'exitCode' => $exitCode];
-        }
-
-        return ['output' => 'proc_open başarısız oldu.', 'exitCode' => 1];
-    }
-
-    if (function_exists('exec')) {
-        $prefix = '';
-        foreach ($env as $name => $value) {
-            $prefix .= $name.'='.escapeshellarg($value).' ';
-        }
-
-        $line = $prefix.implode(' ', array_map('escapeshellarg', $command)).' 2>&1';
-        $lines = [];
-        $exitCode = 1;
-        exec('cd '.escapeshellarg($cwd).' && '.$line, $lines, $exitCode);
-
-        return ['output' => trim(implode("\n", $lines)), 'exitCode' => $exitCode];
-    }
-
-    return [
-        'output' => 'Bu PHP yapılandırmasında hem proc_open hem exec devre dışı — '.
-            'finalize script\'i harici komut çalıştıramaz.',
-        'exitCode' => 1,
-    ];
+    flock($lockHandle, LOCK_UN);
+    fclose($lockHandle);
+    exit($exitCode);
 }
 
-/**
- * `artisan`'ı çalıştıracak PHP 8.3 binary'sini bulur ve GERÇEKTEN SINAR.
- *
- * Neden sınama gerekiyor: bu sunucuda cron, LiteSpeed'in `lsphp`'siyle
- * (CloudLinux Alt-PHP, SAPI `litespeed`) koşuyor. `lsphp` CGI/LSAPI tabanlı
- * olduğu için `-r` gibi CLI'a özgü seçenekleri desteklemeyebilir ve
- * `register_argc_argv` kapalıysa scripte ARGÜMAN TAŞIMAZ — argüman taşımayan
- * bir binary ile `artisan migrate --force` çalıştırmak sessizce `artisan list`
- * koşturmak demektir. Bu yüzden aday binary GERÇEK bir dosya çalıştırılarak,
- * GERÇEK bir argümanla sınanır.
- *
- * Sürüm kapısı MUTLAKTIR: CLAUDE.md §2 uygulamayı 8.3'e KİLİTLER ve `vendor/`
- * ağacı CI'da 8.3 platformuyla çözülür.
- *
- * @param  array<int, string>  $diagnostics  denenen her adayın sonucu buraya yazılır
- * @return array{binary: string, version: string, sapi: string, args: array<int, string>, env: array<string, string>}|null
- */
-function resolvePhpBinary(string $probeFile, array &$diagnostics): ?array
-{
-    $candidates = [
-        // Gerçek CLI binary'leri önce denenir.
-        '/opt/alt/php83/usr/bin/php',              // CloudLinux Alt-PHP (CLI)
-        '/opt/alt/php83/usr/bin/php-cli',
-        '/opt/alt/php83/usr/bin/php83',
-        '/opt/cpanel/ea-php83/root/usr/bin/php',   // cPanel EasyApache 4
-        '/usr/local/lsws/lsphp83/bin/php',
-        '/usr/local/bin/php83',
-        '/usr/local/bin/php8.3',
-        '/usr/local/bin/ea-php83',
-        '/usr/bin/php83',
-        '/usr/bin/php8.3',
-        '/usr/local/bin/php',
-        '/usr/bin/php',
-        // CLI olmayan (LSAPI) binary'ler — son çare, aşağıda ayrıca uyarılır.
-        '/opt/alt/php83/usr/bin/lsphp',
-        '/usr/local/lsws/lsphp83/bin/lsphp',
-        '/usr/local/bin/lsphp',
-        PHP_BINARY,                                 // bizi çağıran binary
-    ];
+out(date('c')." — deploy-pending bulundu, finalize başlıyor.\n");
 
-    // Alt-PHP kurulumları sürüm sürüm ayrı dizinlerdedir; yukarıdaki sabit
-    // liste ıskalarsa dizinin kendisi taranır (yalnızca 8.3 dizini).
-    $globbed = glob('/opt/alt/php83/usr/bin/*php*');
-    if (is_array($globbed)) {
-        $candidates = array_merge($candidates, $globbed);
+// Sürüm kapısı (CLAUDE.md §2). Aynı süreçte koştuğumuz için kontrol edilen
+// sürüm, artisan'ın gerçekten koşacağı sürümün TA KENDİSİDİR.
+if (! str_starts_with(PHP_VERSION, '8.3.')) {
+    err(sprintf(
+        "%s — DURDURULDU: bu süreç PHP %s ile koşuyor, uygulama 8.3'e kilitli (CLAUDE.md §2).\n".
+        "  Binary: %s (SAPI %s)\n".
+        "  Cron satırındaki PHP binary'sini 8.3'e çeviriniz. İşaret dosyası KORUNDU.\n",
+        date('c'),
+        PHP_VERSION,
+        PHP_BINARY,
+        PHP_SAPI,
+    ));
+    stopWith($lockHandle, 1);
+}
+
+$autoload = $appRoot.'/vendor/autoload.php';
+$bootstrap = $appRoot.'/bootstrap/app.php';
+
+foreach ([$autoload, $bootstrap] as $required) {
+    if (! is_file($required)) {
+        err(date('c')." — DURDURULDU: gerekli dosya yok: {$required}. İşaret dosyası KORUNDU.\n");
+        stopWith($lockHandle, 1);
     }
-
-    $seen = [];
-    $fallbackMatch = null;
-
-    foreach ($candidates as $binary) {
-        if ($binary === '' || isset($seen[$binary])) {
-            continue;
-        }
-        $seen[$binary] = true;
-
-        if (! is_file($binary)) {
-            $diagnostics[] = "    {$binary} — yok";
-
-            continue;
-        }
-
-        // Önce sade çağrı, olmazsa register_argc_argv açık hâliyle: CGI/LSAPI
-        // SAPI'lerinde bu ini varsayılan olarak KAPALIDIR ve argüman taşınmaz.
-        foreach ([[], ['-d', 'register_argc_argv=1']] as $extraArgs) {
-            $result = run(array_merge([$binary], $extraArgs, [$probeFile, 'ARGTEST']), __DIR__);
-
-            // Çıktı CGI benzeri SAPI'lerde HTTP başlığı taşıyabilir; işaretleri
-            // arayan bir regex bu gürültüden etkilenmez.
-            if (! preg_match('/__PROBE__(.+?)\|(.+?)\|(\d)__END__/', $result['output'], $m)) {
-                $reason = $result['exitCode'] !== 0
-                    ? "çalıştırılamadı (exit {$result['exitCode']})"
-                    : 'sınama çıktısı okunamadı';
-                $diagnostics[] = sprintf(
-                    '    %s%s — %s: %s',
-                    $binary,
-                    $extraArgs === [] ? '' : ' -d register_argc_argv=1',
-                    $reason,
-                    substr(str_replace("\n", ' ', $result['output']), 0, 160),
-                );
-
-                continue;
-            }
-
-            [, $version, $sapi, $argvOk] = $m;
-
-            if (! str_starts_with($version, '8.3.')) {
-                $diagnostics[] = "    {$binary} — PHP {$version} ({$sapi}): sürüm 8.3 DEĞİL, kullanılmaz";
-
-                continue 2; // bu binary'nin sürümü sabittir, ikinci deneme anlamsız
-            }
-
-            if ($argvOk !== '1') {
-                $diagnostics[] = sprintf(
-                    '    %s%s — PHP %s (%s): argüman taşımıyor',
-                    $binary,
-                    $extraArgs === [] ? '' : ' -d register_argc_argv=1',
-                    $version,
-                    $sapi,
-                );
-
-                continue;
-            }
-
-            $match = [
-                'binary' => $binary,
-                'version' => $version,
-                'sapi' => $sapi,
-                'args' => $extraArgs,
-                'env' => [],
-            ];
-
-            if ($sapi === 'cli') {
-                $diagnostics[] = "    {$binary} — PHP {$version} (cli): UYGUN";
-
-                return $match;
-            }
-
-            $diagnostics[] = "    {$binary} — PHP {$version} ({$sapi}): uygun ama CLI değil (yedek)";
-
-            if ($fallbackMatch === null) {
-                /*
-                 * CLI olmayan SAPI'de iki şey elle telafi edilir:
-                 *  - `APP_RUNNING_IN_CONSOLE=true`: Laravel konsolda olduğunu
-                 *    normalde PHP_SAPI'den anlar; bu ortam değişkeni framework'ün
-                 *    KENDİ desteklediği açık kapıdır (Application::runningInConsole).
-                 *  - süre/bellek limiti: web SAPI'lerinde sıfır değildir, uzun bir
-                 *    migrate ortasında kesilme riski doğar.
-                 */
-                $match['args'] = array_merge($extraArgs, [
-                    '-d', 'max_execution_time=0',
-                    '-d', 'memory_limit=512M',
-                ]);
-                $match['env'] = ['APP_RUNNING_IN_CONSOLE' => 'true'];
-                $fallbackMatch = $match;
-            }
-
-            continue 2;
-        }
-    }
-
-    // CLI binary'si bulunsaydı döngü içinde DÖNERDİ; buraya gelindiyse en iyi
-    // ihtimalle CLI olmayan bir yedek vardır.
-    return $fallbackMatch;
 }
 
 /*
- * Sınama scripti: SAPI fark etmeksizin çalışan GERÇEK bir dosya. `-r` CGI/LSAPI
- * binary'lerinde desteklenmediği için sınama bir dosya üzerinden yapılır.
+ * Laravel'e konsolda olduğumuzu SÖYLE — bootstrap'tan ÖNCE, çünkü
+ * `Application::runningInConsole()` ilk çağrıda sonucu önbelleğe alır.
+ * Üç kanalın üçü de yazılır: `Env` deposu putenv/$_ENV/$_SERVER
+ * adaptörlerinden hangisinin etkin olduğuna göre okur.
  */
-$probeFile = __DIR__.'/.finalize-probe.php';
-$probeWritten = file_put_contents(
-    $probeFile,
-    '<?php $a = isset($_SERVER["argv"]) && in_array("ARGTEST", (array) $_SERVER["argv"], true) ? 1 : 0;'.
-    ' echo "__PROBE__".PHP_VERSION."|".PHP_SAPI."|".$a."__END__";'."\n",
-);
-
-if ($probeWritten === false) {
-    err(date('c')." — DURDURULDU: sınama dosyası yazılamadı ({$probeFile}). İşaret dosyası KORUNDU.\n");
-    flock($lockHandle, LOCK_UN);
-    fclose($lockHandle);
-    exit(1);
+if (function_exists('putenv')) {
+    putenv('APP_RUNNING_IN_CONSOLE=true');
 }
+$_ENV['APP_RUNNING_IN_CONSOLE'] = 'true';
+$_SERVER['APP_RUNNING_IN_CONSOLE'] = 'true';
 
-/** @var array<int, string> $diagnostics */
-$diagnostics = [];
-$php = resolvePhpBinary($probeFile, $diagnostics);
+// Web SAPI'sinin süre/bellek limitleri uzun bir migrate'i ortasında kesebilir.
+@set_time_limit(0);
+@ini_set('memory_limit', '512M');
 
-@unlink($probeFile);
+require $autoload;
 
-if ($php === null) {
+try {
+    /** @var \Illuminate\Foundation\Application $app */
+    $app = require $bootstrap;
+    /** @var \Illuminate\Contracts\Console\Kernel $kernel */
+    $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
+    $kernel->bootstrap();
+} catch (\Throwable $e) {
     err(sprintf(
-        "%s — DURDURULDU: çalıştırılabilir bir PHP 8.3 binary'si bulunamadı.\n".
-        "  Bu script: %s (SAPI %s, PHP %s)\n".
-        "  Denenen adaylar:\n%s\n".
-        "İşaret dosyası KORUNDU; doğru binary bulunup cron satırı güncellendikten sonra\n".
-        "bir sonraki tur kaldığı yerden devam eder.\n",
+        "%s — DURDURULDU: uygulama başlatılamadı: %s: %s (%s:%d)\nİşaret dosyası KORUNDU.\n",
         date('c'),
-        PHP_BINARY,
-        PHP_SAPI,
-        PHP_VERSION,
-        implode("\n", $diagnostics),
+        $e::class,
+        $e->getMessage(),
+        $e->getFile(),
+        $e->getLine(),
     ));
-    flock($lockHandle, LOCK_UN);
-    fclose($lockHandle);
-    exit(1);
+    stopWith($lockHandle, 1);
 }
 
-out("  PHP: {$php['binary']} ({$php['version']}, SAPI {$php['sapi']})\n");
-
-if ($php['sapi'] !== 'cli') {
-    out("  UYARI: gerçek bir CLI binary'si bulunamadı; artisan CLI olmayan bu binary ile\n".
-        "  çalıştırılıyor (APP_RUNNING_IN_CONSOLE=true, süre/bellek limiti kaldırıldı).\n");
-}
+out('  PHP '.PHP_VERSION.' (SAPI '.PHP_SAPI.'), artisan aynı süreçte çalıştırılıyor.'."\n");
 
 /**
- * Sıradaki artisan komutunu çalıştırır, günlüğe yazar; başarısızsa kilidi
- * bırakıp script'i BURADA durdurur — işaret dosyası SİLİNMEDEN.
+ * Sıradaki artisan komutunu AYNI SÜREÇTE çalıştırır, çıktısını günlüğe yazar;
+ * başarısızsa kilidi bırakıp script'i BURADA durdurur — işaret dosyası SİLİNMEDEN.
  *
- * @param  array{binary: string, version: string, sapi: string, args: array<int, string>, env: array<string, string>}  $php
- * @param  array<int, string>  $args
+ * @param  array<string, mixed>  $parameters
  * @param  resource  $lockHandle
  */
-function runStepOrFail(array $php, string $appRoot, array $args, $lockHandle): void
+function runStepOrFail(\Illuminate\Contracts\Console\Kernel $kernel, string $command, array $parameters, $lockHandle): void
 {
-    $label = implode(' ', $args);
+    $label = trim($command.' '.implode(' ', array_map(
+        static fn (string $key, mixed $value): string => $value === true ? $key : "{$key}={$value}",
+        array_keys($parameters),
+        $parameters,
+    )));
+
     out("  → php artisan {$label}\n");
 
-    $command = array_merge([$php['binary']], $php['args'], [$appRoot.'/artisan'], $args);
-    $result = run($command, $appRoot, $php['env']);
-    out($result['output']."\n");
+    $buffer = new \Symfony\Component\Console\Output\BufferedOutput();
 
-    if ($result['exitCode'] !== 0) {
-        err(date('c')." — BAŞARISIZ: 'php artisan {$label}' (exit {$result['exitCode']}). İşaret dosyası KORUNDU, bir sonraki cron tekrar dener.\n");
-        flock($lockHandle, LOCK_UN);
-        fclose($lockHandle);
-        exit(1);
+    try {
+        $exitCode = $kernel->call($command, $parameters, $buffer);
+        $output = trim($buffer->fetch());
+    } catch (\Throwable $e) {
+        $exitCode = 1;
+        $output = trim($buffer->fetch())."\n".$e::class.': '.$e->getMessage().' ('.$e->getFile().':'.$e->getLine().')';
+    }
+
+    if ($output !== '') {
+        out($output."\n");
+    }
+
+    if ($exitCode !== 0) {
+        err(date('c')." — BAŞARISIZ: 'php artisan {$label}' (exit {$exitCode}). İşaret dosyası KORUNDU, bir sonraki cron tekrar dener.\n");
+        stopWith($lockHandle, 1);
     }
 }
 
 // 1) Bayat cache'i migrate'ten ÖNCE temizle (K-102). Tek çağrıda dört
 // :clear komutunu toplayan Laravel kısayolu (CLAUDE.md §15).
-runStepOrFail($php, $appRoot, ['optimize:clear'], $lockHandle);
+runStepOrFail($kernel, 'optimize:clear', [], $lockHandle);
 
 // 2) Migration.
-runStepOrFail($php, $appRoot, ['migrate', '--force'], $lockHandle);
+runStepOrFail($kernel, 'migrate', ['--force' => true], $lockHandle);
 
 // 3) Yetki seed'i — HER deploy'da, migrate'ten hemen sonra, atlanmaz (K-104).
-runStepOrFail($php, $appRoot, [
-    'db:seed',
-    '--class=App\\Modules\\Authorization\\Database\\Seeders\\RolePermissionSeeder',
-    '--force',
+runStepOrFail($kernel, 'db:seed', [
+    '--class' => 'App\\Modules\\Authorization\\Database\\Seeders\\RolePermissionSeeder',
+    '--force' => true,
 ], $lockHandle);
 
 // 4) Üretim cache'ini yeniden kur.
-runStepOrFail($php, $appRoot, ['config:cache'], $lockHandle);
-runStepOrFail($php, $appRoot, ['route:cache'], $lockHandle);
-runStepOrFail($php, $appRoot, ['view:cache'], $lockHandle);
-runStepOrFail($php, $appRoot, ['event:cache'], $lockHandle);
+runStepOrFail($kernel, 'config:cache', [], $lockHandle);
+runStepOrFail($kernel, 'route:cache', [], $lockHandle);
+runStepOrFail($kernel, 'view:cache', [], $lockHandle);
+runStepOrFail($kernel, 'event:cache', [], $lockHandle);
 
 // Hepsi başarılı — işaret dosyasını sil, bir daha bu deploy için tekrar çalışmasın.
 unlink($markerFile);
 
 out(date('c')." — finalize tamamlandı, işaret dosyası silindi.\n");
 
-flock($lockHandle, LOCK_UN);
-fclose($lockHandle);
+stopWith($lockHandle, 0);
