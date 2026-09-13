@@ -22,6 +22,7 @@ use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
 use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -282,7 +283,11 @@ class StayService
      * (model cast'i yüzünden) ENUM NESNESİ olarak gelir; `(string)` dönüşümü
      * o zaman fatal error verir (native enum'larda `__toString()` yoktur).
      *
-     * @param  Builder<Stay>  $query
+     * `$query` `Builder<covariant Model>` olarak tiplenir (Stay'e daraltılmaz):
+     * çağıran taraf `QueryFilter::apply()`'ın döndürdüğü sorguyu doğrudan
+     * geçirir ve o metot da aynı kovaryant imzayı taşır (PHPStan level 5).
+     *
+     * @param  Builder<covariant Model>  $query
      * @return Collection<string, array{currency: Currency, count: int, total: Money, activeTotal: Money, cancelledTotal: Money, cancelledCount: int}>
      */
     public function totalsFor(Builder $query): Collection
