@@ -19,6 +19,12 @@ Route::middleware('auth')->prefix('stays')->name('stays.')->group(function (): v
         ->middleware('can:'.Permission::StaysCreate->value)
         ->name('store');
 
+    // {stay} joker rotasından ÖNCE tanımlanır, aksi hâlde "print" bir kimlik
+    // olarak yorumlanıp model bulunamadı hatası üretirdi.
+    Route::get('print', [StayController::class, 'print'])
+        ->middleware('can:'.Permission::StaysView->value)
+        ->name('print');
+
     Route::get('{stay}', [StayController::class, 'show'])
         ->middleware('can:'.Permission::StaysView->value)
         ->name('show');
@@ -35,4 +41,10 @@ Route::middleware('auth')->prefix('stays')->name('stays.')->group(function (): v
     Route::patch('{stay}/cancel', [StayController::class, 'cancel'])
         ->middleware('can:'.Permission::StaysDelete->value)
         ->name('cancel');
+
+    // Kalıcı silme (hard delete) — YALNIZCA Admin, YALNIZCA zaten iptal
+    // edilmiş bir kayıtta (StayPolicy::forceDelete, kullanıcı talimatı).
+    Route::delete('{stay}', [StayController::class, 'destroy'])
+        ->middleware('can:'.Permission::StaysForceDelete->value)
+        ->name('destroy');
 });

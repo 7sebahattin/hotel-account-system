@@ -1684,7 +1684,7 @@ saat dilimi, production config güvenliği, makbuz config güvenliği.
 HİÇ YOKTU:** `CLAUDE.md §15`, `docs/deploy-lemon.md`, `docs/deploy-cpanel.md`
 ve `docs/deploy-github-actions.md`'nin belgelediği "deploy sonrası" komut
 sırası yalnızca `migrate --force` + cache komutlarını içeriyordu —
-`php artisan db:seed --class=RolePermissionSeeder --force` HİÇBİR YERDE
+`php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force` HİÇBİR YERDE
 YAZILI DEĞİLDİ. Bu, gerçek üretimde görülen "There is no permission named
 cashbook.operate for guard web" hatasının BİREBİR kök nedenidir: kodda yeni
 bir `Permission` case'i deploy edilir ama veritabanının `permissions`

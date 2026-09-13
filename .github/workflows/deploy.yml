@@ -1,11 +1,22 @@
 name: Deploy (Lemon)
 
 # ============================================================================
-# BU WORKFLOW BU HÂLİYLE GERÇEK DEPLOY YAPAMAZ.
+# ÜÇ ÇALIŞMA BİÇİMİ VARDIR.
 #
-# İKİ ÇALIŞMA BİÇİMİ VARDIR VE KİLİTLER YALNIZCA İKİNCİSİNE UYGULANIR:
+#   push → main  (OTOMATİK CANLI YAYIN — 13 Eylül 2026, kullanıcı talimatı)
+#     • `main` dalına her push/merge gerçek aktarımı KENDİLİĞİNDEN başlatır.
+#       Elle tetikleme, onay metni yazma ve sunucuda elle komut YOKTUR:
+#       CI sonrası bakım/aktarım ve finalize işareti otomatik hazırlanır.
+#       cPanel cron'u migrate/seed/cache adımlarını koşturur (§6).
+#     • İki kilit HÂLÂ geçerlidir ve GEVŞETİLMEMİŞTİR: `DEPLOY_ENABLED=true`
+#       ve `LEMON_APP_DIR == EXPECTED_DIR`. Bunlar aktarımın YANLIŞ YERE
+#       yazmasını engeller — hesapta başka canlı siteler vardır.
+#     • `confirm_target` yalnızca ELLE tetiklemede anlamlıdır (insan onayı);
+#       otomatik akışta yazacak bir insan yoktur, bu yüzden ARANMAZ.
+#     • Yalnızca sunucuya AKTARILAN dosyalar tetikler: tek başına docs/,
+#       tests/, .claude/ veya *.md değişen bir push aktarım yapmaz.
 #
-#   mode = dry-run  (varsayılan)  → GÜVENLİ, HER ZAMAN ÇALIŞTIRILABİLİR
+#   mode = dry-run  (ELLE tetiklemenin VARSAYILANI) → GÜVENLİ
 #     • DEPLOY_ENABLED GEREKMEZ
 #     • confirm_target GEREKMEZ (yazılırsa yalnızca bilgilendirme amaçlı bakılır)
 #     • FTPS bağlantısı kurulur, hedef ve aktarım planı doğrulanır
@@ -16,12 +27,11 @@ name: Deploy (Lemon)
 #       oluşturabilir. Boş bir dizinden ibarettir, dosya yazılmaz, silinmez.
 #       Hedefimiz (/lemon-app/) zaten mevcut olduğu için pratikte no-op'tur.
 #
-#   mode = deploy   (gerçek aktarım) → DÖRT KİLİT BİRDEN AÇILMALI
-#     1. Yalnızca `workflow_dispatch` ile elle tetiklenir. push/PR tetiklemesi YOKTUR.
-#     2. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
-#        Bu değişken HENÜZ OLUŞTURULMAMIŞTIR.
-#     3. `confirm_target` alanına hedef alan adı birebir yazılmalı.
-#     4. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
+#   mode = deploy   (ELLE gerçek aktarım) → ÜÇ KİLİT BİRDEN AÇILMALI
+#     1. `DEPLOY_ENABLED` repository variable'ı `true` olmalı.
+#     2. `confirm_target` alanına hedef alan adı birebir yazılmalı —
+#        insan tetiklediği için bilinçli onay aranır.
+#     3. `LEMON_APP_DIR` doğrulanmış TEK değere eşit olmalı (EXPECTED_DIR).
 #
 #   Karar iki kez, birbirinden bağımsız hesaplanır (guard işi + aktarım işi).
 #   İkisi aynı sonuca varmazsa iş durur. Fail-closed: 'true' dışındaki her
@@ -39,6 +49,16 @@ name: Deploy (Lemon)
 # ============================================================================
 
 on:
+  # OTOMATİK CANLI YAYIN: `main`e her push/merge canlıya çıkar.
+  # Sunucuya HİÇ AKTARILMAYAN dosyalar (belgeler, testler, ajan yapılandırması)
+  # tek başına değiştiyse boşuna aktarım yapılmaz.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'tests/**'
+      - '.claude/**'
+      - '**.md'
   workflow_dispatch:
     inputs:
       mode:
@@ -75,6 +95,10 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  verify:
+    name: Yayın öncesi testler
+    uses: ./.github/workflows/ci.yml
+
   # ---------------------------------------------------------------- 1. GUARD
   guard:
     name: Güvenlik kontrolleri
@@ -144,12 +168,33 @@ jobs:
       - name: Çalışma biçimine karar ver
         id: decide
         env:
+          EVENT: ${{ github.event_name }}
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm_target }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
           APP_DIR: ${{ vars.LEMON_APP_DIR }}
         run: |
           set -u
+
+          # ------------------------------------------- OTOMATİK (push → main)
+          # İnsan onayı (confirm_target) ARANMAZ: yazacak bir insan yoktur.
+          # Hedef kilitleri (DEPLOY_ENABLED + LEMON_APP_DIR) GEÇERLİDİR.
+          if [ "$EVENT" = "push" ]; then
+            fail=0
+            if [ "${ENABLED:-}" != "true" ]; then
+              echo "::error::Otomatik canlı yayın kapalı: DEPLOY_ENABLED repository variable'ı 'true' değil."
+              fail=1
+            fi
+            if [ "$APP_DIR" != "$EXPECTED_DIR" ]; then
+              echo "::error::LEMON_APP_DIR beklenen değer değil. Kabul edilen tek değer: $EXPECTED_DIR"
+              fail=1
+            fi
+            [ "$fail" -eq 0 ] || exit 1
+
+            echo "live=true" >> "$GITHUB_OUTPUT"
+            echo "Çalışma biçimi: OTOMATİK CANLI YAYIN (main'e push)."
+            exit 0
+          fi
 
           # ---------------------------------------------------------- DRY-RUN
           if [ "$MODE" != "deploy" ]; then
@@ -198,7 +243,7 @@ jobs:
   # ---------------------------------------------------------------- 2. BUILD
   build:
     name: Üretim derlemesi (PHP ${{ vars.TARGET_PHP_VERSION || '8.3' }})
-    needs: guard
+    needs: [guard, verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -296,6 +341,7 @@ jobs:
       - name: Çalışma biçimini bağımsız doğrula
         id: mode
         env:
+          EVENT: ${{ github.event_name }}
           MODE: ${{ inputs.mode }}
           CONFIRM: ${{ inputs.confirm_target }}
           ENABLED: ${{ vars.DEPLOY_ENABLED }}
@@ -304,7 +350,17 @@ jobs:
         run: |
           set -u
           live=false
-          if [ "$MODE" = "deploy" ] \
+
+          # Otomatik akış (main'e push): insan onayı aranmaz, hedef kilitleri kalır.
+          if [ "$EVENT" = "push" ] \
+             && [ "${ENABLED:-}" = "true" ] \
+             && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
+            live=true
+          fi
+
+          # Elle akış: üç kilit birden.
+          if [ "$EVENT" != "push" ] \
+             && [ "$MODE" = "deploy" ] \
              && [ "${ENABLED:-}" = "true" ] \
              && [ "$CONFIRM" = "$TARGET_DOMAIN" ] \
              && [ "$APP_DIR" = "$EXPECTED_DIR" ]; then
@@ -331,6 +387,60 @@ jobs:
       # exclude edilmiş öğeler dahil siler.
       # `exclude` verildiğinde varsayılan liste EZİLİR; bu yüzden .git ve
       # node_modules kalıpları burada tekrar yazılmıştır.
+      - name: Aktarım öncesi bakım dosyalarını hazırla
+        if: steps.mode.outputs.live == 'true'
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+        run: |
+          set -euo pipefail
+          base="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR}"
+          list_dir() {
+            curl --fail -sS --ssl-reqd --list-only --max-time 30 \
+              --user "$FTP_USERNAME:$FTP_PASSWORD" "$1" | tr -d '\r'
+          }
+          pending="$(list_dir "${base}storage/app/")"
+          framework="$(list_dir "${base}storage/framework/")"
+          if printf '%s\n' "$pending" | grep -qx 'deploy-pending'; then
+            echo "::error::Önceki yayın hâlâ bekliyor. Dosya aktarımı başlatılmadı."
+            exit 1
+          fi
+          if printf '%s\n' "$framework" | grep -qx 'down'; then
+            echo "::error::Site zaten bakımda. Önce mevcut yayının sonucu incelenmeli."
+            exit 1
+          fi
+          mkdir -p maintenance
+          cp release/vendor/laravel/framework/src/Illuminate/Foundation/Console/stubs/maintenance-mode.stub maintenance/maintenance.php
+          # artisan up bu dosyayı siler; sync durum dosyasına rağmen her yayında yeniden gönderilmeli.
+          printf '\n// Deploy %s-%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> maintenance/maintenance.php
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('maintenance/down').write_text(json.dumps({
+              'except': [], 'redirect': None, 'retry': 60, 'refresh': 15,
+              'secret': None, 'status': 503,
+              'template': '<!doctype html><html lang="tr"><meta charset="utf-8"><title>Güncelleme</title><p>Sistem güncelleniyor. Lütfen kısa bir süre sonra yeniden deneyin.</p></html>',
+              'deploy_release_id': os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT'],
+          }), encoding='utf-8')
+          PY
+
+      - name: Dosya aktarımından önce bakım modunu aç
+        if: steps.mode.outputs.live == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftps
+          local-dir: ./maintenance/
+          server-dir: ${{ vars.LEMON_APP_DIR }}storage/framework/
+          state-name: .ftp-deploy-lemon-maintenance.json
+          dangerous-clean-slate: false
+
       - name: Laravel kökünü gönder
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -368,13 +478,115 @@ jobs:
             README.md
             CLAUDE.md
 
+      # storage/ normal aktarımdan HARİÇ TUTULUR (kullanıcı verisi kazara
+      # ezilmesin diye) — bu yüzden finalize tetikleyicisi AYRI, tek dosyalık
+      # bir FTP yüklemesiyle bırakılır. cPanel'deki dakikalık cron +
+      # deploy/finalize.php (docs/deploy-lemon.md §6) bu dosyayı görünce
+      # migrate/seed/cache adımlarını sunucuda çalıştırır. Ayrı `state-name`
+      # kullanılır — ana aktarımla AYNI durum dosyasını paylaşmak, iki
+      # farklı local-dir içeriği yüzünden FTP-Deploy-Action'ın "silinmiş"
+      # sanıp dosya kaldırmaya çalışmasına yol açardı.
+      - name: Finalize işaretini hazırla
+        if: steps.mode.outputs.live == 'true'
+        run: |
+          mkdir -p marker
+          {
+            echo "commit=${{ github.sha }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+            echo "managed_maintenance=1"
+            echo "deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > marker/deploy-pending
+
+      - name: Finalize işaretini bırak (deploy/finalize.php tetikleyicisi)
+        if: steps.mode.outputs.live == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftps
+          local-dir: ./marker/
+          server-dir: ${{ vars.LEMON_APP_DIR }}storage/app/
+          state-name: .ftp-deploy-lemon-app-marker.json
+          dry-run: ${{ steps.mode.outputs.live != 'true' }}
+          dangerous-clean-slate: false
+          log-level: standard
+
+      # Sunucu tarafının GERÇEKTEN bittiğini buradan görürüz: finalize başarıyla
+      # tamamlandığında `deploy/finalize.php` işaret dosyasını SİLER. Dizini
+      # FTPS ile listeleyip dosyanın kaybolmasını bekliyoruz.
+      #
+      # Bu kontrol sunucuya YENİ BİR UÇ AÇMAZ (CLAUDE.md §15: internete açık
+      # migrate/deploy ucu KESİNLİKLE yoktur) — yalnızca zaten var olan FTP
+      # hesabıyla bir dizin listesi okur. Amacı, "cron çalıştı mı, hata mı
+      # verdi" sorusunu sunucu günlüğüne bakmadan cevaplamaktır.
+      - name: Finalize sonucunu bekle (işaret dosyası silindi mi)
+        if: steps.mode.outputs.live == 'true'
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          APP_DIR: ${{ vars.LEMON_APP_DIR }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          # pipefail ŞART: listeleme bir boru hattından geçiyor. Olmazsa curl'ün
+          # hatası `tr`nin başarısıyla maskelenir, BOŞ çıktı "işaret dosyası
+          # silinmiş" gibi okunur ve başarısız bir finalize BAŞARILI raporlanırdı.
+          set -uo pipefail
+
+          url="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR}storage/app/"
+          curl_opts="--ssl-reqd"
+
+          # FTP listesi CRLF ile gelir; `\r` temizlenmezse satır eşleşmesi tutmaz.
+          list_dir() {
+            curl -sS $curl_opts --list-only --max-time 30 \
+                 --user "$FTP_USERNAME:$FTP_PASSWORD" "$url" | tr -d '\r'
+          }
+
+          for attempt in $(seq 1 24); do
+            if ! listing="$(list_dir 2>/dev/null)"; then
+              echo "Dizin listelenemedi (deneme $attempt/24) — tekrar denenecek."
+            elif printf '%s\n' "$listing" | grep -qx 'deploy-pending'; then
+              echo "Finalize bekleniyor… (deneme $attempt/24)"
+            else
+              if curl --fail -sS $curl_opts --max-time 30 \
+                   --user "$FTP_USERNAME:$FTP_PASSWORD" "${url}deploy-completed.json" -o completed.json \
+                 && python3 -c 'import json,os; d=json.load(open("completed.json")); assert d["commit"]==os.environ["EXPECTED_COMMIT"] and d["run_id"]==os.environ["GITHUB_RUN_ID"] and d["run_attempt"]==os.environ["GITHUB_RUN_ATTEMPT"]'; then
+                echo "FİNALİZE TAMAMLANDI: bu commit ve çalıştırmanın sonucu doğrulandı."
+                exit 0
+              fi
+              echo "İşaret yok ancak bu yayına ait başarı kaydı henüz doğrulanamadı."
+            fi
+
+            sleep 15
+          done
+
+          echo "::warning::Finalize 24 kontrolde doğrulanamadı (6 dakika bekleme + ağ süresi)."
+          echo "::warning::Dosyalar aktarıldı; sunucu güncellemesinin sonucu incelenmeli."
+
+          # Sunucu günlüğünü BURAYA yaz. Sunucuda terminal erişimi yok ve
+          # kullanıcının günlüğü elle bulup yapıştırması, bu projede en çok
+          # zaman kaybettiren döngüydü. FTP hesabı /home/<kullanıcı> altına
+          # chroot'lu olduğu için günlük, uygulama dizininin KARDEŞİDİR.
+          log_url="ftp://${FTP_SERVER}:${FTP_PORT}${APP_DIR%lemon-app/}lemon-deploy.log"
+          echo "----- lemon-deploy.log (son 80 satır) -----"
+          curl -sS $curl_opts --max-time 60 \
+               --user "$FTP_USERNAME:$FTP_PASSWORD" "$log_url" 2>&1 \
+            | tr -d '\r' | tail -n 80 || echo "(günlük okunamadı)"
+          echo "----- günlük sonu -----"
+          echo "::error::Sunucu güncellemesi doğrulanamadı; yayın tamamlanmış sayılmadı."
+          exit 1
+
       - name: Özet
         run: |
           if [ "${{ steps.mode.outputs.live }}" = "true" ]; then
-            echo "Gerçek aktarım tamamlandı."
-            echo "Sırada: cPanel'de DocumentRoot /home/derspros/lemon-app/public olarak ayarlanmalı"
-            echo "(zaten ayarlıysa bir şey yapılmaz) ve docs/deploy-lemon.md §7 doğrulaması koşulmalı."
+            echo "Aktarım ve sunucu güncellemesi bu commit/çalıştırmanın başarı kaydıyla doğrulandı."
+            echo "Bu yayının bakım modu kapatıldı. Normal yayın akışında elle komut gerekmez."
           else
             echo "DRY-RUN tamamlandı — sunucuda hiçbir dosya oluşturulmadı, değiştirilmedi veya silinmedi."
-            echo "Gerçek aktarım için: DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
+            echo "Gerçek aktarım: main dalına push (otomatik) ya da"
+            echo "elle DEPLOY_ENABLED=true + mode=deploy + confirm_target=$TARGET_DOMAIN"
           fi

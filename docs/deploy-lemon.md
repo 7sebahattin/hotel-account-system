@@ -299,7 +299,7 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
                           modülün Service Provider'ını taşımazsa migrate
                           o modülün migration'larını hiç GÖRMEZ)
                         → php artisan migrate --force
-                        → php artisan db:seed --class=RolePermissionSeeder --force
+                        → php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force
                         → config:cache / route:cache / view:cache / event:cache
                         ↓
         başarılı → günlüğe yaz + işaret dosyasını SİL
@@ -310,18 +310,81 @@ GitHub deploy  →  storage/app/deploy-pending işaret dosyası
 Planlanan cron satırı:
 
 ```bash
-* * * * * /usr/local/bin/ea-php83 /home/derspros/lemon-app/deploy/finalize.php \
+* * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
           >> /home/derspros/lemon-deploy.log 2>&1
 ```
 
-**`finalize.php` bu turda YAZILMADI** ve production cron kurulmadı — talimat
-gereği yalnızca tasarım dokümante edildi. Yazıldığında taşıması gerekenler:
+**`finalize.php` yazıldı** (12 Eylül 2026 devir notu, `deploy/finalize.php`) —
+yukarıdaki beş özelliğin hepsini taşır (marker yoksa no-op, `flock()` ile
+eşzamanlılık kilidi, her adımın çıktı/çıkış kodu günlüğe yazılır, başarısızlıkta
+marker SİLİNMEZ, HTTP isteği bağlamında çağrılırsa 404 ile reddeder). Gerçek bir deploy
+sırasında `.github/workflows/deploy.yml`, ana FTPS aktarımından SONRA marker'ı
+AYRI ve tek dosyalık bir FTP yüklemesiyle bırakır (storage/ normal aktarımdan
+hariç tutulduğu için).
 
-- işaret dosyası yoksa hiçbir şey yapmadan çıkmak (cron her dakika koşar)
-- eşzamanlı iki çalıştırmayı engelleyen kilit
-- `migrate --force` çıktısını ve çıkış kodunu günlüğe yazmak
-- **başarısızlıkta işaret dosyasını silmemek**
-- yalnızca CLI'dan çalışabilmek (`php_sapi_name() === 'cli'` değilse çıkmak)
+**Cron kaydı 13 Eylül 2026'da kullanıcı tarafından eklendi ve mekanizma
+CANLIDA ÇALIŞIR DURUMDADIR.** Bunu depodan/CI'dan oluşturmak mümkün
+değildir; cPanel arayüzünden (Cron Jobs) elle eklenen satır şudur:
+
+```bash
+* * * * * /usr/local/bin/lsphp /home/derspros/lemon-app/deploy/finalize.php \
+          >> /home/derspros/lemon-deploy.log 2>&1
+```
+
+İlk başarılı otomatik finalize: **13 Eylül 2026, 20:30:01–20:30:02 (+03:00)**.
+Günlük yedi adımı da sırayla gösterdi — `optimize:clear` (altı alt adım) →
+`migrate --force` (**Nothing to migrate**: bu paket yeni bir migration
+İÇERMİYOR, `stays.force_delete` bir YETKİdir ve seeder'dan gelir) →
+`db:seed RolePermissionSeeder` (181 ms) → `config/route/view/event:cache` →
+işaret dosyası silindi. Bir sonraki dakikadan itibaren cron sessiz no-op'a
+döner.
+
+> **PHP çalıştırma ortamı (13 Eylül 2026, canlıda üç turda çözüldü):** bu
+> sunucu **LiteSpeed + CloudLinux Alt-PHP** kullanıyor. Cron satırındaki
+> binary `/usr/local/bin/lsphp`tir (gerçekte `/opt/alt/php83/usr/bin/lsphp`e
+> çözülür, PHP 8.3.33). Daha önce burada yazılı olan cPanel/EasyApache
+> adlandırması (`/usr/local/bin/ea-php83`) BU SUNUCUDA YOKTUR ve cron'da
+> `jailshell: /usr/local/bin/ea-php83: No such file or directory` verir.
+>
+> **`lsphp` bir CLI binary'si DEĞİLDİR** (SAPI `litespeed`). Canlıda sırasıyla
+> üç hata çıktı ve `finalize.php` üçüne karşı da sertleştirildi:
+>
+> 1. `STDOUT`/`STDERR` SABİTLERİ yalnızca CLI SAPI'de tanımlıdır —
+>    "Undefined constant STDERR" fatal hatası alındı. Çıktı artık HER ZAMAN
+>    `php://stdout` / `php://stderr` akışlarıyla yazılır.
+> 2. "CLI değilse çık" kontrolü meşru cron çalışmasını da reddediyordu.
+>    Ayırt edici ölçüt SAPI değil, GERÇEK bir HTTP isteği bağlamının varlığıdır
+>    (`REQUEST_METHOD`/`HTTP_HOST`) — kontrol buna çevrildi.
+> 3. **Asıl neden:** bu `lsphp` yapılandırmasında `proc_open` VE `exec`
+>    BİRLİKTE devre dışıdır (`disable_functions`). Yani script harici bir
+>    komut HİÇ çalıştıramaz — "doğru binary'yi bulma" sorunu değildi, hiçbir
+>    binary çağrılamıyordu. (Aday tarayan ara sürüm bunu günlükte açıkça
+>    raporladığı için teşhis edilebildi; sunucuda terminal erişimi yok.)
+>
+> **Çözüm: artisan AYNI SÜREÇTE çalıştırılır** — alt süreç yok.
+> `finalize.php` `vendor/autoload.php` + `bootstrap/app.php` ile uygulamayı
+> başlatır ve her adımı `Illuminate\Contracts\Console\Kernel::call()` ile
+> koşturur; çıktı `BufferedOutput` ile alınıp günlüğe yazılır, çıkış kodu ve
+> fırlatılan her `Throwable` yakalanır. Bu yüzden:
+>
+> - `APP_RUNNING_IN_CONSOLE=true` bootstrap'TAN ÖNCE yazılır (putenv +
+>   `$_ENV` + `$_SERVER`) — Laravel konsolda olduğunu normalde PHP_SAPI'den
+>   anlar; bu, framework'ün KENDİ desteklediği açık kapıdır
+>   (`Application::runningInConsole()`). `Env::get()` ile doğrulandı.
+> - `set_time_limit(0)` ve `memory_limit=512M` — web SAPI limitleri uzun bir
+>   migrate'i ortasında kesebilirdi.
+> - **Sürüm kapısı** artık doğrudan BU sürecin sürümüne bakar: 8.3 dışında
+>   bir sürümle koşulursa hiçbir şey yapmadan durur ve işaret dosyasını KORUR
+>   (CLAUDE.md §2 — sürüm kilidi).
+>
+> Tüm zincir yerelde gerçek MySQL'e karşı doğrulandı: yedi adım (temizleme →
+> migrate → yetki seed'i → dört cache) sırayla koştu, marker silindi; bir
+> adım hata verdiğinde marker KORUNUP exit 1 verildiği de ayrıca sınandı.
+
+Cron kurulana kadar marker dosyası sunucuda bırakılır ama hiç kimse onu
+işlemez — bu durumda migrate/seed/cache adımları GEÇİCİ olarak elle
+çalıştırılabilir (§15'teki sırayla); cron kurulduktan sonra bir daha hiç elle
+müdahale gerekmez.
 
 ---
 
@@ -407,9 +470,12 @@ uygulanır. Güvenli doğrulamayı engellemek kilidin amacı değildir.
 | Hedef ve aktarım planı | doğrulanır ve raporlanır | doğrulanır |
 | Dosya oluşturma / değiştirme / silme | **yok** | var |
 
-Her iki biçimde de ortak: yalnızca `workflow_dispatch` ile elle tetiklenir —
-`push`/`pull_request` tetiklemesi **yoktur**, `main` veya `develop`'a merge
-hiçbir şey başlatmaz.
+**Üçüncü biçim — OTOMATİK (13 Eylül 2026, kullanıcı talimatı):** `main` dalına
+her push/merge gerçek aktarımı kendiliğinden başlatır. Kilitlerden
+`DEPLOY_ENABLED` ve `LEMON_APP_DIR` aynen aranır; `confirm_target` ARANMAZ
+(insan onayıdır, otomatik akışta yazacak insan yoktur). Tek başına `docs/`,
+`tests/`, `.claude/` veya `*.md` değişen bir push aktarım yapmaz
+(`paths-ignore`). `develop` ve `pull_request` tetiklemesi **hâlâ yoktur**.
 
 ### Karar iki kez, bağımsız hesaplanır
 
@@ -474,10 +540,15 @@ Lemon şu anda **ilk kabul/staging ortamı** olarak kullanılacak.
 
 Gerçek production ortamı geldiğinde: `main` → production, `develop` → Lemon.
 
-**Otomatik push deployment hiçbir dal için etkinleştirilmedi ve sizin onayınız
-olmadan etkinleştirilmeyecek.** Onay verdiğinizde bile önerim, `develop` için
-`push` tetikleyicisi yerine `workflow_dispatch`'te kalmaktır: paylaşımlı
-hostingde geri alma maliyeti yüksektir.
+**GÜNCELLENDİ (13 Eylül 2026):** kullanıcı talimatıyla `main` dalı için otomatik
+push deployment ETKİNLEŞTİRİLDİ — "canlıya al = main'e push". Gerekçe: her yayın
+için elle tetikleme + onay metni + sunucuda elle komut zinciri, geliştirme hızını
+belirgin biçimde düşürüyordu. `develop` için otomatik deployment HÂLÂ YOKTUR ve
+önerim orada `workflow_dispatch`'te kalmaktır.
+
+Bilinen ödünç: `main`e giren hatalı bir commit doğrudan canlıya çıkar. Geri
+alma yolu, düzeltmeyi `main`e push etmektir (ileri düzeltme) — paylaşımlı
+hostingde dosya düzeyinde geri alma maliyetlidir, bkz. §13.
 
 ---
 
@@ -534,7 +605,7 @@ deploy tamamlanana kadar 403/404 verir. Bu yüzden sıra şudur:
     K-102: bayat cache bu deploy'da yeni eklenen bir modülün Service
     Provider'ını taşımıyorsa `migrate` o modülün migration'larını hiç
     GÖRMEZ, sessizce atlar), sonra `migrate --force`, sonra
-    **`db:seed --class=RolePermissionSeeder --force`** (HER deploy'da,
+    **`db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`** (HER deploy'da,
     migrate'ten hemen sonra — atlanırsa production "no permission named X"
     hatası verir, gerçek üretim olayı), `storage:link`, sonra üretim
     cache'i KURULUR: `config:cache route:cache view:cache event:cache`.
@@ -636,7 +707,8 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 - Production veritabanı oluşturulmadı, migration çalıştırılmadı
 - cPanel'de hiçbir ayar değiştirilmedi
 - **DocumentRoot değiştirilmedi** — bu işlem cPanel'den elle yapılacaktır (§11 Aşama 4)
-- `finalize.php` ve production cron yazılmadı (§6)
+- `finalize.php` yazıldı ve production cron kaydı 13 Eylül 2026'da eklendi (§6);
+  mekanizma canlıda uçtan uca çalıştı — bu madde ARTIK AÇIK DEĞİLDİR
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
 - **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı

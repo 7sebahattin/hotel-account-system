@@ -7,6 +7,7 @@ namespace App\Modules\Stays\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
@@ -18,8 +19,14 @@ use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
+use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
+use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Models\Stay;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -214,6 +221,128 @@ class StayService
 
             return $stay;
         });
+    }
+
+    /**
+     * Konaklamayı veritabanından KALICI olarak siler (hard delete).
+     *
+     * Yalnızca `StayPolicy::forceDelete()`ten geçen çağrılar buraya ulaşır
+     * (Admin + zaten İPTAL edilmiş kayıt), ama kural burada da AYRICA
+     * doğrulanır — Service son savunmadır (CLAUDE.md §7.1). Ledger append-only
+     * olduğu için (§6/L1) bu işlem konaklamanın ledger etkisini GERİ ALMAZ:
+     * iptal sırasında zaten yazılan orijinal + ters kayıt çifti deftere
+     * kalıcı olarak yazılı kalır, yalnızca artık gereksiz olan Stay satırının
+     * kendisi kaldırılır.
+     *
+     * Bu konaklamaya bugüne kadar bir ödeme dağılımı uygulanmışsa (geçmişte
+     * serbest bırakılmış olsa bile — `payment_allocations` de append-only'dir)
+     * `stay_id` FK kısıtı (RESTRICT) silmeyi veritabanı düzeyinde reddeder;
+     * bu durum StayHasLinkedAllocations olarak dışarı taşınır.
+     *
+     * @throws StayNotCancelled
+     * @throws StayHasLinkedAllocations
+     */
+    public function forceDelete(Stay $stay, ?User $actor = null): void
+    {
+        if (! $stay->isCancelled()) {
+            throw StayNotCancelled::make($stay->getKey());
+        }
+
+        $user = $this->resolveActor($actor);
+        if (! $user->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+
+        DB::transaction(function () use ($stay, $user): void {
+            app(CompanyService::class)->lockAccounts([$stay->company_id]);
+            $fresh = Stay::query()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
+            if (! $fresh->isCancelled()) {
+                throw StayNotCancelled::make($fresh->id);
+            }
+            $stay->setRawAttributes($fresh->getAttributes(), true);
+            $before = $this->snapshot($stay);
+
+            try {
+                $stay->forceDelete();
+            } catch (QueryException $e) {
+                // Bağlantı hatası dışındaki SQL sorunlarını "bağlı ödeme var" diye gizleme.
+                if ((int) ($e->errorInfo[1] ?? 0) !== 1451) {
+                    throw $e;
+                }
+                throw StayHasLinkedAllocations::make($stay->getKey(), previous: $e);
+            }
+
+            $this->auditLogger->log(
+                event: AuditEvent::Deleted,
+                subject: $stay,
+                oldValues: $before,
+                user: $user,
+            );
+        });
+    }
+
+    /**
+     * Verilen (zaten filtrelenmiş) sorgu için para birimi bazında toplam.
+     *
+     * Aktif ve iptal edilmiş tutarlar AYRI tutulur — iptal edilenler normal
+     * muhasebe toplamına karışmaz (kullanıcı talimatı, onaylı geliştirme
+     * kapsamı notu) ama görünürlükten de kaldırılmaz; ekran ikisini de
+     * gösterir. Para birimleri hiçbir zaman birleştirilmez (CLAUDE.md §6/L5).
+     *
+     * Sorgu KLONLANIR: aynı $query hem bu toplam hem de asıl liste (sayfalama
+     * veya tam liste) için kullanılabilsin diye. `reorder()` olası bir
+     * ORDER BY'ı temizler — aksi hâlde GROUP BY ile birlikte MySQL'in
+     * ONLY_FULL_GROUP_BY modunda hataya yol açardı. `toBase()` sorguyu ham
+     * query builder'a indirger — aksi hâlde Eloquent bu satırları `Stay`
+     * modeli olarak hidratlamaya çalışır ve `currency`/`status` alanları
+     * (model cast'i yüzünden) ENUM NESNESİ olarak gelir; `(string)` dönüşümü
+     * o zaman fatal error verir (native enum'larda `__toString()` yoktur).
+     *
+     * `$query` `Builder<covariant Model>` olarak tiplenir (Stay'e daraltılmaz):
+     * çağıran taraf `QueryFilter::apply()`'ın döndürdüğü sorguyu doğrudan
+     * geçirir ve o metot da aynı kovaryant imzayı taşır (PHPStan level 5).
+     *
+     * @param  Builder<covariant Model>  $query
+     * @return Collection<string, array{currency: Currency, count: int, total: Money, activeTotal: Money, cancelledTotal: Money, cancelledCount: int}>
+     */
+    public function totalsFor(Builder $query): Collection
+    {
+        $rows = (clone $query)
+            ->toBase()
+            ->reorder()
+            ->selectRaw('currency, status, COUNT(*) as count, CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->groupBy('currency', 'status')
+            ->get();
+
+        $totals = collect();
+
+        foreach ($rows as $row) {
+            $code = (string) $row->currency;
+
+            $bucket = $totals->get($code, [
+                'currency' => Currency::from($code),
+                'count' => 0,
+                'total' => Money::zero(),
+                'activeTotal' => Money::zero(),
+                'cancelledTotal' => Money::zero(),
+                'cancelledCount' => 0,
+            ]);
+
+            $amount = Money::fromDecimal((string) $row->total);
+            $bucket['count'] += (int) $row->count;
+            $bucket['total'] = $bucket['total']->add($amount);
+
+            if ($row->status === StayStatus::Cancelled->value) {
+                $bucket['cancelledTotal'] = $bucket['cancelledTotal']->add($amount);
+                $bucket['cancelledCount'] += (int) $row->count;
+            } else {
+                $bucket['activeTotal'] = $bucket['activeTotal']->add($amount);
+            }
+
+            $totals->put($code, $bucket);
+        }
+
+        return $totals->sortKeys();
     }
 
     /**

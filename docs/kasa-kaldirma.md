@@ -47,32 +47,24 @@ Admin Gate kısayolu da `cashbook.*` yetkilerine erişim vermez.
 ## Yayına geçiş
 
 Bu görevde canlıya aktarım yapılmaz. Yeni tablo/kolon migration'ı yoktur.
-Yayın sırasında aşağıdaki sıra gereklidir:
+Claude'un yeni otomatik yayın akışıyla birleştirildi. Normal yayın sırasında
+elle artisan komutu veya geçici cron kurulmaz:
 
-1. Kayıt girişini durdur, güncel veritabanı/dosya yedeğini al. Cari hesap
-   bazında para birimi bakiyelerini ve konaklama/tahsilat sayısını kaydet.
-   Kasa tablolarının kayıt sayıları ve mevcut vardiya bağlantıları da arşiv
-   kontrolüne dahil edilsin. Yedeklerin geri yükleme provası ayrıca doğrulansın.
-2. Eski sürüm çalışırken bakım moduna gir. Optimize önbelleklerini temizle;
-   kaldırılan CashBook provider ve controller'ları eski cache'de bırakma.
-3. Test edilmiş sürümü ve onun üretim bağımlılıklarını aktar. FTPS ile silinen
-   dosyaların da kaldırıldığını doğrula; eski modül dosyaları sunucuda kalmasın.
-4. `php artisan optimize:clear` çalıştır. Migration durumunu kontrol et.
-   Bu dal yeni migration eklemez; beklenmedik Pending varsa önce incele.
-5. Yalnız şu seeder'ı çalıştır:
+1. Güncel veritabanı/dosya yedeği ve cari bakiyeler, kayıt sayıları, tarihsel
+   kasa sayıları karşılaştırma için saklanır.
+2. Test edilmiş dal için yayın kararı verildiğinde main'e alınır. CI geçmeden
+   aktarım başlamaz. Workflow önce bakım modunu açar, dosyaları gönderir ve
+   finalize işaretini bırakır.
+3. Kalıcı finalize cron'u kernel başlamadan eski cache'i temizler;
+   optimize:clear → migrate → tam sınıf adıyla RolePermissionSeeder → cache
+   sırasını çalıştırır. Sonra kendi bakımını kapatıp başarı kaydını yazar.
+4. Actions aynı commit/run/attempt başarı kaydını doğrular. Zaman aşımı ve
+   FTP hataları başarılı yayın sayılmaz. Kalıcı finalize cron'u silinmez.
+5. Cari bakiyeler, kayıt sayıları ve kasa arşivi değişmeden kaldı mı kontrol
+   edilir. Admin/patron/personel ekranları gerçek para hareketi yaratmadan
+   kontrol edilir. İlk gerçek nakit tahsilat yetkili kullanıcıyla izlenir.
 
-   ```bash
-   php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force
-   ```
-
-   Kısa `--class=RolePermissionSeeder` adı bu projede çalışmaz. Tüm
-   `DatabaseSeeder`'ı veya örnek veri seeder'ını canlıda çalıştırma.
-6. Config/route/view/event cache'lerini yeniden oluştur. Cari bakiye ve kayıt
-   sayılarının başlangıçla aynı olduğunu, arşiv verisinin değişmediğini doğrula.
-7. Bakım modunu kapat. Admin, patron, personel için pano/konaklama/tahsilat/
-   ekstre erişimini kontrol et. Gerçek para hareketi yaratacak deneme kaydı
-   ekleme. Yayın Cron'larını kaldır. Yeni nakit tahsilat ilk gerçek işlemde
-   yetkili kullanıcı tarafından kontrol edilsin.
+Hata ve kurtarma ayrıntıları: `docs/claude-karsilastirma-2026-09-13.md`.
 
 Yeni sürümde işlem girildikten sonra eski dosyalara dönmek güvenli değildir:
 eski sürüm nakit tahsilatları kasaya yazılmış varsayar. Geri dönüş gerekirse
@@ -110,11 +102,11 @@ Yerel MariaDB doğrulaması:
   291 doğrulama, tamamı başarılı. Sonradan eklenen dövizli şahsi nakit ödeme
   ve eski kasa denetim kaydı okuma kontrolleri de bu koşuda yer aldı.
 - Pint başarılı, PHPStan level 5: sıfır hata, Vite build başarılı.
-- Eski kasa migration'ları ve Ledger, StayService, CompanyService dosyaları
-  taban sürümle aynıdır; şema geçmişi ve cari bakiye algoritması değiştirilmedi.
+- İlk kasa kaldırma sürümünde eski kasa migration'ları ve Ledger, StayService,
+  CompanyService dosyaları taban sürümle aynıydı; şema geçmişi ve cari bakiye algoritması değiştirilmedi.
 - Yeni arayüz HTTP/view testleriyle kontrol edildi; bu dalda ayrıca gerçek
   tarayıcı/mobil görsel kabulü yapılmış sayılmamalıdır.
 
-Kullanıcı başka değişiklikler hazırladığını ve birazdan alınmasını istedi.
-Bu değişiklikler henüz çekilmedi/birleştirilmedi; dal yerel olarak saklanır.
-Birleştirmeden sonra son sürümün tam test paketi ve görsel kabulü yapılmalıdır.
+Claude değişiklikleri 6d31e06 dahil karşılaştırılarak alındı. StayService'e
+Claude'un toplam ve kalıcı silme işlevleri geldi; entegrasyonda silme kontrolü
+sıkılaştırıldı. Ayrıntı ve son doğrulama: `docs/claude-karsilastirma-2026-09-13.md`.

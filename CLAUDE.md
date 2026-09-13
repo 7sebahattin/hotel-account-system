@@ -98,6 +98,134 @@ hassasiyetinde borcu aşmayan döviz tutarı kullanılır, fark silinmez.
 Bu adım dövizden TL'ye kapamadır; diğer döviz çiftleri ve avans sahipliği
 aktarımı henüz uygulanmaz. Canlı geçiş yapılmaz.
 
+`codex/yayin-cari-1` paketi canlıya aktarıldı (12 Eylül 2026 devir notu, detay
+`docs/yayin-cari-1-2026-09-13.md`): `main`/`develop` `dcb771d`'ye güncellendi,
+GitHub Deploy #11 gerçek FTPS aktarımıyla tamamlandı, sunucuda iki migration
+uygulandı, yetki seeder'ı çalıştı, bakım modu kapatıldı. Yedek geri yükleme
+provası hâlâ ERTELENMİŞTİR, canlı ekran/bakiye kontrolü kullanıcı tarafından
+henüz TEYİT EDİLMEDİ — bu paket bu yüzden tam kapanmış sayılmaz. Bu devir
+notu ayrıca deploy komut sırasındaki bir hatayı düzeltti: `db:seed --class=
+RolePermissionSeeder` KISA sınıf adıyla sunucuda "class not found" verir —
+bu seeder `database/seeders/` içinde DEĞİLDİR, tam adı `App\Modules\
+Authorization\Database\Seeders\RolePermissionSeeder`dır. §15 ve tüm
+`docs/deploy-*`/`docs/release-checklist-v2.1.1.md` dosyaları bu tam adla
+düzeltildi.
+
+Konaklamalar ekranı UI/araç eklentisi (12 Eylül 2026, kullanıcı talimatı,
+yukarıdaki yayın paketinin ÜZERİNE — cari/ödeme/döviz mantığına dokunmaz):
+listeye her satır için "Görüntüle" bağlantısı, filtreye göre para birimi
+bazlı toplam kutusu (aktif/iptal ayrı gösterilir, §6/L5 gereği para birimleri
+asla birleşmez) ve sayfalanmayan bir yazdırma görünümü (`stays.print`,
+mevcut `stays.view` yetkisiyle) eklendi. Ayrıca yeni, BİLEREK dar bir yetki
+açıldı: `stays.force_delete` — yalnızca Admin'e atanır ve
+`StayPolicy::forceDelete()` bunu yalnızca ZATEN İPTAL EDİLMİŞ bir kayıtta
+kabul eder. Gerekçe: ledger append-only olduğu için (§6/L1) aktif bir
+konaklamanın borcu hard-delete ile KALDIRILAMAZ — borç deftere kalıcı yazılır
+ve yalnızca ters kayıtla sıfırlanabilir; hard-delete bu yüzden yalnızca borcu
+zaten sıfırlanmış (İptal edilmiş) bir kaydın artık gereksiz `stays` satırını
+temizler, `ledger_entries` ve `payment_allocations`a HİÇ dokunmaz (ikisi de
+append-only kalır). Bu kayda daha önce bir ödeme dağılımı uygulanmışsa (geçmişte
+serbest bırakılmış olsa bile) `payment_allocations.stay_id` FK kısıtı
+(RESTRICT) silmeyi veritabanı düzeyinde reddeder (`StayHasLinkedAllocations`).
+Patron/Personel için mevcut Düzenle/İptal yetki kapsamı DEĞİŞMEDİ. Firma
+seçim alanı (yalnızca konaklama formundaki `company_id`) Alpine.js OLMADAN,
+native `<select>` üzerine yazan bağımsız bir JS combobox ile aranabilir hale
+getirildi (`resources/js/app.js`, `initSearchableSelects()`) — §11.7'deki
+"dinamik firma arama" istisnası bu turda kullanıcı talimatıyla devreye girdi;
+gerçek form değeri her zaman `<select>`in kendisinden okunur, kullanıcı
+yazdığı serbest metinle var olmayan bir kayda asla "bağlanamaz".
+
+Deploy finalize script'i yazıldı (12 Eylül 2026 devir notu, `deploy/
+finalize.php`, bkz. `docs/deploy-lemon.md` §6): daha önce yalnızca mimari
+karar olarak dokümante edilen cron+işaret dosyası akışı artık gerçek koddur
+— marker yoksa no-op, `flock()` ile eşzamanlılık kilidi, her adımın çıktısı
+günlüğe yazılır, herhangi bir adım BAŞARISIZ olursa marker SİLİNMEZ (bir
+sonraki cron baştan dener). `.github/workflows/deploy.yml`, gerçek bir
+aktarımdan SONRA bu marker'ı AYRI ve tek dosyalık bir FTP yüklemesiyle
+bırakır (`storage/` normal aktarımdan hariç tutulduğu için). Gerçek MySQL'e
+karşı elle doğrulandı: cache temizleme → migrate → yetki seed'i → cache
+yeniden kurma sırası ve başarısızlıkta marker'ın korunması beklendiği gibi
+çalışıyor. cPanel cron kaydı 13 Eylül 2026'da kullanıcı tarafından eklendi.
+
+Canlı sunucu **LiteSpeed + CloudLinux Alt-PHP**tir ve cron'u çağıran
+`lsphp` bir **CLI binary'si DEĞİLDİR** (SAPI `litespeed`). Script buna göre
+sertleştirildi (detay `docs/deploy-lemon.md` §6): çıktı `php://stdout`/
+`php://stderr` ile yazılır (CLI'a özgü `STDOUT`/`STDERR` sabitleri fatal
+verirdi) ve web'den çağrılma kontrolü SAPI adına değil GERÇEK bir HTTP
+isteği bağlamına bakar. **Bu `lsphp` yapılandırmasında `proc_open` ve `exec`
+BİRLİKTE kapalıdır**, yani script hiçbir harici komut çalıştıramaz; bu
+yüzden artisan komutları ALT SÜREÇ olarak değil, AYNI SÜREÇTE
+`Illuminate\Contracts\Console\Kernel::call()` ile koşturulur (çıktı
+`BufferedOutput` ile günlüğe yazılır, çıkış kodu ve her `Throwable`
+yakalanır). Bootstrap'tan ÖNCE `APP_RUNNING_IN_CONSOLE=true` yazılır
+(Laravel'in kendi desteklediği açık kapı) ve süre/bellek limiti gevşetilir.
+Sürüm kapısı MUTLAKTIR (yalnızca 8.3, §2); uygun değilse marker KORUNUR.
+**Mekanizma 13 Eylül 2026 20:30'da canlıda uçtan uca çalıştı:** yedi adım
+sırayla koştu (migrate: "Nothing to migrate" — bu paket migration
+içermiyor, `stays.force_delete` seeder'dan gelen bir YETKİdir) ve işaret
+dosyası silindi. Deploy sonrası elle müdahale artık GEREKMİYOR.
+
+## YAYIN AKIŞI — 13 Eylül 2026'dan itibaren geçerli (yeni oturumlar ÖNCE BUNU OKUSUN)
+
+**"Canlıya al" = `main` dalına push.** Başka hiçbir elle adım YOKTUR: elle
+workflow tetikleme, onay metni yazma, sunucuda migrate/seed/cache koşturma
+KALDIRILDI. Detay ve gerekçe: `docs/k107-otomatik-yayin.md`, `docs/deploy-lemon.md`
+§6/§9, §15 (aşağıda).
+
+```
+main'e push → Actions "Deploy (Lemon)": CI testleri + vendor (8.3) + Vite derlemesi
+            → önceki yayın/bakım kontrolü → bu yayına ait bakım modu → FTPS aktarımı (/lemon-app/)
+            → storage/app/deploy-pending işareti (ayrı tek dosyalık FTP yüklemesi)
+            → cPanel cron (dakikalık) → deploy/finalize.php:
+              kernel başlamadan eski bootstrap cache'lerini temizle
+              → optimize:clear → migrate --force → RolePermissionSeeder → 4× cache
+              → yalnız bu yayının bakımını kapat → başarı kaydı → işareti sil
+            → workflow, işaretin silinmesini ve aynı commit/run/attempt başarı
+              kaydını FTPS ile doğrular (15 sn × 24 + ağ süresi) ve
+              SONUCU Actions ekranına yazar; takılırsa sunucudaki
+              lemon-deploy.log'un son 80 satırını da oraya döker
+```
+
+**Claude bu depoda `main`'e Bash ile push EDEMEZ** — uzak oturum ortamı
+`git push origin main` komutunu "production deploy" sayıp blokluyor. Çalışan
+yol: iş dalına (`claude/*`) normal `git push`, sonra GitHub MCP araçlarıyla
+`create_pull_request` + `merge_pull_request`. Merge'in kendisi `main`'e bir
+push olduğu için yayını tetikler. (Kullanıcı isterse `.claude/settings.json`
+içine `"permissions": {"allow": ["Bash(git push:*)"]}` ekleyerek doğrudan
+push'u açabilir — bu dosyayı Claude KENDİSİ düzenleyemez, ortam engelliyor.)
+
+**Sunucu gerçekleri (tekrar keşfetme, üçü de canlıda acı çekilerek bulundu):**
+LiteSpeed + CloudLinux Alt-PHP; cron'u çağıran `lsphp` CLI SAPI DEĞİL
+(`STDOUT`/`STDERR` sabitleri fatal verir), ve `proc_open` + `exec` BİRLİKTE
+kapalı (harici komut çalıştırılamaz → artisan AYNI SÜREÇTE `Kernel::call()`
+ile koşar). Sunucuda terminal erişimi YOK; tanılama yalnızca
+`lemon-deploy.log` üzerinden yapılır ve artık workflow onu kendisi indirir.
+
+**DURUM: ÇALIŞIYOR — zincir uçtan uca doğrulandı (13 Eylül 2026, 21:20).**
+`main`'e merge → koşu #18 → 21:19:29 işaret bırakıldı → 21:20:01 cron finalize'ı
+koşturdu (optimize:clear → migrate "Nothing to migrate" → RolePermissionSeeder
+187 ms → 4× cache) → 21:20:18 workflow işaretin silindiğini görüp
+"FİNALİZE TAMAMLANDI" yazdı. Bekleme adımı 43 saniye. Elle hiçbir adım yok.
+
+Ara notlar (tanılama tarihçesi, tekrar yaşanırsa işe yarar): 20:57 ve 21:12'de
+bırakılan işaretler ancak 21:20'de işlendi ve o aralıkta günlüğe HİÇ satır
+düşmedi — cron o pencerede tetiklenmemişti. Cron koşup finalize hata verseydi
+günlüğe yazardı; bu yüzden **"günlükte yeni satır yok" = cron hiç koşmadı**
+teşhisi geçerlidir (cPanel → Cron Jobs'a bakılır). Bekleme süresi bu yüzden
+6 dakikaya çıkarıldı. Yeni güvenilirlik düzeltmesinde zaman aşımı Deploy'u
+kırmızı bitirir: dosya aktarımı tek başına başarılı yayın sayılmaz. Cron
+sonradan tamamlayabilir; bu durumda sunucu günlüğü ve aynı yayının
+`storage/app/deploy-completed.json` kaydı kontrol edilir. Körlemesine tekrar
+yayın yapılmaz. Kalıcı finalize cron'u silinmez.
+
+**Kasa kaldırma entegrasyonu:** Yukarıdaki CI kapısı, bakım sahipliği ve
+başarı kaydı kontrolleri yerel `codex/kasa-kaldirma` dalında hazırlanmıştır;
+önceki #18 canlı doğrulaması bu yeni kontrollerin canlı testi değildir.
+FTPS sertifika doğrulaması başarısızsa kontrol atlanmaz; doğru sunucu adı ve
+sertifika düzeltilir. Ayrıntılar `docs/claude-karsilastirma-2026-09-13.md`.
+
+---
+
 Buradaki kurallar ile bir istek çelişiyorsa **önce sor**, kendi başına kapsam genişletme.
 
 ---
@@ -763,6 +891,7 @@ users.view, users.manage
 roles.manage
 companies.view, companies.create, companies.update, companies.delete, companies.restore
 stays.view, stays.create, stays.update, stays.delete
+stays.force_delete     # kalıcı silme (hard delete) — yalnızca Admin, yalnızca iptal edilmiş kayıt
 rooms.manage           # oda tanımlarını yönet (K-100)
 payments.view, payments.create, payments.cancel
 ledger.view            # tek firmanın ekstresi
@@ -802,6 +931,7 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | stays.create | ✅ | ✅ | ✅ |
 | stays.update | ✅ | ✅ | ⚠️ kendi kaydı + süre |
 | stays.delete | ✅ | ✅ | ❌ |
+| stays.force_delete (kalıcı sil) | ✅ (yalnızca iptal edilmiş) | ❌ | ❌ |
 | rooms.manage | ✅ | ✅ | ❌ |
 | payments.view | ✅ (tümü) | ✅ (tümü) | ✅ (tümü) |
 | payments.create | ✅ | ✅ | ✅ |
@@ -1680,14 +1810,22 @@ ESC, dışarı tıklama ve `aria-expanded` ile klavye erişilebilirdir.
 
 ### 11.7 JavaScript
 
-`resources/js/app.js` sade JavaScript'tir, harici paket yoktur. İçinde üç şey vardır:
-kenar çubuğu çekmecesi, **çift gönderim koruması** ve konaklama formunun ücret
-önizlemesi. Çökertilebilir yüzeyler (kenar çubuğu grupları, liste filtre paneli) JS
-KULLANMAZ — native `<details>/<summary>`dir.
+`resources/js/app.js` sade JavaScript'tir, harici paket yoktur. Üç çekirdek
+davranışı: kenar çubuğu çekmecesi, **çift gönderim koruması** ve konaklama
+formunun ücret önizlemesi. Çökertilebilir yüzeyler (kenar çubuğu grupları,
+liste filtre paneli) JS KULLANMAZ — native `<details>/<summary>`dir.
 
 **Alpine.js kurulu DEĞİLDİR** ve bu bilinçlidir; ihtiyaç doğarsa (modal, tutar
 maskesi, dinamik firma arama) kullanıcı onayıyla eklenir. JS ile iş mantığı
 yazılmaz, veri hesaplanmaz.
+
+**Dinamik firma arama istisnası devreye girdi (12 Eylül 2026, kullanıcı
+talimatı):** konaklama formundaki `company_id` seçimi artık yazarak aranabilir
+(`initSearchableSelects()`) — ama Alpine.js EKLENMEDİ, native `<select>`in
+üzerine yazan bağımsız bir vanilla JS combobox ile yapıldı. Native `<select>`
+DOM'dan kaldırılmaz (yalnızca `hidden` olur) ve form değeri HER ZAMAN ondan
+okunur/yazılır; JS çalışmazsa normal açılır liste olarak kalır (progresif
+geliştirme).
 
 **Çift gönderim koruması:** her form gönderiminde submit butonları kilitlenir.
 Kilitleme `setTimeout(0)` ile yapılır — devre dışı bir butonun `name`/`value`
@@ -1907,11 +2045,33 @@ workflow'un `guard` işi başka her hedefi fail-closed reddeder.
 
 - Genel ilkeler: `docs/deploy-github-actions.md`
 - **Hedefe özel kurulum, dizin mimarisi kararı ve blocker'lar: `docs/deploy-lemon.md`**
-- Workflow: `.github/workflows/deploy.yml` — yalnızca elle tetiklenir, varsayılanı
-  `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan gerçek aktarım yapamaz.
+- Workflow: `.github/workflows/deploy.yml` — `main` dalına push OTOMATİK canlı
+  yayın yapar (13 Eylül 2026, kullanıcı talimatı); elle tetiklemenin varsayılanı
+  hâlâ `dry-run`'dır ve `DEPLOY_ENABLED` variable'ı olmadan hiçbir yol gerçek
+  aktarım yapamaz.
 
 `develop` → Lemon (kabul/staging), `main` → production; ayrı hedefler, ayrı veritabanı.
-**Otomatik push deployment hiçbir dal için etkin değildir.**
+
+**`main` için OTOMATİK push deployment ETKİNDİR (13 Eylül 2026 — kullanıcı
+talimatıyla değiştirildi; önceki kural "hiçbir dal için etkin değildir"di).**
+Gerekçe: kullanıcı her yayın için elle workflow tetikleyip onay metni yazmaktan
+ve sunucuda elle komut koşturmaktan yoruldu; bu turda "canlıya al = main'e
+push" akışı istendi. Kural artık şudur:
+
+- `main`e push → derleme (vendor + Vite) → FTPS aktarımı → finalize işareti →
+  cPanel cron'u `deploy/finalize.php` ile migrate/seed/cache adımlarını en geç
+  1 dakika içinde koşturur. Elle hiçbir adım yoktur.
+- **Hedef kilitleri GEVŞETİLMEDİ:** `DEPLOY_ENABLED=true` ve
+  `LEMON_APP_DIR == /lemon-app/` her iki yolda da aranır (hesapta başka canlı
+  siteler vardır). Otomatik yolda ARANMAYAN tek şey `confirm_target`'tır —
+  o bir İNSAN onayıdır ve otomatik akışta yazacak insan yoktur.
+- Yalnızca sunucuya aktarılan dosyalar tetikler: tek başına `docs/`, `tests/`,
+  `.claude/` veya `*.md` değişen bir push aktarım yapmaz (`paths-ignore`).
+- `develop` için otomatik deployment HÂLÂ YOKTUR.
+- Aktarımdan sonra workflow, işaret dosyasının silinmesini FTPS ile izleyerek
+  finalize'ın gerçekten bittiğini raporlar — sunucu günlüğüne bakmak
+  gerekmez. **Yeni bir HTTP ucu AÇILMADI**: internete açık migrate/deploy ucu
+  yasağı (aşağıdaki kural) aynen geçerlidir.
 
 > **PHP sürümü blocker'ı ÇÖZÜLDÜ** — bkz. §2 ve `docs/kararlar.md` K-060.
 > Bağımlılıklar `config.platform.php = "8.3.0"` ile PHP 8.3'e kilitlendi;
@@ -1947,7 +2107,7 @@ Kurallar:
   Service Provider'ını taşımıyorsa `migrate` o modülün migration'larını hiç
   GÖRMEZ, sessizce atlar — gerçek üretim olayı) →
   `php artisan migrate --force` →
-  **`php artisan db:seed --class=RolePermissionSeeder --force`** (HER
+  **`php artisan db:seed --class="App\Modules\Authorization\Database\Seeders\RolePermissionSeeder" --force`** (HER
   deploy'da, migrate'ten hemen sonra, ATLANMAZ — koddaki yeni bir
   `Permission` case'i bu adım koşulmadan production'da "no permission
   named X for guard web" hatası üretir, gerçek üretim olayı) →

@@ -27,3 +27,5 @@ Homestead.yaml
 Thumbs.db
 /.local/
 /.env.testing
+/deploy/finalize.lock
+/deploy/.finalize-probe.php
