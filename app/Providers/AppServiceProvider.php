@@ -10,6 +10,8 @@ use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Authorization\Models\Role;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
+use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
+use App\Modules\MonthlyAccount\Models\MonthlyPaymentProvider;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use App\Modules\Rooms\Models\Room;
@@ -48,6 +50,8 @@ class AppServiceProvider extends ServiceProvider
             'payment' => Payment::class,
             'room' => Room::class,
             'receipt_book_entry' => ReceiptBookEntry::class,
+            'monthly_account_day' => MonthlyAccountDay::class,
+            'monthly_payment_provider' => MonthlyPaymentProvider::class,
         ]);
 
         // CLAUDE.md §7.1: admin rolü yetki kontrollerini geçer.

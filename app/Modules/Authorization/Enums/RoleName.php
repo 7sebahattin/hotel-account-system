@@ -62,6 +62,9 @@ enum RoleName: string
                 Permission::FxCorrectHistorical,
                 Permission::ReceiptBookView,
                 Permission::ReceiptBookCreate,
+                Permission::MonthlyAccountView,
+                Permission::MonthlyAccountUpdate,
+                Permission::MonthlyAccountViewAll,
             ],
 
             self::Personel => [
@@ -82,6 +85,9 @@ enum RoleName: string
                  */
                 Permission::ReceiptBookView,
                 Permission::ReceiptBookCreate,
+                Permission::MonthlyAccountView,
+                Permission::MonthlyAccountCreate,
+                Permission::MonthlyAccountUpdate,
             ],
         };
     }

@@ -61,6 +61,13 @@ enum Permission: string
     case ReceiptBookView = 'receipt_book.view';
     case ReceiptBookCreate = 'receipt_book.create';
 
+    case MonthlyAccountView = 'monthly_account.view';
+    case MonthlyAccountCreate = 'monthly_account.create';
+    case MonthlyAccountUpdate = 'monthly_account.update';
+    case MonthlyAccountDelete = 'monthly_account.delete';
+    case MonthlyAccountViewAll = 'monthly_account.view_all';
+    case MonthlyAccountManageProviders = 'monthly_account.manage_providers';
+
     /** Yetki yönetimi ekranındaki gruplama başlığı. */
     public function group(): string
     {
@@ -79,6 +86,9 @@ enum Permission: string
             self::AuditView => 'Denetim Kaydı',
             self::FxCorrectHistorical => 'Geçmiş Döviz Düzeltme',
             self::ReceiptBookView, self::ReceiptBookCreate => 'Tahsilat Makbuzu Defteri',
+            self::MonthlyAccountView, self::MonthlyAccountCreate, self::MonthlyAccountUpdate,
+            self::MonthlyAccountDelete, self::MonthlyAccountViewAll,
+            self::MonthlyAccountManageProviders => 'Aylık Hesap',
         };
     }
 
@@ -110,6 +120,12 @@ enum Permission: string
             self::FxCorrectHistorical => 'Geçmiş kaydın eksik döviz kurunu düzelt',
             self::ReceiptBookView => 'Tahsilat makbuzu defterini görüntüle / yazdır',
             self::ReceiptBookCreate => 'Tahsilat makbuzu defterine yeni makbuz ekle',
+            self::MonthlyAccountView => 'Aylık hesabı görüntüle',
+            self::MonthlyAccountCreate => 'Günlük hesap ekle',
+            self::MonthlyAccountUpdate => 'Günlük hesabı düzenle',
+            self::MonthlyAccountDelete => 'Günlük hesabı sil / geri getir',
+            self::MonthlyAccountViewAll => 'Diğer kullanıcıların hesap alanlarına eriş',
+            self::MonthlyAccountManageProviders => 'Banka / ödeme kuruluşu tanımlarını yönet',
         };
     }
 

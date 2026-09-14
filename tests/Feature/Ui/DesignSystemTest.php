@@ -35,6 +35,9 @@ class DesignSystemTest extends TestCase
         $this->actingAs($admin)->get(route('home'))
             ->assertSee('Cari hesaplar')
             ->assertSee('Konaklamalar')
+            ->assertSee('Aylık Hesap')
+            ->assertSee('Banka / Ödeme Kuruluşları')
+            ->assertDontSee('>Kasa<', false)
             ->assertSee('Kullanıcılar')
             ->assertSee('Roller / Yetkiler')
             ->assertSee('Denetim Kayıtları');
@@ -43,6 +46,9 @@ class DesignSystemTest extends TestCase
         $this->actingAs($personel)->get(route('home'))
             ->assertSee('Cari hesaplar')
             ->assertSee('Konaklamalar')
+            ->assertSee('Aylık Hesap')
+            ->assertDontSee('Banka / Ödeme Kuruluşları')
+            ->assertDontSee('>Kasa<', false)
             ->assertDontSee('Kullanıcılar')
             ->assertDontSee('Roller / Yetkiler')
             ->assertDontSee('Denetim Kayıtları');
@@ -52,6 +58,9 @@ class DesignSystemTest extends TestCase
     public function patron_kullanici_ve_rol_menusunu_gormez_denetimi_gorur(): void
     {
         $this->actingAs($this->userWithRole(RoleName::Patron))->get(route('home'))
+            ->assertSee('Aylık Hesap')
+            ->assertDontSee('Banka / Ödeme Kuruluşları')
+            ->assertDontSee('>Kasa<', false)
             ->assertDontSee('Kullanıcılar')
             ->assertDontSee('Roller / Yetkiler')
             ->assertSee('Denetim Kayıtları');
@@ -80,7 +89,7 @@ class DesignSystemTest extends TestCase
     }
 
     /**
-     * Kasa/Cari/Yönetim başlıkları koyu renkli, katlanabilir gruplardır;
+     * Cari/Hesap/Yönetim başlıkları koyu renkli, katlanabilir gruplardır;
      * alt öğeler varsayılan olarak kapalıdır. Aktif sayfanın grubu sunucu
      * tarafında `open` ile başlar ve başka bir gruba geçilene kadar açık
      * kalır (her sayfa yüklemesinde rota bazında yeniden hesaplanır).
@@ -92,8 +101,9 @@ class DesignSystemTest extends TestCase
             ->get(route('companies.index'))
             ->getContent();
 
-        // "Kasa" grubunun <details> bloğu 'open' taşır, "Cari"/"Yönetim" taşımaz.
+        // Aktif rota "Cari" grubunu açar; "Hesap" ve "Yönetim" kapalı kalır.
         $this->assertDetailsOpen($html, 'Cari', true);
+        $this->assertDetailsOpen($html, 'Hesap', false);
         $this->assertDetailsOpen($html, 'Yönetim', false);
     }
 

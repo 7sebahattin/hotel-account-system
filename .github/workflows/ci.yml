@@ -61,6 +61,9 @@ jobs:
       - name: Frontend derlemesi
         run: npm run build
 
+      - name: Aylık hesap para girişi testleri
+        run: npm run test:monthly-account
+
       - name: Ortam hazırlığı
         run: |
           cp .env.example .env

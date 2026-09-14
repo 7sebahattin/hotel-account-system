@@ -28,11 +28,18 @@
             ],
         ],
         [
+            'label' => 'Hesap',
+            'items' => [
+                ['route' => 'monthly-account.index', 'label' => 'Aylık Hesap', 'can' => Permission::MonthlyAccountView->value, 'icon' => 'ledger'],
+            ],
+        ],
+        [
             'label' => 'Yönetim',
             'items' => [
                 ['route' => 'users.index', 'label' => 'Kullanıcılar', 'can' => Permission::UsersView->value, 'icon' => 'users'],
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
                 ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
+                ['route' => 'monthly-account.providers.index', 'label' => 'Banka / Ödeme Kuruluşları', 'can' => Permission::MonthlyAccountManageProviders->value, 'icon' => 'building'],
                 ['route' => 'fx-correction.index', 'label' => 'Geçmiş Döviz Düzeltme', 'can' => Permission::FxCorrectHistorical->value, 'icon' => 'log'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
@@ -69,9 +76,11 @@
         'payments.index' => ['payments.*'],
         'receipt-book.index' => ['receipt-book.*'],
         'statements.index' => ['statements.*'],
+        'monthly-account.index' => ['monthly-account.index', 'monthly-account.create', 'monthly-account.show', 'monthly-account.edit'],
         'users.index' => ['users.*'],
         'roles.index' => ['roles.*'],
         'rooms.index' => ['rooms.*'],
+        'monthly-account.providers.index' => ['monthly-account.providers.*'],
         'fx-correction.index' => ['fx-correction.*'],
         'audit.index' => ['audit.*'],
     ];

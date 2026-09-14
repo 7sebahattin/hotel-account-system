@@ -1,3 +1,5 @@
+import './monthly-account.js';
+
 /*
  * Mobil kenar çubuğu çekmecesi.
  *
