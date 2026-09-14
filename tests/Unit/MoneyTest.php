@@ -187,4 +187,56 @@ class MoneyTest extends TestCase
 
         Money::fromDecimal('100.00')->multiplyByRate('51.20000');
     }
+
+    /**
+     * `rateAgainst()` — `multiplyByRate()`in tersi (K-110): operatör TL
+     * toplamını girdiğinde kur bundan türetilir.
+     */
+    #[Test]
+    #[DataProvider('kurTuretmeleri')]
+    public function kur_turetme_dort_ondalikla_yarim_yukari_yuvarlar(
+        string $tryTotal,
+        string $amount,
+        string $expected,
+    ): void {
+        $this->assertSame(
+            $expected,
+            Money::fromDecimal($tryTotal)->rateAgainst(Money::fromDecimal($amount)),
+        );
+    }
+
+    /** @return array<string, array{string, string, string}> */
+    public static function kurTuretmeleri(): array
+    {
+        return [
+            'tam bölünen' => ['25600.00', '500.00', '51.2000'],
+            'devirli bölme' => ['100.00', '3.00', '33.3333'],
+            'yarım yukarı yuvarlama' => ['41234.57', '1000.00', '41.2346'],
+            'birim tutar' => ['55.00', '1.00', '55.0000'],
+            'kesirli tutar' => ['5512.50', '100.00', '55.1250'],
+        ];
+    }
+
+    /**
+     * Dört ondalık her toplamı tam ifade edemez; bu BİLİNÇLİDİR. Türetilen
+     * kur geri çarpıldığında toplam birkaç kuruş şaşabilir — bu yüzden TL
+     * modunda saklanan karşılık kurdan yeniden hesaplanmaz.
+     */
+    #[Test]
+    public function kur_turetme_her_zaman_tam_tersi_degildir(): void
+    {
+        $amount = Money::fromDecimal('1000.00');
+        $rate = Money::fromDecimal('41234.57')->rateAgainst($amount);
+
+        $this->assertSame('41.2346', $rate);
+        $this->assertSame('41234.60', $amount->multiplyByRate($rate)->toDecimal());
+    }
+
+    #[Test]
+    public function kur_turetme_pozitif_olmayan_tutari_reddeder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Money::fromDecimal('100.00')->rateAgainst(Money::zero());
+    }
 }

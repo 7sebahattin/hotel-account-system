@@ -40,10 +40,11 @@
                                 <form method="POST" action="{{ route('fx-correction.stays.update', $stay) }}"
                                       class="flex flex-wrap items-center gap-2">
                                     @csrf @method('PATCH')
-                                    <input type="text" name="exchange_rate_to_try" inputmode="decimal" required
-                                           placeholder="Kur, ör. 51,20"
-                                           class="min-h-11 w-32 rounded-lg border border-field bg-card px-2 text-sm tabular-nums text-tx focus:border-acc-tx">
-                                    <x-ui.button type="submit" variant="secondary" class="text-xs">Kaydet</x-ui.button>
+                                    {{-- Kur ya da doğrudan TL karşılığı (K-110) — aynı bileşen, satır içi düzen. --}}
+                                    <x-ui.fx-input layout="inline" :currency="$stay->currency->value"
+                                                   :id-prefix="'fx-stay-'.$stay->id">
+                                        <x-ui.button type="submit" variant="secondary" class="text-xs">Kaydet</x-ui.button>
+                                    </x-ui.fx-input>
                                 </form>
                             </td>
                         </tr>
@@ -83,10 +84,11 @@
                                 <form method="POST" action="{{ route('fx-correction.payments.update', $payment) }}"
                                       class="flex flex-wrap items-center gap-2">
                                     @csrf @method('PATCH')
-                                    <input type="text" name="exchange_rate_to_try" inputmode="decimal" required
-                                           placeholder="Kur, ör. 51,20"
-                                           class="min-h-11 w-32 rounded-lg border border-field bg-card px-2 text-sm tabular-nums text-tx focus:border-acc-tx">
-                                    <x-ui.button type="submit" variant="secondary" class="text-xs">Kaydet</x-ui.button>
+                                    {{-- Kur ya da doğrudan TL karşılığı (K-110) — aynı bileşen, satır içi düzen. --}}
+                                    <x-ui.fx-input layout="inline" :currency="$payment->currency->value"
+                                                   :id-prefix="'fx-payment-'.$payment->id">
+                                        <x-ui.button type="submit" variant="secondary" class="text-xs">Kaydet</x-ui.button>
+                                    </x-ui.fx-input>
                                 </form>
                             </td>
                         </tr>

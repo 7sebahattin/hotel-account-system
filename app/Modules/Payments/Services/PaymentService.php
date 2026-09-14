@@ -9,6 +9,7 @@ use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\ExchangeRateSnapshot;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
@@ -401,7 +402,7 @@ class PaymentService
      *
      * @throws ExchangeRateAlreadyRecorded
      */
-    public function correctHistoricalExchangeRate(Payment $payment, string $rate, ?User $actor = null): Payment
+    public function correctHistoricalExchangeRate(Payment $payment, array|string $input, ?User $actor = null): Payment
     {
         if ($payment->exchange_rate_to_try !== null) {
             throw ExchangeRateAlreadyRecorded::make($payment->getKey());
@@ -412,8 +413,17 @@ class PaymentService
         }
 
         $user = $this->resolveActor($actor);
-        $normalizedRate = Money::normalizeInput($rate);
-        $tryEquivalent = $payment->amountMoney()->multiplyByRate($normalizedRate)->toDecimal();
+        $snapshot = ExchangeRateSnapshot::fromInput(
+            $payment->amountMoney(),
+            is_string($input) ? ['exchange_rate_to_try' => $input] : $input,
+        );
+
+        if ($snapshot === null) {
+            throw new \InvalidArgumentException('Kur düzeltmesi için kur ya da TL karşılığı gereklidir.');
+        }
+
+        $normalizedRate = $snapshot->rate;
+        $tryEquivalent = $snapshot->tryEquivalent;
 
         return DB::transaction(function () use ($payment, $normalizedRate, $tryEquivalent, $user): Payment {
             $payment->exchange_rate_to_try = $normalizedRate;
@@ -449,13 +459,14 @@ class PaymentService
             return;
         }
 
-        if (! array_key_exists('exchange_rate_to_try', $data) || $data['exchange_rate_to_try'] === null) {
+        $snapshot = ExchangeRateSnapshot::fromInput($payment->amountMoney(), $data);
+
+        if ($snapshot === null) {
             return;
         }
 
-        $rate = Money::normalizeInput((string) $data['exchange_rate_to_try']);
-        $payment->exchange_rate_to_try = $rate;
-        $payment->try_equivalent = $payment->amountMoney()->multiplyByRate($rate)->toDecimal();
+        $payment->exchange_rate_to_try = $snapshot->rate;
+        $payment->try_equivalent = $snapshot->tryEquivalent;
     }
 
     private function postCredit(Payment $payment, User $user): LedgerEntry

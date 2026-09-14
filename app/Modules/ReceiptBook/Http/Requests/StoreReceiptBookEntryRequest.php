@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\ReceiptBook\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\ExchangeRateInput;
 use App\Modules\Core\Support\Money;
 use App\Modules\ReceiptBook\Enums\ReceiptPaymentMethod;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
@@ -30,16 +31,14 @@ class StoreReceiptBookEntryRequest extends FormRequest
             'customer_name' => ['required', 'string', 'max:200'],
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
             'currency' => ['required', Rule::enum(Currency::class)],
-            'exchange_rate_to_try' => [
-                // bkz. StayRequest'teki AYNI yorum.
-                'nullable',
-                'prohibited_if:currency,TRY',
-                'required_unless:currency,TRY',
-                'numeric', 'gt:0', 'decimal:0,4', 'max:999999.9999',
-            ],
             'payment_method' => ['nullable', Rule::enum(ReceiptPaymentMethod::class)],
             'description' => ['nullable', 'string', 'max:1000'],
-        ];
+            /*
+             * Kur / TL karşılığı — iki modlu giriş (K-110). Kurallar
+             * `Core\Support\ExchangeRateInput`ta TEK yerdedir; dört döviz
+             * girişli ekran da aynı sözleşmeyi kullanır (CLAUDE.md §4.2/4).
+             */
+        ] + ExchangeRateInput::rules();
     }
 
     /**
@@ -52,10 +51,9 @@ class StoreReceiptBookEntryRequest extends FormRequest
             'customer_name' => 'müşteri / cari adı',
             'amount' => 'tutar',
             'currency' => 'para birimi',
-            'exchange_rate_to_try' => 'kur (TL karşılığı)',
             'payment_method' => 'ödeme şekli',
             'description' => 'açıklama',
-        ];
+        ] + ExchangeRateInput::attributes();
     }
 
     /**
@@ -65,20 +63,18 @@ class StoreReceiptBookEntryRequest extends FormRequest
     {
         return [
             'amount.gt' => 'Tutar sıfırdan büyük olmalıdır.',
-            'exchange_rate_to_try.required_unless' => 'TRY dışındaki para birimlerinde kur girilmesi zorunludur.',
-            'exchange_rate_to_try.prohibited_if' => 'TRY için kur girilmez.',
-        ];
+        ] + ExchangeRateInput::messages();
     }
 
     protected function prepareForValidation(): void
     {
-        foreach (['amount', 'exchange_rate_to_try'] as $field) {
-            $value = $this->input($field);
+        $value = $this->input('amount');
 
-            if (is_string($value)) {
-                $this->merge([$field => Money::normalizeInput($value)]);
-            }
+        if (is_string($value)) {
+            $this->merge(['amount' => Money::normalizeInput($value)]);
         }
+
+        ExchangeRateInput::normalize($this);
     }
 
     /**

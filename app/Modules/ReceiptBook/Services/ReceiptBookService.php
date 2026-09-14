@@ -6,7 +6,7 @@ namespace App\Modules\ReceiptBook\Services;
 
 use App\Models\User;
 use App\Modules\Core\Enums\Currency;
-use App\Modules\Core\Support\Money;
+use App\Modules\Core\Support\ExchangeRateSnapshot;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
@@ -80,13 +80,14 @@ class ReceiptBookService
             return;
         }
 
-        if (! array_key_exists('exchange_rate_to_try', $data) || $data['exchange_rate_to_try'] === null) {
+        $snapshot = ExchangeRateSnapshot::fromInput($entry->amountMoney(), $data);
+
+        if ($snapshot === null) {
             return;
         }
 
-        $rate = Money::normalizeInput((string) $data['exchange_rate_to_try']);
-        $entry->exchange_rate_to_try = $rate;
-        $entry->try_equivalent = $entry->amountMoney()->multiplyByRate($rate)->toDecimal();
+        $entry->exchange_rate_to_try = $snapshot->rate;
+        $entry->try_equivalent = $snapshot->tryEquivalent;
     }
 
     private function resolveActor(?User $actor): User

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\ExchangeRateInput;
 use App\Modules\Core\Support\Money;
 use App\Modules\Payments\Enums\AllocationMode;
 use App\Modules\Payments\Enums\PayerType;
@@ -37,26 +38,15 @@ class StorePaymentRequest extends FormRequest
             'payment_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
             'currency' => ['required', Rule::enum(Currency::class)],
-            /*
-             * Kur yalnızca YENİ tahsilatta yakalanır (v2.1.1-C §2). Tahsilat
-             * zaten tamamen değişmez olduğu için (§8/Payments) normal bir
-             * "düzenleme" yolu hiç YOKTUR — UpdatePaymentRequest bu alanı
-             * hiç tanımaz; eksik geçmiş kur yalnızca §3'teki ayrı araçla
-             * doldurulur.
-             */
-            'exchange_rate_to_try' => [
-                // bkz. StayRequest'teki AYNI yorum: alan gizliyken bile boş
-                // değerle gönderilir, 'nullable' bunu 'required_unless'i
-                // bastırmadan zararsız kılar.
-                'nullable',
-                'prohibited_if:currency,TRY',
-                'required_unless:currency,TRY',
-                'numeric', 'gt:0', 'decimal:0,4', 'max:999999.9999',
-            ],
             'payment_method' => ['nullable', Rule::enum(PaymentMethod::class)],
             'reference_no' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string', 'max:255'],
-        ];
+            /*
+             * Kur / TL karşılığı — iki modlu giriş (K-110). Kurallar
+             * `Core\Support\ExchangeRateInput`ta TEK yerdedir; dört döviz
+             * girişli ekran da aynı sözleşmeyi kullanır (CLAUDE.md §4.2/4).
+             */
+        ] + ExchangeRateInput::rules();
     }
 
     /**
@@ -72,11 +62,10 @@ class StorePaymentRequest extends FormRequest
             'payment_date' => 'tahsilat tarihi',
             'amount' => 'tutar',
             'currency' => 'para birimi',
-            'exchange_rate_to_try' => 'kur (TL karşılığı)',
             'payment_method' => 'ödeme yöntemi',
             'reference_no' => 'referans no',
             'description' => 'açıklama',
-        ];
+        ] + ExchangeRateInput::attributes();
     }
 
     /**
@@ -87,20 +76,18 @@ class StorePaymentRequest extends FormRequest
         return [
             'amount.gt' => 'Tutar sıfırdan büyük olmalıdır.',
             'amount.decimal' => 'Tutar en fazla iki ondalık basamak içerebilir.',
-            'exchange_rate_to_try.required_unless' => 'TRY dışındaki para birimlerinde kur girilmesi zorunludur.',
-            'exchange_rate_to_try.prohibited_if' => 'TRY için kur girilmez.',
-        ];
+        ] + ExchangeRateInput::messages();
     }
 
     /** Türkçe klavyede ondalık ayırıcı virgüldür; noktaya çevrilir. */
     protected function prepareForValidation(): void
     {
-        foreach (['amount', 'exchange_rate_to_try'] as $field) {
-            $value = $this->input($field);
+        $value = $this->input('amount');
 
-            if (is_string($value)) {
-                $this->merge([$field => Money::normalizeInput($value)]);
-            }
+        if (is_string($value)) {
+            $this->merge(['amount' => Money::normalizeInput($value)]);
         }
+
+        ExchangeRateInput::normalize($this);
     }
 }

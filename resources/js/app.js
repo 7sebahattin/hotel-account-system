@@ -295,6 +295,29 @@ function tryEquivalentMinor(amountMinor, rateScaled) {
 }
 
 /**
+ * `tryEquivalentMinor()`in TERSİ: TL kuruş ÷ döviz kuruş → kur (10.000
+ * ölçeği). Sunucudaki `Money::rateAgainst()` ile BİREBİR aynı — yarım yukarı
+ * yuvarlama, tamsayı aritmetiği. DECIMAL(10,4) aralığının dışına düşerse
+ * `null` döner (sunucu da o girdiyi doğrulama hatasıyla reddeder).
+ */
+function deriveRateScaled(totalMinor, amountMinor) {
+    if (totalMinor <= 0 || amountMinor <= 0) return null;
+
+    const numerator = totalMinor * 10000;
+    let scaled = Math.floor(numerator / amountMinor);
+    if ((numerator % amountMinor) * 2 >= amountMinor) scaled++;
+
+    return scaled > 0 && scaled <= 9999999999 ? scaled : null;
+}
+
+/** 412346 → '41,2346' (kur her zaman dört ondalıkla gösterilir). */
+function formatRateScaled(scaled) {
+    const whole = String(Math.trunc(scaled / 10000)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    return `${whole},${String(scaled % 10000).padStart(4, '0')}`;
+}
+
+/**
  * Konaklama formu — ücret giriş şekli.
  *
  * Yalnızca UX içindir: alanları gösterip gizler ve hesaplanan toplamı yazar.
@@ -316,9 +339,7 @@ function initStayPricing() {
     const dailyGroups = root.querySelectorAll('[data-pricing-daily]');
     const totalOutput = root.querySelector('[data-daily-total]');
     const amountInput = root.querySelector('[name="amount"]');
-    const exchangeRateGroup = root.querySelector('[data-exchange-rate-group]');
-    const exchangeRateInput = root.querySelector('[data-exchange-rate]');
-    const exchangeRatePreview = root.querySelector('[data-exchange-rate-preview]');
+    const fxInput = root.querySelector('[data-fx-input]');
 
     // Sembol JS'de sabit bir listeye bağlanmaz: her <option> kendi sembolünü
     // `data-symbol` ile taşır (bkz. Currency::symbol(), PHP tarafındaki tek kaynak).
@@ -339,14 +360,41 @@ function initStayPricing() {
         return diff >= 1 ? diff : null;
     };
 
+    /*
+        Günlük ücretlendirmede nihai tutarı bu form hesaplar; döviz bloğunun
+        TL önizlemesi de aynı tutarı kullanmalıdır. Değer `data-fx-amount`
+        ile bildirilir — döviz sürücüsü (initExchangeRateInputs) o alanı
+        okur, kendi hesabını YAPMAZ. Toplam modunda alan boşaltılır ve
+        sürücü doğrudan `amount` girdisine düşer.
+    */
+    const publishAmount = (value) => {
+        if (!fxInput) return;
+
+        if (value === null) {
+            delete fxInput.dataset.fxAmount;
+        } else {
+            fxInput.dataset.fxAmount = value;
+        }
+
+        fxInput.dispatchEvent(new CustomEvent('fx:refresh'));
+    };
+
     const renderTotal = () => {
-        if (!totalOutput) return;
+        const daily = modeSelect?.value === 'daily';
         const count = nights();
         const rate = parseMinorUnits(rateInput?.value);
-        if (count === null || rate === null || rate === 0) {
+        const computable = daily && count !== null && rate !== null && rate !== 0;
+
+        publishAmount(computable ? String((rate * count) / 100) : (daily ? '' : null));
+
+        if (!totalOutput) return;
+
+        if (!computable) {
             totalOutput.textContent = '—';
+
             return;
         }
+
         const symbol = currencySymbol();
         totalOutput.textContent =
             `${count} gece × ${formatMinorUnits(rate, symbol)} = ${formatMinorUnits(rate * count, symbol)}`;
@@ -362,141 +410,145 @@ function initStayPricing() {
         renderTotal();
     };
 
-    // Kur alanı yalnızca TRY DIŞI para biriminde görünür/zorunludur
-    // (v2.1.1-C §2). TRY'ye dönülürse alan hem gizlenir hem TEMİZLENİR —
-    // sunucu zaten TRY için gönderilse bile bu alanı reddeder, ama
-    // formda görünmemesi kullanıcı için daha dürüsttür.
-    const renderExchangeRatePreview = () => {
-        if (!exchangeRatePreview) return;
-        const amountMinor = parseMinorUnits(amountInput?.value);
-        const rateScaled = parseRateScaled(exchangeRateInput?.value);
-        if (amountMinor === null || rateScaled === null) {
-            exchangeRatePreview.textContent = '';
-            return;
-        }
-        const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
-        exchangeRatePreview.textContent = `≈ ${formatMinorUnits(equivalentMinor, '₺')} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
-    };
-
-    const applyCurrency = () => {
-        if (!exchangeRateGroup || !exchangeRateInput) return;
-        const isTry = currencySelect?.value === 'TRY';
-        exchangeRateGroup.hidden = isTry;
-        exchangeRateInput.toggleAttribute('required', !isTry);
-        if (isTry) {
-            exchangeRateInput.value = '';
-        }
-        renderExchangeRatePreview();
-    };
-
     modeSelect?.addEventListener('change', applyMode);
-    currencySelect?.addEventListener('change', applyCurrency);
     [rateInput, currencySelect, checkIn, checkOut].forEach((el) =>
         el?.addEventListener('input', renderTotal)
     );
-    [amountInput, exchangeRateInput].forEach((el) =>
-        el?.addEventListener('input', renderExchangeRatePreview)
-    );
+    currencySelect?.addEventListener('change', renderTotal);
 
     applyMode();
-    applyCurrency();
 }
 
 document.addEventListener('DOMContentLoaded', initStayPricing);
 
 /**
- * Tahsilat formu — kur alanının TL dışı para biriminde gösterilmesi
- * (v2.1.1-C §2). Yalnızca UX: sunucu tarafı `StorePaymentRequest`/
- * `PaymentService` doğrulamayı ve hesaplamayı BAĞIMSIZ olarak tekrar yapar.
+ * Döviz girişi — İKİ MOD (K-110).
+ *
+ * Dört ekran (Konaklama, Tahsilat, Tahsilat Makbuzu Defteri, Geçmiş Döviz
+ * Düzeltme) `<x-ui.fx-input>` ile AYNI işaretlemeyi kullanır, bu yüzden
+ * burada TEK jenerik sürücü vardır — daha önce üç kopya vardı ve üçünde de
+ * aynı hesap hatası bulunuyordu (K-109).
+ *
+ * Yalnızca UX: alanları gösterip gizler ve karşı değeri önizler. Kaydedilen
+ * çift HER ZAMAN sunucuda `ExchangeRateSnapshot` ile yeniden hesaplanır.
  */
-function initPaymentExchangeRate() {
-    const root = document.querySelector('[data-payment-exchange-rate]');
-    if (!root) return;
+function initExchangeRateInputs() {
+    document.querySelectorAll('[data-fx-input]').forEach((root) => {
+        // Makbuz dialog'u içeriğini `fetch()` ile yükledikten sonra bu işlevi
+        // TEKRAR çağırır; zaten bağlanmış bloklara ikinci kez dinleyici
+        // eklenmemelidir.
+        if (root.dataset.fxReady === '1') return;
+        root.dataset.fxReady = '1';
 
-    const currencySelect = root.querySelector('[data-currency]');
-    const amountInput = root.querySelector('[data-amount]');
-    const group = root.querySelector('[data-exchange-rate-group]');
-    const rateInput = root.querySelector('[data-exchange-rate]');
-    const preview = root.querySelector('[data-exchange-rate-preview]');
-
-
-
-    const renderPreview = () => {
-        if (!preview) return;
-        const amountMinor = parseMinorUnits(amountInput?.value);
-        const rateScaled = parseRateScaled(rateInput?.value);
-        if (amountMinor === null || rateScaled === null) {
-            preview.textContent = '';
-            return;
-        }
-        const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
-        preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı (bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)`;
-    };
-
-    const applyCurrency = () => {
-        if (!group || !rateInput) return;
-        const isTry = currencySelect?.value === 'TRY';
-        group.hidden = isTry;
-        rateInput.toggleAttribute('required', !isTry);
-        if (isTry) {
-            rateInput.value = '';
-        }
-        renderPreview();
-    };
-
-    currencySelect?.addEventListener('change', applyCurrency);
-    [amountInput, rateInput].forEach((el) => el?.addEventListener('input', renderPreview));
-
-    applyCurrency();
-}
-
-document.addEventListener('DOMContentLoaded', initPaymentExchangeRate);
-
-/**
- * Tahsilat Makbuzu Defteri formu — kur alanı (v2.1.1-C §5). Payments'takiyle
- * AYNI mantık, ayrı bir kök seçici (`[data-receipt-book-form]`) üzerinden —
- * iki form birbirinden bağımsız DOM'da yaşayabilir (dialog + standalone sayfa
- * aynı anda mevcut olabilir).
- */
-function initReceiptBookExchangeRate() {
-    document.querySelectorAll('[data-receipt-book-form]').forEach((root) => {
-        const currencySelect = root.querySelector('[data-currency]');
-        const amountInput = root.querySelector('[data-amount]');
-        const group = root.querySelector('[data-exchange-rate-group]');
+        const form = root.closest('form');
+        const modeSelect = root.querySelector('[data-fx-mode]');
         const rateInput = root.querySelector('[data-exchange-rate]');
+        const totalInput = root.querySelector('[data-fx-total]');
         const preview = root.querySelector('[data-exchange-rate-preview]');
-        if (!currencySelect || !group || !rateInput) return;
+        // Geçmiş Döviz Düzeltme'de para birimi seçici YOKTUR: kayıtlar zaten
+        // TRY dışıdır ve blok hiçbir zaman gizlenmez.
+        const currencySelect = form?.querySelector('[data-currency], [name="currency"]') ?? null;
 
+        if (!modeSelect || !rateInput || !totalInput) return;
 
+        /*
+            Tutar kaynağı: konaklama formu GÜNLÜK ücretlendirmede tutarı
+            kendisi hesapladığı için `data-fx-amount`ı doldurur; diğer
+            ekranlarda tutar formun kendi `amount` alanından okunur; düzeltme
+            ekranında ise kayıt tutarı sunucudan sabit gelir.
+        */
+        const amountMinor = () => {
+            const provided = root.dataset.fxAmount;
+            if (provided !== undefined && provided !== '') return parseMinorUnits(provided);
+
+            return parseMinorUnits(form?.querySelector('[name="amount"]')?.value);
+        };
+
+        const isTotalMode = () => modeSelect.value === 'total';
 
         const renderPreview = () => {
             if (!preview) return;
-            const amountMinor = parseMinorUnits(amountInput?.value);
-            const rateScaled = parseRateScaled(rateInput?.value);
-            if (amountMinor === null || rateScaled === null) {
-                preview.textContent = '';
+            preview.textContent = '';
+
+            if (root.hidden) return;
+
+            const amount = amountMinor();
+            if (amount === null || amount === 0) return;
+
+            if (isTotalMode()) {
+                const totalTl = parseMinorUnits(totalInput.value);
+                if (totalTl === null || totalTl === 0) return;
+
+                const rate = deriveRateScaled(totalTl, amount);
+                if (rate === null) {
+                    preview.textContent = 'Girilen TL karşılığı bu tutar için geçerli bir kura dönüşmüyor.';
+                    return;
+                }
+
+                // Türetilen kur dört ondalıkla sınırlı olduğu için toplam her
+                // zaman tam ifade edilemez. Saklanan değer GİRİLEN tutardır;
+                // fark gizlenmez, operatöre açıkça söylenir.
+                const roundTrip = tryEquivalentMinor(amount, rate);
+                const note = roundTrip === totalTl
+                    ? ''
+                    : ` · bu kur ${formatMinorUnits(roundTrip, '₺')} eder; girdiğiniz tutar aynen saklanır`;
+
+                preview.textContent = `Hesaplanan kur: ${formatRateScaled(rate)}${note}`;
+
                 return;
             }
-            const equivalentMinor = tryEquivalentMinor(amountMinor, rateScaled);
-            preview.textContent = `≈ ${formatMinorUnits(equivalentMinor)} TL karşılığı`;
+
+            const rate = parseRateScaled(rateInput.value);
+            if (rate === null) return;
+
+            preview.textContent =
+                `≈ ${formatMinorUnits(tryEquivalentMinor(amount, rate), '₺')} TL karşılığı `
+                + '(bilgi amaçlıdır; kesin tutar kayıtta hesaplanır)';
         };
 
-        const applyCurrency = () => {
-            const isTry = currencySelect.value === 'TRY';
-            group.hidden = isTry;
-            rateInput.toggleAttribute('required', !isTry);
-            if (isTry) rateInput.value = '';
+        const applyMode = () => {
+            const total = isTotalMode();
+            root.querySelectorAll('[data-fx-field]').forEach((field) => {
+                field.hidden = field.dataset.fxField !== (total ? 'total' : 'rate');
+            });
+            // Gizli alan zorunlu kalırsa tarayıcı gönderimi engeller.
+            rateInput.required = !root.hidden && !total;
+            totalInput.required = !root.hidden && total;
             renderPreview();
         };
 
-        currencySelect.addEventListener('change', applyCurrency);
-        [amountInput, rateInput].forEach((el) => el?.addEventListener('input', renderPreview));
+        const applyCurrency = () => {
+            if (!currencySelect) {
+                applyMode();
+
+                return;
+            }
+
+            const isTry = currencySelect.value === 'TRY';
+            root.hidden = isTry;
+
+            // TRY'ye dönülürse alanlar TEMİZLENİR: sunucu TRY için bu
+            // alanları zaten reddeder, ama formda kalması yanıltıcı olurdu.
+            if (isTry) {
+                rateInput.value = '';
+                totalInput.value = '';
+            }
+
+            applyMode();
+        };
+
+        modeSelect.addEventListener('change', applyMode);
+        currencySelect?.addEventListener('change', applyCurrency);
+        [rateInput, totalInput].forEach((el) => el.addEventListener('input', renderPreview));
+        form?.querySelector('[name="amount"]')?.addEventListener('input', renderPreview);
+        // Konaklama formu günlük toplamı yeniden hesapladığında haber verir.
+        root.addEventListener('fx:refresh', renderPreview);
 
         applyCurrency();
     });
 }
 
-document.addEventListener('DOMContentLoaded', initReceiptBookExchangeRate);
+document.addEventListener('DOMContentLoaded', initExchangeRateInputs);
 
 /**
  * "Yeni Makbuz" dialog/sheet'i (v2.1.1-C §5) — ortak pencere
@@ -538,7 +590,7 @@ function initReceiptBookDialog() {
         }
 
         content.innerHTML = await response.text();
-        initReceiptBookExchangeRate();
+        initExchangeRateInputs();
         content.querySelector('input, select, textarea')?.focus();
     };
 

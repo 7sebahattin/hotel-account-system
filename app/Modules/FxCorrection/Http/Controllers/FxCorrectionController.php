@@ -50,7 +50,7 @@ class FxCorrectionController extends Controller
         try {
             $this->stays->correctHistoricalExchangeRate(
                 $this->stays->findOrFail($stay),
-                (string) $request->validated('exchange_rate_to_try'),
+                $request->validated(),
                 $request->user(),
             );
         } catch (StayExchangeRateAlreadyRecorded $e) {
@@ -67,7 +67,7 @@ class FxCorrectionController extends Controller
         try {
             $this->payments->correctHistoricalExchangeRate(
                 $this->payments->findOrFail($payment),
-                (string) $request->validated('exchange_rate_to_try'),
+                $request->validated(),
                 $request->user(),
             );
         } catch (PaymentExchangeRateAlreadyRecorded $e) {

@@ -10,6 +10,7 @@ use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\ExchangeRateSnapshot;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
@@ -558,7 +559,7 @@ class StayService
      *
      * @throws ExchangeRateAlreadyRecorded
      */
-    public function correctHistoricalExchangeRate(Stay $stay, string $rate, ?User $actor = null): Stay
+    public function correctHistoricalExchangeRate(Stay $stay, array|string $input, ?User $actor = null): Stay
     {
         if ($stay->exchange_rate_to_try !== null) {
             throw ExchangeRateAlreadyRecorded::make($stay->getKey());
@@ -569,8 +570,17 @@ class StayService
         }
 
         $user = $this->resolveActor($actor);
-        $normalizedRate = Money::normalizeInput($rate);
-        $tryEquivalent = $stay->amountMoney()->multiplyByRate($normalizedRate)->toDecimal();
+        $snapshot = ExchangeRateSnapshot::fromInput(
+            $stay->amountMoney(),
+            is_string($input) ? ['exchange_rate_to_try' => $input] : $input,
+        );
+
+        if ($snapshot === null) {
+            throw new \InvalidArgumentException('Kur düzeltmesi için kur ya da TL karşılığı gereklidir.');
+        }
+
+        $normalizedRate = $snapshot->rate;
+        $tryEquivalent = $snapshot->tryEquivalent;
 
         return DB::transaction(function () use ($stay, $normalizedRate, $tryEquivalent, $user): Stay {
             $stay->exchange_rate_to_try = $normalizedRate;
@@ -713,16 +723,23 @@ class StayService
             return;
         }
 
-        $rate = array_key_exists('exchange_rate_to_try', $data) && $data['exchange_rate_to_try'] !== null
-            ? Money::normalizeInput((string) $data['exchange_rate_to_try'])
-            : $stay->exchange_rate_to_try;
+        $snapshot = ExchangeRateSnapshot::fromInput($stay->amountMoney(), $data);
 
-        if ($rate === null) {
+        if ($snapshot !== null) {
+            $stay->exchange_rate_to_try = $snapshot->rate;
+            $stay->try_equivalent = $snapshot->tryEquivalent;
+
             return;
         }
 
-        $stay->exchange_rate_to_try = $rate;
-        $stay->try_equivalent = $stay->amountMoney()->multiplyByRate($rate)->toDecimal();
+        // Form kur bilgisi göndermediyse (programatik çağrı) mevcut kur
+        // KORUNUR ve karşılık ondan yeniden hesaplanır — tutar değişmiş
+        // olabilir ve eski karşılık artık o tutara ait değildir.
+        if ($stay->exchange_rate_to_try !== null) {
+            $stay->try_equivalent = $stay->amountMoney()
+                ->multiplyByRate($stay->exchange_rate_to_try)
+                ->toDecimal();
+        }
     }
 
     /**

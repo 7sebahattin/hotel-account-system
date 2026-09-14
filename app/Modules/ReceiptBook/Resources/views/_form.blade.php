@@ -21,13 +21,7 @@
         @endforeach
     </x-ui.select>
 
-    <div data-exchange-rate-group @if (old('currency', 'TRY') === 'TRY') hidden @endif>
-        <x-ui.input label="Kur (1 birim → TL)" name="exchange_rate_to_try" inputmode="decimal"
-                    data-exchange-rate placeholder="51,20" class="tabular-nums"
-                    :value="old('exchange_rate_to_try')"
-                    hint="TL dışı para biriminde zorunludur." />
-        <p class="mt-1 text-xs text-mut" data-exchange-rate-preview aria-live="polite"></p>
-    </div>
+    <x-ui.fx-input :currency="old('currency', 'TRY')" />
 
     <x-ui.select label="Ödeme şekli" name="payment_method">
         <option value="">Belirtilmedi</option>

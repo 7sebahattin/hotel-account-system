@@ -2488,3 +2488,95 @@ HİÇ yazılmaz (`ExchangeRateTest` bunu zaten kilitliyordu).
 `app/Modules/AuditLog/Resources/views/{index,show}.blade.php`,
 `resources/js/app.js`, `tests/Feature/Stays/StayForceDeleteTest.php`,
 `tests/Feature/AuditLog/AuditLogDetailTest.php`, `CLAUDE.md`.
+
+---
+
+## K-110 · Döviz girişi iki modlu: kur VEYA doğrudan TL karşılığı
+**Tarih:** 14 Eylül 2026 · **Kullanıcı talimatı** ("ister kur girilsin ister
+toplam tutar girilsin … aynı şekilde tüm döviz girişli ekranları düzenleyelim")
+
+**Bağlam:** v2.1.1-C'den beri TRY DIŞI bir kayıtta operatör YALNIZCA kuru
+girebiliyordu. Ama elde çoğu zaman kur değil, bankaya fiilen düşen TL TOPLAMI
+oluyor; operatör onu kendisi bölmek zorunda kalıyordu.
+
+### 1. Migration GEREKMEDİ — şema zaten izin veriyordu
+Üç tablodaki (`stays`, `payments`, `receipt_book_entries`) CHECK kısıtları
+yalnızca şunları arar: TRY hiç kur taşımaz · kur ve karşılık birlikte dolu
+ya da birlikte boş · ikisi de pozitif. **"karşılık = tutar × kur" diye bir
+kısıt YOKTUR**, bu yüzden iki değer birbirinden bağımsız yazılabilir ve
+canlı veriye dokunan bir migration gerekmedi.
+
+### 2. Hangi değer kesin, hangisi türetilmiş?
+**Karar:** operatör hangisini girdiyse O AYNEN saklanır; diğeri türetilir.
+
+- `rate` modu — kur girilir, karşılık `Money::multiplyByRate()` ile hesaplanır
+  (v2.1.1-C davranışı, değişmedi).
+- `total` modu — TL toplamı girilir ve **aynen saklanır**; kur yeni
+  `Money::rateAgainst()` ile türetilir.
+
+**Gerekçe (kullanıcı kararı):** kur kolonu `DECIMAL(10,4)` olduğu için her
+toplam dört ondalıkla tam ifade EDİLEMEZ — 1.000 EUR ↔ 41.234,57 ₺ → kur
+41,2346 → geri çarpım 41.234,60 ₺. Operatörün yazdığı rakamı üç kuruş
+kaydırmaktansa, TÜRETİLMİŞ olanın (kur) yaklaşık olması tercih edildi.
+Fark gizlenmez: form önizlemesi "bu kur … eder; girdiğiniz tutar aynen
+saklanır" der ve `ExchangeRateSnapshot::isExact()` bunu programatik olarak
+da bildirir.
+
+**Cari defter ETKİLENMEZ:** her iki modda da tutar SEÇİLEN PARA BİRİMİNDE
+işlenir, TL karşılığı `ledger_entries`e HİÇ yazılmaz (CLAUDE.md §6/L5).
+
+### 3. Kur artık DÜZENLEMEDE de sorulur (K-104'ün kuralı değişti)
+v2.1.1-C, kuru "yalnızca oluşturmada" soruyor ve düzenleme formunda alanı
+hiç göstermiyordu. **Kullanıcı kararıyla bu değişti:** konaklama düzenleme
+formu da kur/TL bloğunu gösterir ve mevcut değerlerle ön dolu gelir.
+Gerekçe: finansal bir düzenleme tutarı ya da para birimini değiştirebilir ve
+eski TL karşılığı o YENİ tutara ait DEĞİLDİR; operatörün onu yeniden teyit
+etmesi, sessizce türetilmesinden dürüsttür. Tahsilat ve makbuz defteri
+kayıtları zaten tamamen değişmez olduğu için (§8/Payments, §5.10) orada
+düzenleme yolu YOKTUR ve bu madde onları etkilemez.
+
+### 4. Beş kopya tek yere toplandı
+Kur/karşılık mantığı `StayService`, `PaymentService`, `ReceiptBookService` ve
+iki `correctHistoricalExchangeRate()` içinde BİREBİR kopyalanmıştı. Artık:
+
+- `Core\Support\ExchangeRateSnapshot` — çift üretimi ve iki mod (§4.2/4).
+- `Core\Support\ExchangeRateInput` — paylaşılan doğrulama sözleşmesi.
+- `Money::rateAgainst()` — `multiplyByRate()`in tersi; tamsayı aritmetiği,
+  yarım yukarı yuvarlama, taşma koruması, kayan nokta YOK (§13).
+- `<x-ui.fx-input>` — dört ekranın TEK işaretleme kaynağı; `grid` (form) ve
+  `inline` (düzeltme tablosu satırı) olmak üzere iki düzen taşır.
+- `app.js` `initExchangeRateInputs()` — üç kopya önizleme sürücüsünün yerine
+  tek jenerik sürücü. `deriveRateScaled()` sunucudaki `rateAgainst()` ile
+  birebir aynı sonucu verir (testle karşılaştırıldı).
+
+### 5. Geriye dönük uyumluluk bilerek korundu
+`fx_input_mode` İSTEĞE BAĞLIDIR ve yokluğu "kur" demektir. Böylece yalnızca
+`exchange_rate_to_try` gönderen eski çağrılar (testler, CLI import,
+`correctHistoricalExchangeRate(..., '51,20')` string imzası) kırılmadan
+çalışır. `prohibited_if:currency,TRY` moda UYGULANAMAZ: blok TRY'de gizlense
+bile `<select>` değerini yine gönderir, yani hiçbir zaman boş gelmez — mod
+bir VERİ değil, hangi alanın okunacağını söyleyen bir ayraçtır.
+
+### 6. Kura dönüşmeyen girdi 500 değil, doğrulama hatasıdır
+Bir avroya iki milyon lira gibi bir yazım hatası `DECIMAL(10,4)` aralığı
+dışında bir kur üretir ve veritabanı CHECK'ine takılırdı.
+`ExchangeRateSnapshot::fromTryTotal()` bu durumda `ValidationException`
+fırlatır; Laravel onu kendiliğinden forma, `try_equivalent_input` alanının
+ALTINA döndürür — hiçbir controller'a `try/catch` eklemek gerekmedi (§13:
+controller ince kalır).
+
+**Doğrulama:** `MoneyTest` (kur türetme + tam-ters-değildir), yeni
+`ExchangeRateTotalInputTest` (9 test: iki mod, dört ekran, düzenleme, TRY,
+aralık dışı kur), `ExchangeRateScreenTest` (dört ekranın da bloğu render
+ettiği). Tüm paket: 687 test yeşil; Pint ve PHPStan temiz. Kalan 3 hata
+`DeployFinalizeTest`in bilinen PHP 8.4/8.3 sürüm kapısıdır, CI'da 8.3'te
+geçer.
+
+**Etkilenen dosyalar:** `app/Modules/Core/Support/{Money,ExchangeRateSnapshot,ExchangeRateInput}.php`,
+`app/Modules/{Stays,Payments,ReceiptBook}/Services/*Service.php`,
+`app/Modules/{Stays,Payments,ReceiptBook,FxCorrection}/Http/Requests/*.php`,
+`app/Modules/FxCorrection/Http/Controllers/FxCorrectionController.php`,
+`resources/views/components/ui/fx-input.blade.php` (yeni), dört ekranın
+Blade'i, `resources/js/app.js`, `tests/Unit/MoneyTest.php`,
+`tests/Feature/Core/{ExchangeRateTotalInputTest,ExchangeRateScreenTest}.php`,
+`CLAUDE.md`.

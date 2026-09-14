@@ -91,21 +91,16 @@
     </x-ui.select>
 
     {{--
-        Kur yalnızca YENİ kayıtta istenir (v2.1.1-C §2) — StayRequest bu
-        alanı düzenlemede hiç TANIMLAMAZ, bu yüzden formda da göstermek
-        yanıltıcı olurdu ("gönderilse bile hiçbir etkisi yok"). Geçmiş bir
-        kaydın eksik kuru YALNIZCA "Yönetim → Geçmiş Döviz Düzeltme" ile
-        doldurulur.
+        Kur/TL karşılığı DÜZENLEMEDE de sorulur (K-110, kullanıcı kararı —
+        v2.1.1-C'deki "yalnızca oluşturmada" kuralı bilerek değiştirildi).
+        Gerekçe: finansal bir düzenleme tutarı ya da para birimini
+        değiştirebilir ve eski TL karşılığı o YENİ tutara ait DEĞİLDİR;
+        operatörün onu yeniden teyit etmesi sessizce türetilmesinden
+        dürüsttür. Değerler kaydın mevcut kuruyla ÖN DOLU gelir.
     --}}
-    @unless (isset($stay))
-        <div data-exchange-rate-group @if (old('currency', 'TRY') === 'TRY') hidden @endif>
-            <x-ui.input label="Kur (1 birim → TL)" name="exchange_rate_to_try" inputmode="decimal"
-                        data-exchange-rate placeholder="51,20" class="tabular-nums"
-                        :value="old('exchange_rate_to_try')"
-                        hint="TL dışı para biriminde zorunludur; işlem anındaki kur olarak SAKLANIR, sonradan güncellenmez." />
-            <p class="mt-1 text-xs text-mut" data-exchange-rate-preview aria-live="polite"></p>
-        </div>
-    @endunless
+    <x-ui.fx-input :currency="old('currency', $s?->currency?->value ?? 'TRY')"
+                   :rate="$s?->exchange_rate_to_try"
+                   :equivalent="$s?->try_equivalent" />
 
     <div class="sm:col-span-2" data-pricing-daily @if ($mode !== 'daily') hidden @endif>
         <p class="block text-sm text-mut">Hesaplanan toplam</p>

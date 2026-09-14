@@ -154,6 +154,42 @@ final readonly class Money implements Stringable
         return self::fromMinorUnits($sign * $rounded);
     }
 
+    /**
+     * `multiplyByRate()`in TERSİ: bu tutarın $base'e oranını DÖRT ondalıklı
+     * bir kur METNİ olarak üretir (v2.1.1-F).
+     *
+     * Operatör kur yerine TL karşılığını girdiğinde kur bundan türetilir:
+     * kur = TL karşılığı ÷ döviz tutarı. Hesap tamsayı üzerindedir — kayan
+     * nokta ve `bcmath` KULLANILMAZ: pay 10.000 ile ölçeklenir, tam sayı
+     * bölmesi yapılır ve kalan yarıyı geçiyorsa YARIM YUKARI yuvarlanır
+     * (`multiplyByRate()` ile AYNI yuvarlama yönü).
+     *
+     * **Tam tersi olmayabilir ve bu bilinçlidir:** kur kolonu DECIMAL(10,4)
+     * olduğu için her TL toplamı dört ondalıkla tam ifade edilemez
+     * (1.000 EUR ↔ 41.234,57 ₺ → kur 41,2346 → geri çarpım 41.234,60 ₺).
+     * Bu yüzden TL modunda saklanan karşılık kurdan yeniden hesaplanmaz,
+     * operatörün GİRDİĞİ değer aynen korunur (K-110).
+     */
+    public function rateAgainst(self $base): string
+    {
+        if (! $this->isPositive() || ! $base->isPositive()) {
+            throw new InvalidArgumentException('Kur türetmek için tutarların ikisi de pozitif olmalıdır.');
+        }
+
+        if ($this->minorUnits > intdiv(PHP_INT_MAX, 10000)) {
+            throw new InvalidArgumentException('Kur hesaplaması taşma sınırını aşıyor.');
+        }
+
+        $numerator = $this->minorUnits * 10000;
+        $scaled = intdiv($numerator, $base->minorUnits);
+
+        if (($numerator % $base->minorUnits) * 2 >= $base->minorUnits) {
+            $scaled++;
+        }
+
+        return sprintf('%d.%04d', intdiv($scaled, 10000), $scaled % 10000);
+    }
+
     public function negate(): self
     {
         return new self(-$this->minorUnits);

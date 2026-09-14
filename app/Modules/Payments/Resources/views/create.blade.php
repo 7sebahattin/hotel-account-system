@@ -59,17 +59,11 @@
                 </x-ui.select>
 
                 {{--
-                    Kur yalnızca YENİ tahsilatta istenir (v2.1.1-C §2) —
-                    tahsilat zaten tamamen değişmez olduğu için düzenleme
-                    formunda bu alan hiç YOKTUR.
+                    Kur / TL karşılığı yalnızca YENİ tahsilatta istenir —
+                    tahsilat oluşturulduktan sonra tamamen değişmezdir
+                    (§8/Payments), düzenleme formunda bu blok hiç YOKTUR.
                 --}}
-                <div data-exchange-rate-group @if (old('currency', 'TRY') === 'TRY') hidden @endif>
-                    <x-ui.input label="Kur (1 birim → TL)" name="exchange_rate_to_try" inputmode="decimal"
-                                data-exchange-rate placeholder="51,20" class="tabular-nums"
-                                :value="old('exchange_rate_to_try')"
-                                hint="TL dışı para biriminde zorunludur; işlem anındaki kur olarak SAKLANIR, sonradan güncellenmez." />
-                    <p class="mt-1 text-xs text-mut" data-exchange-rate-preview aria-live="polite"></p>
-                </div>
+                <x-ui.fx-input :currency="old('currency', 'TRY')" />
 
                 <x-ui.input label="Referans no" name="reference_no" maxlength="50"
                             hint="Dekont / slip numarası." />

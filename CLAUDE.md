@@ -399,7 +399,11 @@ Aşağıdakiler için **tablo, migration, model, servis, route, view, config ana
 > Stay/Payment/ReceiptBookEntry TRY DIŞI bir para biriminde oluşturulurken
 > operatörün ELLE girdiği bir kurun `exchange_rate_to_try`/`try_equivalent`
 > olarak SAKLANMASI ve (2) bu turdan ÖNCEKİ eksik kayıtları tek seferlik
-> doldurmak için "Yönetim → Geçmiş Döviz Düzeltme" ekranı. Otomatik/canlı kur
+> doldurmak için "Yönetim → Geçmiş Döviz Düzeltme" ekranı. **K-110 (14 Eylül
+> 2026) bu istisnayı YALNIZCA giriş ŞEKLİYLE genişletti:** operatör aynı
+> anlık görüntüyü kur yerine doğrudan TL TOPLAMI girerek de oluşturabilir;
+> bu hâlâ ELLE girilen, tek seferlik bir anlık görüntüdür — otomatik kur
+> servisi DEĞİLDİR. Otomatik/canlı kur
 > servisi, TCMB entegrasyonu, periyodik güncelleme, kur çevrimi (farklı para
 > birimlerini birbirine dönüştürme) HÂLÂ kapsam dışıdır ve bu istisnanın
 > parçası DEĞİLDİR. Detay: §5.3, §5.4, §7.2, §8/Payments, §8/Geçmiş Döviz
@@ -564,7 +568,7 @@ Genel kurallar:
 | daily_rate | decimal(15,2) null | yalnızca `daily` modunda dolu |
 | currency | char(3) | default TRY |
 | exchange_rate_to_try | decimal(10,4) null | v2.1.1-C — yalnızca TRY DIŞI kayıtlarda, işlem ANINDA girilen kur ANLIK GÖRÜNTÜSÜ; sonradan yeniden hesaplanmaz (bkz. §8/Payments, K-104) |
-| try_equivalent | decimal(15,2) null | v2.1.1-C — `amount × exchange_rate_to_try` (tamsayı kuruş aritmetiğiyle); salt bilgi amaçlı, `ledger_entries`e hiç yazılmaz |
+| try_equivalent | decimal(15,2) null | v2.1.1-C — salt bilgi amaçlı, `ledger_entries`e hiç yazılmaz. `rate` modunda `amount × exchange_rate_to_try`; **`total` modunda operatörün GİRDİĞİ değerdir ve kurdan yeniden hesaplanmaz** (K-110, §8/Döviz Girişi) |
 | notes | text null | |
 | status | varchar(20) | `active` \| `cancelled` — V1'de PMS durumu YOK |
 | created_by / updated_by | FK users | |
@@ -1080,14 +1084,19 @@ Liste + arama + detay. Detay ekranı sekmeleri: Bilgiler / Konaklamalar / Tahsil
   Pasif bir oda YENİ kayıt için seçilemez (`StayRequest`); düzenlemede kaydın KENDİ odası
   pasifleşmiş olsa bile seçenekten kaybolmaz. `room_id` finansal alan DEĞİLDİR, değişimi
   ters kayıt üretmez.
-- **Kur (v2.1.1-C, §3.2 istisnası):** yeni bir TRY DIŞI konaklama oluşturulurken
-  `exchange_rate_to_try` ZORUNLUDUR; sunucu `try_equivalent`i `Money::multiplyByRate()`
-  ile tamsayı aritmetiğiyle hesaplar ve saklar. `LedgerService`'e HİÇ geçirilmez —
-  cari hareketi her zaman orijinal para biriminde kalır (§6/L5). Yalnızca OLUŞTURMADA
-  sorulur; düzenleme formunda bu alan hiç YOKTUR. Finansal bir düzenleme (tutar/para
-  birimi değişimi) MEVCUT kuru koruyarak karşılığı yeniden hesaplar — yeni bir CANLI
-  kur DEĞİLDİR. Eksik geçmiş kayıtlar yalnızca "Geçmiş Döviz Düzeltme" ile doldurulur
-  (bkz. aşağı). Detay: K-104.
+- **Kur (v2.1.1-C, §3.2 istisnası; K-110 ile İKİ MODLU):** yeni bir TRY DIŞI
+  konaklamada kur bilgisi ZORUNLUDUR ve operatör bunu İKİ ŞEKİLDE girebilir —
+  ya kuru (`exchange_rate_to_try`) ya da doğrudan TL TOPLAMINI
+  (`try_equivalent_input`); diğerini sunucu türetir. Ayrıntılı kural
+  §8/Döviz Girişi'ndedir. `LedgerService`'e HİÇ geçirilmez — cari hareketi
+  her zaman orijinal para biriminde kalır (§6/L5).
+  **K-110'dan beri DÜZENLEMEDE de sorulur** (v2.1.1-C'nin "yalnızca
+  oluşturmada" kuralı kullanıcı kararıyla DEĞİŞTİ): finansal bir düzenleme
+  tutarı ya da para birimini değiştirebilir ve eski TL karşılığı o YENİ
+  tutara ait DEĞİLDİR. Form mevcut değerlerle ÖN DOLU gelir. Kur bilgisi hiç
+  gönderilmezse (programatik çağrı) mevcut kur KORUNUR ve karşılık ondan
+  yeniden hesaplanır. Eksik geçmiş kayıtlar "Geçmiş Döviz Düzeltme" ile
+  doldurulur. Detay: K-104, K-110.
 
 ### Rooms (Odalar) — K-100
 
@@ -1237,12 +1246,59 @@ bu açıkça yazılıdır. Z-raporu hâlâ YOKTUR (yukarıdaki madde).
   (yalnızca route ADI ile — CashBook Payments sınıflarını import ETMEZ, §4.3/3
   ihlal edilmez); `payments::show` da bağlı vardiyaya (`Payment.cashSession`)
   bağlantı verir.
-- **Kur (v2.1.1-C, §3.2 istisnası):** Stays ile AYNI kural — TRY DIŞI tahsilatta
-  `exchange_rate_to_try` ZORUNLUDUR, `try_equivalent` sunucuda hesaplanır. Tahsilat
-  tamamen değişmez olduğu için (yukarı) bu alanlar `Payment::IMMUTABLE_FIELDS`e
-  BİLEREK EKLENMEDİ — normal düzenleme yolu (`UpdatePaymentRequest`) zaten bu
-  alanları hiç bilmiyor, tek yazma yolu `create()` ve "Geçmiş Döviz Düzeltme"dir.
-  Detay: K-104.
+- **Kur (v2.1.1-C, §3.2 istisnası; K-110 ile İKİ MODLU):** Stays ile AYNI
+  kural — TRY DIŞI tahsilatta kur bilgisi ZORUNLUDUR ve kur ya da TL toplamı
+  olarak girilebilir (§8/Döviz Girişi). Tahsilat tamamen değişmez olduğu için
+  (yukarı) bu alanlar `Payment::IMMUTABLE_FIELDS`e BİLEREK EKLENMEDİ — normal
+  düzenleme yolu (`UpdatePaymentRequest`) zaten bu alanları hiç bilmiyor, tek
+  yazma yolu `create()` ve "Geçmiş Döviz Düzeltme"dir. Konaklamadaki
+  "düzenlemede de sor" kuralı BURADA GEÇERSİZDİR: tahsilatın düzenleme yolu
+  hiç yoktur. Detay: K-104, K-110.
+
+### Döviz Girişi — iki mod (K-110)
+
+TRY DIŞI bir kayıt oluştururken (Konaklama, Tahsilat, Tahsilat Makbuzu
+Defteri) ve Geçmiş Döviz Düzeltme'de operatör kur bilgisini İKİ ŞEKİLDE
+girebilir. Seçim `fx_input_mode` ile yapılır:
+
+| Mod | Operatör girer | Sunucu türetir |
+|---|---|---|
+| `rate` (varsayılan) | `exchange_rate_to_try` | `try_equivalent = tutar × kur` |
+| `total` | `try_equivalent_input` | `exchange_rate_to_try = TL ÷ tutar` |
+
+**BAĞLAYICI KURAL — girilen değer AYNEN saklanır, türetilen yaklaşıktır.**
+`total` modunda TL toplamı kurdan YENİDEN HESAPLANMAZ. Kur kolonu
+`DECIMAL(10,4)` olduğu için her toplam dört ondalıkla tam ifade edilemez
+(1.000 EUR ↔ 41.234,57 ₺ → kur 41,2346 → geri çarpım 41.234,60 ₺);
+operatörün yazdığı rakamı kaydırmak yerine türetilmiş olanın yaklaşık
+olması KASITLI olarak tercih edilmiştir (kullanıcı kararı). Fark gizlenmez:
+form önizlemesi bunu açıkça yazar, `ExchangeRateSnapshot::isExact()` de
+programatik olarak bildirir.
+
+**Şema DEĞİŞMEDİ ve değişmemelidir:** üç tablodaki CHECK kısıtları iki
+değeri birbirine BAĞLAMAZ (yalnızca "TRY kur taşımaz", "ikisi birlikte
+dolu/boş", "ikisi de pozitif"), bu yüzden iki modlu giriş migration
+gerektirmedi. "karşılık = tutar × kur" diye bir kısıt EKLENMEMELİDİR —
+eklenirse `total` modu kırılır.
+
+**Tek kaynak (§4.2/4):** mantık beş serviste kopyalanmıştı, artık
+`Core\Support\ExchangeRateSnapshot` (çift üretimi), `Core\Support\
+ExchangeRateInput` (doğrulama sözleşmesi), `Money::rateAgainst()`
+(`multiplyByRate()`in tersi), `<x-ui.fx-input>` (dört ekranın işaretlemesi,
+`grid`/`inline` düzenleri) ve `app.js` `initExchangeRateInputs()` (tek
+önizleme sürücüsü) içindedir. Kopyalanmaz.
+
+**`fx_input_mode` İSTEĞE BAĞLIDIR; yokluğu `rate` demektir** — yalnızca
+kur gönderen eski çağrılar (CLI import, testler) kırılmaz. Moda
+`prohibited_if:currency,TRY` UYGULANAMAZ: blok TRY'de gizlense bile
+`<select>` değerini yine gönderir, yani asla boş gelmez.
+
+**Kura dönüşmeyen bir TL toplamı** (`DECIMAL(10,4)` aralığı dışı — ör. bir
+avroya iki milyon lira) 500 değil, `try_equivalent_input` alanına bağlı bir
+DOĞRULAMA hatası üretir.
+
+Her iki modda da tutar SEÇİLEN PARA BİRİMİNDE cariye işlenir; TL karşılığı
+`ledger_entries`e HİÇ yazılmaz (§6/L5).
 
 ### Geçmiş Döviz Düzeltme (v2.1.1-C, §3.2 istisnası)
 
@@ -1746,7 +1802,12 @@ ve sağa hizalı.
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
 `alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`,
-`filter-panel`.
+`fx-input`, `filter-panel`.
+
+`fx-input` (K-110) döviz girişinin iki modlu bloğudur (kur / TL karşılığı) ve
+DÖRT ekranın da tek işaretleme kaynağıdır; `grid` (form) ve `inline` (Geçmiş
+Döviz Düzeltme tablo satırı) düzenlerini taşır. Bağlayıcı kuralları
+§8/Döviz Girişi'ndedir.
 
 `filter-panel` (v2.1.1-E) liste ekranlarının çökertilebilir filtre kabuğudur — davranışı
 ve bağlayıcı kuralları §9'dadır.
@@ -1918,6 +1979,15 @@ BİREBİR aynıdır: kur 10.000 ölçeğinde tamsayıdır (kolon `DECIMAL(10,4)`
 ondalık kabul edilir), yuvarlama yarım yukarıdır, kayan nokta kullanılmaz. Bu
 önizleme yalnızca bilgi amaçlıdır; kaydedilen tutar HER ZAMAN seçilen para
 birimindedir (§6/L5) ve TL karşılığı sunucuda yeniden hesaplanır.
+
+**K-110 eki:** üç kopya önizleme sürücüsünün yerini tek jenerik
+`initExchangeRateInputs()` aldı; `[data-fx-input]` taşıyan her bloğu sürer
+ve iki modu da önizler. `deriveRateScaled()` sunucudaki
+`Money::rateAgainst()` ile BİREBİR aynı sonucu verir. Sürücü
+İDEMPOTENT'tir (`data-fx-ready`) — makbuz dialog'u içeriğini `fetch()` ile
+yükledikten sonra onu tekrar çağırır, dinleyiciler ikiye katlanmaz.
+Konaklama formu günlük ücretlendirmede hesapladığı tutarı `data-fx-amount`
+ile bildirir; sürücü kendi tutar hesabını YAPMAZ.
 
 **Çift gönderim koruması:** her form gönderiminde submit butonları kilitlenir.
 Kilitleme `setTimeout(0)` ile yapılır — devre dışı bir butonun `name`/`value`

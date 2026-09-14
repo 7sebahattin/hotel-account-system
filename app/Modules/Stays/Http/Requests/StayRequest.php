@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Stays\Http\Requests;
 
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Core\Support\ExchangeRateInput;
 use App\Modules\Core\Support\Money;
 use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Models\Stay;
@@ -66,25 +67,17 @@ class StayRequest extends FormRequest
         ];
 
         /*
-         * Kur yalnızca YENİ kayıtta yakalanır (v2.1.1-C §2). Düzenleme
-         * kuralları bu alanı hiç TANIMLAMAZ — `validated()` bu yüzden
-         * göndermez, servis mevcut değeri KORUR. Normal ekranlardan
-         * "casual" kur düzenlemesi böylece mimari olarak imkânsızdır;
-         * eksik kur yalnızca §3'teki ayrı araçla doldurulur.
+         * Kur/TL karşılığı hem OLUŞTURMADA hem DÜZENLEMEDE sorulur
+         * (K-110, 14 Eylül 2026 kullanıcı kararı — v2.1.1-C'deki "yalnızca
+         * oluşturmada" kuralı bilerek değiştirildi). Gerekçe: finansal bir
+         * düzenleme tutarı ya da para birimini değiştirebilir ve eski TL
+         * karşılığı o yeni tutara ait DEĞİLDİR; operatörün onu yeniden
+         * teyit etmesi, sessizce türetilmesinden dürüsttür.
+         *
+         * Kurallar `Core\Support\ExchangeRateInput`ta TEK yerdedir; dört
+         * ekran da aynı sözleşmeyi kullanır (CLAUDE.md §4.2/4).
          */
-        if ($isCreate) {
-            $rules['exchange_rate_to_try'] = [
-                // 'nullable': alan HTML'de gizliyken bile TARAYICI tarafından
-                // boş değerle GÖNDERİLİR (yalnızca `hidden` — `disabled` değil).
-                // 'nullable' boşsa 'numeric'/'gt'/'decimal'i atlatır; ama
-                // `required_unless` YİNE de zorunlu kılınmışsa çalışır (Laravel
-                // önce "zorunlu mu" sorusunu çözer, `nullable` onu BASTIRMAZ).
-                'nullable',
-                'prohibited_if:currency,TRY',
-                'required_unless:currency,TRY',
-                'numeric', 'gt:0', 'decimal:0,4', 'max:999999.9999',
-            ];
-        }
+        $rules += ExchangeRateInput::rules();
 
         return $rules;
     }
@@ -105,9 +98,8 @@ class StayRequest extends FormRequest
             'amount' => 'toplam tutar',
             'daily_rate' => 'günlük ücret',
             'currency' => 'para birimi',
-            'exchange_rate_to_try' => 'kur (TL karşılığı)',
             'notes' => 'notlar',
-        ];
+        ] + ExchangeRateInput::attributes();
     }
 
     /**
@@ -122,20 +114,20 @@ class StayRequest extends FormRequest
             'daily_rate.required' => 'Günlük ücretlendirmede gecelik tutar zorunludur.',
             'daily_rate.gt' => 'Günlük ücret sıfırdan büyük olmalıdır.',
             'daily_rate.decimal' => 'Günlük ücret en fazla iki ondalık basamak içerebilir.',
-            'exchange_rate_to_try.required_unless' => 'TRY dışındaki para birimlerinde kur girilmesi zorunludur.',
-            'exchange_rate_to_try.prohibited_if' => 'TRY için kur girilmez.',
-        ];
+        ] + ExchangeRateInput::messages();
     }
 
     /** Türkçe klavyede ondalık ayırıcı virgüldür; noktaya çevrilir. */
     protected function prepareForValidation(): void
     {
-        foreach (['amount', 'daily_rate', 'exchange_rate_to_try'] as $field) {
+        foreach (['amount', 'daily_rate'] as $field) {
             $value = $this->input($field);
 
             if (is_string($value)) {
                 $this->merge([$field => Money::normalizeInput($value)]);
             }
         }
+
+        ExchangeRateInput::normalize($this);
     }
 }
