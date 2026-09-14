@@ -53,7 +53,9 @@ class RolePermissionMatrixTest extends TestCase
         $role = Role::byName(RoleName::Patron->value);
         $granted = $role->permissions->pluck('name')->all();
 
-        foreach ([Permission::UsersView, Permission::UsersManage, Permission::RolesManage] as $forbidden) {
+        foreach ([Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
+            Permission::MonthlyAccountCreate, Permission::MonthlyAccountDelete,
+            Permission::MonthlyAccountManageProviders] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted);
         }
 
@@ -68,12 +70,15 @@ class RolePermissionMatrixTest extends TestCase
             Permission::FxCorrectHistorical,
             Permission::ReceiptBookView,
             Permission::ReceiptBookCreate,
+            Permission::MonthlyAccountView,
+            Permission::MonthlyAccountUpdate,
+            Permission::MonthlyAccountViewAll,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
         // Kaldırılan dört kasa yetkisi artık rolün parçası değildir.
-        $this->assertCount(20, $granted);
+        $this->assertCount(23, $granted);
     }
 
     #[Test]
@@ -93,6 +98,9 @@ class RolePermissionMatrixTest extends TestCase
             Permission::RoomsManage,
             // v2.1.1-C: geçmiş döviz düzeltmesi Admin/Patron'dadır, personelde YOKTUR.
             Permission::FxCorrectHistorical,
+            Permission::MonthlyAccountDelete,
+            Permission::MonthlyAccountViewAll,
+            Permission::MonthlyAccountManageProviders,
         ] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted, "personel {$forbidden->value} yetkisine sahip olmamalı");
         }
@@ -115,6 +123,9 @@ class RolePermissionMatrixTest extends TestCase
             // v2.1.1-C: personel de tahsilat makbuzu defteri girebilir (PaymentsCreate ile AYNI seviye).
             Permission::ReceiptBookView->value,
             Permission::ReceiptBookCreate->value,
+            Permission::MonthlyAccountView->value,
+            Permission::MonthlyAccountCreate->value,
+            Permission::MonthlyAccountUpdate->value,
         ], $granted);
     }
 

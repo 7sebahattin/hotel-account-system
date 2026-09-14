@@ -90,6 +90,118 @@
         Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
 }
 
+/* Aylık Hesap: hücreler tutarı kesmeden dar ekranda satıra böler. */
+@layer components {
+    .monthly-account {
+        min-width: 0;
+    }
+
+    .monthly-account input,
+    .monthly-account select {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .monthly-table-wrap {
+        overflow: hidden;
+    }
+
+    .monthly-table {
+        table-layout: fixed;
+        border-collapse: collapse;
+    }
+
+    .monthly-table th,
+    .monthly-table td {
+        padding: 0.5rem 0.3rem;
+        text-align: right;
+        vertical-align: middle;
+        overflow-wrap: anywhere;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.25;
+    }
+
+    .monthly-table thead th {
+        font-size: 0.65rem;
+        font-weight: 500;
+    }
+
+    .monthly-table th:first-child {
+        width: 11%;
+        text-align: left;
+    }
+
+    .monthly-table th:last-child {
+        width: 6%;
+    }
+
+    .monthly-amount-line + .monthly-amount-line {
+        margin-top: 0.25rem;
+    }
+
+    .monthly-account-index {
+        font-size: 0.875rem;
+    }
+
+    .monthly-account-index .monthly-table tbody .monthly-day-row:nth-child(odd),
+    .monthly-account-index .monthly-card-list .monthly-day-card:nth-child(odd) {
+        background-color: var(--color-card);
+    }
+
+    .monthly-account-index .monthly-table tbody .monthly-day-row:nth-child(even),
+    .monthly-account-index .monthly-card-list .monthly-day-card:nth-child(even) {
+        background-color: var(--color-bg);
+    }
+
+    .monthly-account-index .monthly-total-row .text-mut {
+        color: var(--color-nav-mut);
+    }
+
+    .monthly-account-form .monthly-daily-total {
+        border-width: 1.5px;
+        border-color: var(--color-tx);
+    }
+
+    @media (min-width: 768px) {
+        .monthly-account-form input,
+        .monthly-account-form select {
+            min-height: 2.25rem;
+            padding-right: 0.625rem;
+            padding-left: 0.625rem;
+            font-size: 0.875rem;
+        }
+
+        .monthly-account-form textarea {
+            min-height: 2.25rem;
+            padding: 0.4rem 0.625rem;
+            font-size: 0.875rem;
+        }
+
+        .monthly-account-form label {
+            font-size: 0.75rem;
+        }
+
+        .monthly-account-form button,
+        .monthly-account-form a {
+            min-height: 2.25rem;
+            padding-right: 0.75rem;
+            padding-left: 0.75rem;
+            font-size: 0.8125rem;
+        }
+    }
+
+    .monthly-account [hidden] {
+        display: none !important;
+    }
+
+    @media (min-width: 1440px) {
+        .monthly-table th,
+        .monthly-table td {
+            padding: 0.6rem 0.45rem;
+        }
+    }
+}
+
 /* Spesifikasyondaki kısa adlar; ham CSS'te kullanmak için Tailwind token'larına bağlı. */
 :root {
     --bg: var(--color-bg);
