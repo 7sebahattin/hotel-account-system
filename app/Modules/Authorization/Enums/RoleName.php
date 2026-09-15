@@ -64,7 +64,6 @@ enum RoleName: string
                 Permission::ReceiptBookCreate,
                 Permission::MonthlyAccountView,
                 Permission::MonthlyAccountUpdate,
-                Permission::MonthlyAccountViewAll,
             ],
 
             self::Personel => [

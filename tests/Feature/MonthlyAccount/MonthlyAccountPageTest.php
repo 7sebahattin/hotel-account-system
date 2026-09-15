@@ -168,10 +168,11 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
         $personel = $this->userWithRole(RoleName::Personel);
         $patron = $this->userWithRole(RoleName::Patron);
         $day = $this->createDay($personel);
+        $patronDay = $this->createDay($patron);
 
-        $this->actingAs($patron)->get(route('monthly-account.index', ['owner_id' => $personel->id]))
+        $this->actingAs($patron)->get(route('monthly-account.index', ['owner_id' => $patron->id]))
             ->assertOk()->assertDontSee('+ Günlük kayıt')->assertDontSee('+ Ekle');
-        $this->get(route('monthly-account.show', $day))->assertOk()->assertSee('Düzenle')->assertDontSee('Günü sil');
+        $this->get(route('monthly-account.show', $patronDay))->assertOk()->assertSee('Düzenle')->assertDontSee('Günü sil');
         $this->actingAs($personel)->get(route('monthly-account.index'))->assertOk()->assertSee('+ Günlük kayıt');
         $this->get(route('monthly-account.show', $day))->assertOk()->assertSee('Düzenle')->assertDontSee('Günü sil');
     }
