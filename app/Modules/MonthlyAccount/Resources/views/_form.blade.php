@@ -24,18 +24,9 @@
 
 <section class="rounded-lg border border-line bg-card p-3">
     <h2 class="text-sm font-medium">Günün bilgileri</h2>
-    <div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+    <div class="mt-2 grid gap-2 sm:grid-cols-2">
         <x-ui.input label="Tarih" name="account_date" type="date" required :value="$date" :readonly="(bool) $day" />
-        @if (! $day && $owners->isNotEmpty())
-            <x-ui.select label="Hesap sahibi" name="owner_id" required>
-                @foreach ($owners as $candidate)
-                    <option value="{{ $candidate->id }}" @selected((string) old('owner_id', $owner->id) === (string) $candidate->id)>{{ $candidate->name }}</option>
-                @endforeach
-            </x-ui.select>
-        @else
-            <input type="hidden" name="owner_id" value="{{ $owner->id }}">
-            <div><p class="text-xs text-mut">Hesap sahibi</p><p class="mt-1 flex min-h-9 items-center font-medium">{{ $owner->name }}</p></div>
-        @endif
+        <input type="hidden" name="owner_id" value="{{ $owner->id }}">
         <x-ui.input label="Günlük Liste Toplamı (TL)" name="daily_total" required :value="$revision?->daily_total ?? ''" inputmode="decimal" autocomplete="off" data-money-input data-daily-total class="monthly-daily-total tabular-nums" placeholder="0,00" hint="Liste tutarını elle girin." />
     </div>
     <div class="mt-2"><x-ui.textarea label="Günlük not" name="note" :value="$revision?->note" rows="1" maxlength="2000" placeholder="Bu güne ait genel notunuz" /></div>

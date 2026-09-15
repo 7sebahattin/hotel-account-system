@@ -9,7 +9,7 @@
         $methodLabels = ['cash' => 'Nakit', 'credit_card' => 'Kredi kartı', 'link' => 'Link ödemesi', 'bank_transfer' => 'Havale', 'extra' => 'Ekstra tahsilat'];
     @endphp
     <div class="monthly-account">
-        <x-ui.page-header :title="$day->account_date->translatedFormat('d F Y, l')" :subtitle="$day->owner->name.' · Aylık Hesap'">
+        <x-ui.page-header :title="$day->account_date->translatedFormat('d F Y, l')" subtitle="Aylık Hesap">
             <x-slot:actions>
                 <x-ui.button variant="secondary" :href="route('monthly-account.index', ['month' => $day->account_date->format('Y-m'), 'owner_id' => $day->owner_id])">Aylık liste</x-ui.button>
                 @can('update', $day)

@@ -1,5 +1,12 @@
 # CLAUDE.md
 
+## Onaylı Aylık Hesap arayüz sadeleştirmesi — 15 Eylül 2026
+
+Kullanıcının açık talimatıyla Aylık Hesap liste, ekleme, düzenleme ve ayrıntı
+ekranlarındaki **Hesap sahibi** alanları ile başlıklardaki sahip adı kaldırıldı.
+Bu görsel sadeleştirme veri sahipliğini, kullanıcı bazlı yetki kapsamını veya
+denetim izini kaldırmaz; `owner_id` mevcut kayıt bütünlüğü için korunur.
+
 ## Onaylı kapsam değişikliği — kasa kaldırma
 
 Kullanıcı kasa kaldırma işini Codex’e, diğer geliştirmeleri Claude’a verdi.

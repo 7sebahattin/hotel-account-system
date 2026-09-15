@@ -20,6 +20,7 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
             ->assertOk()
             ->assertSee('Ay toplamı')
             ->assertSee('Bu ay için kayıt yok.')
+            ->assertDontSee('Hesap sahibi')
             ->assertDontSee('Her satır bir gündür.');
         $dom = new DOMDocument;
         @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
@@ -97,8 +98,7 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
             ->assertOk()
             ->assertViewHas('days', fn (Collection $days) => $days->keys()->all() === ['2026-09-01', '2026-09-30']
                 && $days->get('2026-09-01')->is($first) && $days->get('2026-09-30')->is($last))
-            ->assertViewHas('summary', fn (array $summary) => $summary['daily_total']->toDecimal() === '500.00')
-            ->assertViewHas('owners', fn (Collection $owners) => $owners->isEmpty());
+            ->assertViewHas('summary', fn (array $summary) => $summary['daily_total']->toDecimal() === '500.00');
     }
 
     #[Test]
@@ -134,6 +134,7 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
             ->assertSee('name="items[0][try_equivalent]"', false)
             ->assertDontSee('name="accommodation_total"', false)
             ->assertDontSee('Konaklama Listesi Toplamı')
+            ->assertDontSee('Hesap sahibi')
             ->assertDontSee('Örn. 209 no.lu oda · tek çekim');
 
         $dom = new DOMDocument;
@@ -144,6 +145,7 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
         $this->assertSame(1, $xpath->query('//*[@data-monthly-items]/following-sibling::div//button[@data-add-item]')->length);
         $this->assertSame(0, $xpath->query('//input[@data-item-note and @placeholder]')->length);
         $this->assertSame(1, $xpath->query('//input[@name="daily_total" and contains(concat(" ", normalize-space(@class), " "), " monthly-daily-total ")]')->length);
+        $this->assertSame(0, $xpath->query('//select[@name="owner_id"]')->length);
         $this->assertSame(1, $xpath->query('//select[@name="items[0][bank_name]" and @data-item-bank]')->length);
         $this->assertSame(0, $xpath->query('//input[@data-item-bank] | //datalist[@id="monthly-bank-names"]')->length);
     }

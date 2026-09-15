@@ -7,7 +7,10 @@ Sayfa mevcut Lemon tasarımını kullanır. Cari başlığının hemen ardından
 ## Kullanıcı kararları
 
 - Her kullanıcı ayrı bir hesap alanına sahiptir. Personel kendi alanını,
-  Patron kendi alanını, Admin kullanıcı seçerek bütün alanları görür.
+  Patron kendi alanını, Admin yetkisi kapsamında bütün alanları görebilir.
+  15 Eylül 2026 sadeleştirmesiyle kullanıcıya gösterilen **Hesap sahibi**
+  seçicileri ve başlıklardaki sahip adı kaldırılmıştır; veri sahipliği ve
+  denetim izi arka planda korunur.
 - Yalnız **Günlük Liste Toplamı** vardır ve elle TL olarak girilir.
   İlk mesajdaki Konaklama Listesi Toplamı sonraki yanıtla kaldırılmıştır.
 - Personel görüntüler/ekler/düzenler. Patron görüntüler/düzenler.
@@ -17,7 +20,7 @@ Sayfa mevcut Lemon tasarımını kullanır. Cari başlığının hemen ardından
 
 ## Günlük akış
 
-Ay ve kullanıcı seçilir. Liste en son kayıttan ilk kayda doğru gider. İlk ve son
+Ay seçilir. Liste en son kayıttan ilk kayda doğru gider. İlk ve son
 kayıt dışındaki boş günler gizlenir; iki kayıt arasındaki boş gün, eksik günü
 tamamlamak için gösterilir. Günlük kayıt açılır, tarih ve Günlük Liste Toplamı girilir.
 Nakit / Kredi kartı / Link / Havale / Ekstra satırları istenen sayıda eklenir.

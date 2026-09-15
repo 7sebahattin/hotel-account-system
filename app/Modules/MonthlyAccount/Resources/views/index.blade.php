@@ -33,7 +33,7 @@
     @endphp
 
     <div class="monthly-account monthly-account-index">
-        <x-ui.page-header title="Aylık Hesap" :subtitle="$owner->name.' · '.$month->translatedFormat('F Y').' · '.$recorded.' gün kayıtlı'">
+        <x-ui.page-header title="Aylık Hesap" :subtitle="$month->translatedFormat('F Y').' · '.$recorded.' gün kayıtlı'">
             <x-slot:actions>
                 @can('createForOwner', [$model, $owner])
                     <x-ui.button :href="route('monthly-account.create', ['owner_id' => $owner->id, 'date' => now()->isSameMonth($month) ? now()->toDateString() : $month->toDateString()])">+ Günlük kayıt</x-ui.button>
@@ -45,17 +45,7 @@
             <div class="min-w-0 sm:flex-none">
                 <x-ui.input label="Ay" name="month" type="month" :value="$month->format('Y-m')" required />
             </div>
-            @if ($owners->isNotEmpty())
-                <div class="min-w-0 sm:min-w-48 sm:flex-none">
-                    <x-ui.select label="Hesap sahibi" name="owner_id">
-                        @foreach ($owners as $candidate)
-                            <option value="{{ $candidate->id }}" @selected($candidate->id === $owner->id)>{{ $candidate->name }}</option>
-                        @endforeach
-                    </x-ui.select>
-                </div>
-            @else
-                <input type="hidden" name="owner_id" value="{{ $owner->id }}">
-            @endif
+            <input type="hidden" name="owner_id" value="{{ $owner->id }}">
             <x-ui.button variant="secondary" class="col-span-2">Göster</x-ui.button>
             <div class="col-span-2 flex flex-wrap items-center justify-between gap-1 sm:ml-auto sm:justify-start" aria-label="Ay seçimi">
                 <x-ui.button variant="ghost" :href="route('monthly-account.index', $monthParams + ['month' => $month->subMonth()->format('Y-m')])" aria-label="Önceki ay">←</x-ui.button>
@@ -72,7 +62,7 @@
 
         <div class="monthly-table-wrap mt-3 hidden rounded-lg border border-line bg-card lg:block">
             <table class="monthly-table w-full text-xs">
-                <caption class="sr-only">{{ $owner->name }} — {{ $month->translatedFormat('F Y') }} günlük hesap kayıtları</caption>
+                <caption class="sr-only">{{ $month->translatedFormat('F Y') }} günlük hesap kayıtları</caption>
                 <thead class="border-b border-line bg-well text-tx">
                     <tr>
                         <th scope="col" class="text-left">Gün</th>

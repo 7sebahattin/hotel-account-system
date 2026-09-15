@@ -14,7 +14,6 @@ use App\Modules\MonthlyAccount\Services\MonthlyAccountService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 
 class MonthlyAccountController extends Controller
 {
@@ -30,7 +29,6 @@ class MonthlyAccountController extends Controller
         return view('monthly-account::index', [
             'month' => $month,
             'owner' => $owner,
-            'owners' => $this->accounts->owners($request->user()),
             'days' => $days,
             'summary' => $this->accounts->summarize($days),
         ]);
@@ -44,7 +42,6 @@ class MonthlyAccountController extends Controller
         return view('monthly-account::create', [
             'day' => null,
             'owner' => $owner,
-            'owners' => $this->accounts->owners($request->user()),
             'currencies' => Currency::active(),
             'bankNames' => $this->accounts->bankNames(),
             'date' => $data['date'] ?? now()->toDateString(),
@@ -66,7 +63,7 @@ class MonthlyAccountController extends Controller
         return view('monthly-account::show', ['day' => $day, 'revision' => $day->currentRevision]);
     }
 
-    public function edit(Request $request, MonthlyAccountDay $day): View
+    public function edit(MonthlyAccountDay $day): View
     {
         $this->authorize('update', $day);
         $day->load(['owner', 'currentRevision.items']);
@@ -74,7 +71,6 @@ class MonthlyAccountController extends Controller
         return view('monthly-account::edit', [
             'day' => $day,
             'owner' => $day->owner,
-            'owners' => $this->accounts->owners($request->user()),
             'currencies' => Currency::cases(),
             'bankNames' => $this->accounts->bankNames($day),
             'date' => $day->account_date->toDateString(),

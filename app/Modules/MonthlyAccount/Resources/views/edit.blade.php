@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title', 'Günlük Hesabı Düzenle')
 @section('content')
-    <x-ui.page-header title="Günlük Hesabı Düzenle" :subtitle="$owner->name.' · '.$day->account_date->format('d.m.Y')" />
+    <x-ui.page-header title="Günlük Hesabı Düzenle" :subtitle="$day->account_date->format('d.m.Y')" />
     @if ($day->isDeleted())
         <x-ui.alert tone="info" class="mt-4">Bu gün silinmiş olarak saklanıyor. Kaydettiğinizde yeniden aylık hesaba dahil edilir.</x-ui.alert>
     @endif
