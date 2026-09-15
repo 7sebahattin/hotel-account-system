@@ -54,7 +54,7 @@ class RolePermissionMatrixTest extends TestCase
         $granted = $role->permissions->pluck('name')->all();
 
         foreach ([Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
-            Permission::MonthlyAccountCreate, Permission::MonthlyAccountDelete,
+            Permission::MonthlyAccountCreate, Permission::MonthlyAccountDelete, Permission::MonthlyAccountViewAll,
             Permission::MonthlyAccountManageProviders] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted);
         }
@@ -72,13 +72,12 @@ class RolePermissionMatrixTest extends TestCase
             Permission::ReceiptBookCreate,
             Permission::MonthlyAccountView,
             Permission::MonthlyAccountUpdate,
-            Permission::MonthlyAccountViewAll,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
         // Kaldırılan dört kasa yetkisi artık rolün parçası değildir.
-        $this->assertCount(23, $granted);
+        $this->assertCount(22, $granted);
     }
 
     #[Test]

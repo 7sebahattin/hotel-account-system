@@ -60,10 +60,11 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
     }
 
     #[Test]
-    public function personel_baska_kullanicinin_alanina_url_ve_form_ile_erisemez(): void
+    #[DataProvider('restrictedRoles')]
+    public function personel_ve_patron_baska_kullanicinin_alanina_url_ve_form_ile_erisemez(string $role): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
-        $intruder = $this->userWithRole(RoleName::Personel);
+        $intruder = $this->userWithRole(RoleName::from($role));
         $day = $this->createDay($owner);
         $this->actingAs($intruder);
 
@@ -81,14 +82,20 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
     }
 
     /** @return array<string, array{string}> */
+    public static function restrictedRoles(): array
+    {
+        return ['personel' => ['personel'], 'patron' => ['patron']];
+    }
+
+    /** @return array<string, array{string}> */
     public static function supervisors(): array
     {
-        return ['admin' => ['admin'], 'patron' => ['patron']];
+        return ['admin' => ['admin']];
     }
 
     #[Test]
     #[DataProvider('supervisors')]
-    public function admin_ve_patron_personelin_alanini_secerek_gorur_ve_duzenler(string $role): void
+    public function admin_personelin_alanini_secerek_gorur_ve_duzenler(string $role): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
         $supervisor = $this->userWithRole(RoleName::from($role));
@@ -150,10 +157,11 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
     }
 
     #[Test]
-    public function servis_http_disindan_da_personelin_baska_kayda_yazmasini_engeller(): void
+    #[DataProvider('restrictedRoles')]
+    public function servis_http_disindan_da_personelin_baska_kayda_yazmasini_engeller(string $role): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
-        $intruder = $this->userWithRole(RoleName::Personel);
+        $intruder = $this->userWithRole(RoleName::from($role));
         $day = $this->createDay($owner);
 
         try {

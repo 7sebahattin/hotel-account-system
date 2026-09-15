@@ -7,7 +7,7 @@ Sayfa mevcut Lemon tasarımını kullanır. Cari başlığının hemen ardından
 ## Kullanıcı kararları
 
 - Her kullanıcı ayrı bir hesap alanına sahiptir. Personel kendi alanını,
-  Admin ve Patron kullanıcı seçerek bütün alanları görür.
+  Patron kendi alanını, Admin kullanıcı seçerek bütün alanları görür.
 - Yalnız **Günlük Liste Toplamı** vardır ve elle TL olarak girilir.
   İlk mesajdaki Konaklama Listesi Toplamı sonraki yanıtla kaldırılmıştır.
 - Personel görüntüler/ekler/düzenler. Patron görüntüler/düzenler.
