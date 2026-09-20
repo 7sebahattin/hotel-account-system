@@ -134,9 +134,11 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
 
         $this->assertNotFalse($rows);
         $this->assertSame(1, $rows->length);
-        $this->assertSame(route('monthly-account.show', $day), $rows->item(0)?->getAttribute('data-monthly-row-url'));
-        $this->assertSame('0', $rows->item(0)?->getAttribute('tabindex'));
-        $this->assertSame('link', $rows->item(0)?->getAttribute('role'));
+        $row = $rows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('monthly-account.show', $day), $row->getAttribute('data-monthly-row-url'));
+        $this->assertSame('0', $row->getAttribute('tabindex'));
+        $this->assertSame('link', $row->getAttribute('role'));
     }
 
     #[Test]
