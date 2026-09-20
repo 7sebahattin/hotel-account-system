@@ -118,9 +118,14 @@
         padding: 0.5rem 0.3rem;
         text-align: right;
         vertical-align: middle;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
         font-variant-numeric: tabular-nums;
         line-height: 1.25;
+    }
+
+    .monthly-table th + th,
+    .monthly-table td + td {
+        border-inline-start: 1px solid var(--color-line);
     }
 
     .monthly-table thead th {
@@ -133,23 +138,31 @@
         text-align: left;
     }
 
-    .monthly-table th:last-child {
-        width: 3.75rem;
-    }
-
     .monthly-table .monthly-amount-line {
+        display: flex;
+        align-items: flex-end;
+        flex-direction: column;
         white-space: nowrap;
         font-size: 0.7rem;
     }
 
     .monthly-table .monthly-amount-line > p {
-        display: inline;
-        margin-top: 0;
-        margin-left: 0.2rem;
+        margin: 0.1rem 0 0;
+        font-size: 0.625rem;
+        line-height: 1.2;
+    }
+
+    .monthly-table .monthly-amount-primary {
+        font-weight: 600;
+    }
+
+    .monthly-table .monthly-amount-currency {
+        color: var(--color-mut);
+        font-size: 0.625rem;
     }
 
     .monthly-amount-line + .monthly-amount-line {
-        margin-top: 0.25rem;
+        margin-top: 0.3rem;
     }
 
     .monthly-account-index {
@@ -197,6 +210,30 @@
 
     .monthly-account-index .monthly-total-row .text-mut {
         color: var(--color-nav-mut);
+    }
+
+    .monthly-account-index .monthly-total-row th + td,
+    .monthly-account-index .monthly-total-row td + td {
+        border-inline-start-color: var(--color-nav-line);
+    }
+
+    .monthly-account-index .monthly-total-row .monthly-amount-currency {
+        color: var(--color-nav-mut);
+    }
+
+    .monthly-account-index .monthly-day-row[data-monthly-row-url] {
+        cursor: pointer;
+    }
+
+    .monthly-account-index .monthly-day-row[data-monthly-row-url]:hover {
+        background-color: var(--color-well) !important;
+    }
+
+    .monthly-account-index .monthly-day-row[data-monthly-row-url]:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 2px solid var(--color-acc-tx);
+        outline-offset: -2px;
     }
 
     .monthly-account-form .monthly-daily-total {

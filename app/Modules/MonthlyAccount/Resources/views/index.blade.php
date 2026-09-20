@@ -76,7 +76,6 @@
                             </th>
                         @endforeach
                         <th scope="col">Ödemeler<br><span class="font-normal">TL karşılığı</span></th>
-                        <th scope="col"><span class="sr-only">İşlemler</span></th>
                     </tr>
                     <tr class="monthly-total-row border-t border-nav-line bg-nav-well font-medium text-nav-tx">
                         <th scope="row" class="text-left">Ay toplamı</th>
@@ -90,7 +89,6 @@
                             <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                         @endforeach
                         <td class="tabular-nums">{{ $summary['receipt_total']->format($try) }}</td>
-                        <td></td>
                     </tr>
                 </thead>
                 <tbody>
@@ -101,10 +99,23 @@
                             $hasEntry = $day && ! $day->isDeleted();
                             $daySummary = $hasEntry ? $day->currentRevision->summary() : null;
                         @endphp
-                        <tr data-monthly-date="{{ $date->toDateString() }}" class="monthly-day-row border-b border-line last:border-0 hover:bg-well">
+                        <tr
+                            data-monthly-date="{{ $date->toDateString() }}"
+                            @if ($day) data-monthly-row-url="{{ route('monthly-account.show', $day) }}" tabindex="0" role="link" aria-label="{{ $date->translatedFormat('d F l') }} kaydını {{ $day->isDeleted() ? 'görüntüle' : 'aç' }}" @endif
+                            class="monthly-day-row border-b border-line last:border-0"
+                        >
                             <th scope="row" class="text-left font-normal">
                                 <span class="block font-medium tabular-nums">{{ $date->translatedFormat('d F') }}</span>
                                 <span class="text-xs text-mut">{{ $date->translatedFormat('l') }}</span>
+                                @if ($day?->isDeleted())
+                                    <span class="block text-xs text-mut">Silindi</span>
+                                @elseif (! $day)
+                                    @can('createForOwner', [$model, $owner])
+                                        <a href="{{ route('monthly-account.create', ['owner_id' => $owner->id, 'date' => $date->toDateString()]) }}" class="inline-flex min-h-11 items-center text-xs text-mut hover:text-tx" aria-label="{{ $date->format('d.m.Y') }} için kayıt ekle">+ Ekle</a>
+                                    @else
+                                        <span class="block text-xs text-mut">Boş</span>
+                                    @endcan
+                                @endif
                             </th>
                             <td class="tabular-nums">{{ $daySummary ? $daySummary['daily_total']->format($try) : '—' }}</td>
                             @foreach ($columns as $column)
@@ -116,21 +127,10 @@
                                 <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                             @endforeach
                             <td class="font-semibold tabular-nums">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</td>
-                            <td>
-                                @if ($day)
-                                    <a href="{{ route('monthly-account.show', $day) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg px-1 text-xs font-medium text-tx underline decoration-line underline-offset-4 hover:decoration-tx">{{ $day->isDeleted() ? 'Silindi' : 'Aç' }}</a>
-                                @else
-                                    @can('createForOwner', [$model, $owner])
-                                        <a href="{{ route('monthly-account.create', ['owner_id' => $owner->id, 'date' => $date->toDateString()]) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg px-1 text-xs text-mut hover:text-tx" aria-label="{{ $date->format('d.m.Y') }} için kayıt ekle">+ Ekle</a>
-                                    @else
-                                        <span class="text-xs text-mut">Boş</span>
-                                    @endcan
-                                @endif
-                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ count($columns) + 4 }}" class="py-8 text-center text-sm text-mut">Bu ay için kayıt yok.</td>
+                            <td colspan="{{ count($columns) + 3 }}" class="py-8 text-center text-sm text-mut">Bu ay için kayıt yok.</td>
                         </tr>
                     @endforelse
                 </tbody>

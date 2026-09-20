@@ -118,6 +118,28 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function kayitli_gun_satiri_acilabilir_ve_islem_kolonu_yoktur(): void
+    {
+        $day = $this->createDay($this->admin, ['account_date' => '2026-09-14']);
+
+        $response = $this->get(route('monthly-account.index', ['month' => '2026-09']))
+            ->assertOk()
+            ->assertDontSee('>Aç<', false)
+            ->assertDontSee('İşlemler');
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+        $rows = $xpath->query('//table[contains(@class, "monthly-table")]/tbody/tr[@data-monthly-row-url]');
+
+        $this->assertNotFalse($rows);
+        $this->assertSame(1, $rows->length);
+        $this->assertSame(route('monthly-account.show', $day), $rows->item(0)?->getAttribute('data-monthly-row-url'));
+        $this->assertSame('0', $rows->item(0)?->getAttribute('tabindex'));
+        $this->assertSame('link', $rows->item(0)?->getAttribute('role'));
+    }
+
+    #[Test]
     public function gunluk_form_tek_liste_tutari_tarih_doviz_ve_tekrarlanabilir_odeme_kontrollerini_gosterir(): void
     {
         $response = $this->actingAs($this->admin)->get(route('monthly-account.create', ['date' => '2026-09-14']))

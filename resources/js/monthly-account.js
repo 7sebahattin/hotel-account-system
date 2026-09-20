@@ -295,8 +295,33 @@ function initMonthlyAccount(form) {
     preview();
 }
 
+function initMonthlyRowNavigation(row) {
+    if (row.dataset.monthlyRowNavigationReady) return;
+    row.dataset.monthlyRowNavigationReady = '1';
+
+    const navigate = () => {
+        const url = row.dataset.monthlyRowUrl;
+        if (url) window.location.assign(url);
+    };
+    const interactiveSelector = 'a, button, input, select, textarea, label, summary, [role="button"], [role="link"]';
+    const isInteractive = (target) => target instanceof Element && target.closest(interactiveSelector);
+
+    row.addEventListener('click', (event) => {
+        if (!isInteractive(event.target)) navigate();
+    });
+    row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !isInteractive(event.target)) {
+            event.preventDefault();
+            navigate();
+        }
+    });
+}
+
 if (typeof document !== 'undefined') {
-    const initialize = () => document.querySelectorAll('[data-monthly-account-form]').forEach(initMonthlyAccount);
+    const initialize = () => {
+        document.querySelectorAll('[data-monthly-account-form]').forEach(initMonthlyAccount);
+        document.querySelectorAll('[data-monthly-row-url]').forEach(initMonthlyRowNavigation);
+    };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize);
     else initialize();
 }
