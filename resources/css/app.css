@@ -142,8 +142,16 @@
         display: flex;
         align-items: flex-end;
         flex-direction: column;
+        min-width: 0;
         white-space: nowrap;
         font-size: 0.7rem;
+    }
+
+    .monthly-table .monthly-amount-head {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.18rem;
+        max-width: 100%;
     }
 
     .monthly-table .monthly-amount-line > p {
