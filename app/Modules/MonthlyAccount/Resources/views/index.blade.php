@@ -60,7 +60,7 @@
             <x-ui.stat label="Listeye göre fark" :value="$summary['difference']->format($try)" hint="Ödemeler − günlük liste toplamları" />
         </div>
 
-        <div class="monthly-table-wrap mt-3 hidden rounded-lg border border-line bg-card lg:block">
+        <div class="monthly-table-wrap mt-3 hidden rounded-lg border border-line bg-card 2xl:block">
             <table class="monthly-table w-full text-xs">
                 <caption class="sr-only">{{ $month->translatedFormat('F Y') }} günlük hesap kayıtları</caption>
                 <thead class="border-b border-line bg-well text-tx">
@@ -137,7 +137,7 @@
             </table>
         </div>
 
-        <div class="monthly-card-list mt-3 space-y-2 lg:hidden">
+        <div class="monthly-card-list mt-3 space-y-2 2xl:hidden">
             @forelse ($listedDayNumbers as $number)
                 @php
                     $date = $month->setDay($number);
