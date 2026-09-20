@@ -10,4 +10,7 @@ Kod yazmadan önce CLAUDE.md'yi oku. Özellikle:
 - §12 — testsiz merge edilmeyecek alanlar
 - §18 — davranış kuralları
 
-Bu dosya ile CLAUDE.md çelişirse **CLAUDE.md geçerlidir**.
+Claude, Codex ve ChatGPT arasında branch/PR/handoff standardı için ayrıca
+**[docs/AI_WORKFLOW.md](./docs/AI_WORKFLOW.md)** dosyasını oku.
+
+Bu dosya veya AI_WORKFLOW.md ile CLAUDE.md çelişirse **CLAUDE.md geçerlidir**.
