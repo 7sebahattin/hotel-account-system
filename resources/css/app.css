@@ -103,14 +103,13 @@
     }
 
     .monthly-table-wrap {
-        overflow-x: auto;
-        overflow-y: hidden;
-        overscroll-behavior-inline: contain;
+        overflow: hidden;
     }
 
     .monthly-table {
-        min-width: max(100%, 88rem);
-        table-layout: auto;
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
         border-collapse: collapse;
     }
 
@@ -130,22 +129,17 @@
     }
 
     .monthly-table th:first-child {
-        width: 8rem;
-        min-width: 8rem;
+        width: 7.5rem;
         text-align: left;
     }
 
-    .monthly-table th:not(:first-child):not(:last-child) {
-        min-width: 5.75rem;
-    }
-
     .monthly-table th:last-child {
-        width: 4.25rem;
-        min-width: 4.25rem;
+        width: 3.75rem;
     }
 
-    .monthly-amount-line {
+    .monthly-table .monthly-amount-line {
         white-space: nowrap;
+        font-size: 0.7rem;
     }
 
     .monthly-table .monthly-amount-line > p {
@@ -169,19 +163,25 @@
         neredeyse tamamen kullanır. Böylece sabit dar sütunların toplam
         satırını gereksiz yere büyütmesi engellenir.
     */
-    @media (min-width: 1024px) {
+    @media (min-width: 1536px) {
         .monthly-account-index {
             position: relative;
             left: 50%;
-            width: calc(100vw - 16rem - 3rem);
+            width: min(calc(100vw - 16rem - 2rem), 110rem);
             max-width: none;
             transform: translateX(-50%);
         }
 
+        .monthly-account-index .monthly-table th,
+        .monthly-account-index .monthly-table td {
+            padding-left: 0.22rem;
+            padding-right: 0.22rem;
+        }
+
         .monthly-account-index .monthly-total-row th,
         .monthly-account-index .monthly-total-row td {
-            padding-top: 0.7rem;
-            padding-bottom: 0.7rem;
+            padding-top: 0.55rem;
+            padding-bottom: 0.55rem;
         }
     }
 
