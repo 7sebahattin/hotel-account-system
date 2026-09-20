@@ -4,6 +4,8 @@ Otelin **firma (cari) alacak ve tahsilat takibi**. Excel ile yürütülen süre�
 
 > Bu depoda çalışmadan önce **[CLAUDE.md](./CLAUDE.md)** okunmalıdır. Kapsam, mimari
 > kurallar, cari hesap değişmezleri ve test zorunlulukları orada tanımlıdır.
+> Claude, Codex ve ChatGPT arasında ortak çalışma/devretme standardı için
+> **[docs/AI_WORKFLOW.md](./docs/AI_WORKFLOW.md)** kullanılır.
 
 ## Teknoloji
 
@@ -37,6 +39,14 @@ Varsayılan yönetici hesabı `.env` üzerinden ayarlanır
 test veritabanlarını Türkçe collation ile oluşturur ve bağımlılıkları kontrol eder.
 Hook yalnızca yerel geliştirme/test ortamına dokunur; hiçbir hosting işlemi yapmaz.
 
+## Çoklu AI geliştirme
+
+Bu repo Claude, Codex ve ChatGPT ile aynı GitHub akışı üzerinden geliştirilebilir.
+Her ajan güncel `main` HEAD'i doğrular, kendi branch'inde çalışır, test/CI sonucunu
+kaydeder ve devrederken standart handoff bırakır.
+
+Ayrıntılar: **[docs/AI_WORKFLOW.md](./docs/AI_WORKFLOW.md)**.
+
 ## Dallar
 
 | Dal | Rolü |
@@ -65,6 +75,7 @@ Bkz. `phpunit.xml` ve CLAUDE.md §12.
 ## Dokümantasyon
 
 - [CLAUDE.md](./CLAUDE.md) — bağlayıcı proje kılavuzu
+- [docs/AI_WORKFLOW.md](./docs/AI_WORKFLOW.md) — Claude/Codex/ChatGPT ortak çalışma ve handoff standardı
 - [docs/deploy-cpanel.md](./docs/deploy-cpanel.md) — cPanel dağıtım rehberi
 - [docs/deploy-github-actions.md](./docs/deploy-github-actions.md) — FTPS deploy mimarisi ve GitHub Secrets
 - [docs/kararlar.md](./docs/kararlar.md) — mimari kararlar ve gerekçeleri
