@@ -103,11 +103,14 @@
     }
 
     .monthly-table-wrap {
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-inline: contain;
     }
 
     .monthly-table {
-        table-layout: fixed;
+        min-width: max(100%, 88rem);
+        table-layout: auto;
         border-collapse: collapse;
     }
 
@@ -127,12 +130,28 @@
     }
 
     .monthly-table th:first-child {
-        width: 11%;
+        width: 8rem;
+        min-width: 8rem;
         text-align: left;
     }
 
+    .monthly-table th:not(:first-child):not(:last-child) {
+        min-width: 5.75rem;
+    }
+
     .monthly-table th:last-child {
-        width: 6%;
+        width: 4.25rem;
+        min-width: 4.25rem;
+    }
+
+    .monthly-amount-line {
+        white-space: nowrap;
+    }
+
+    .monthly-table .monthly-amount-line > p {
+        display: inline;
+        margin-top: 0;
+        margin-left: 0.2rem;
     }
 
     .monthly-amount-line + .monthly-amount-line {
@@ -141,6 +160,29 @@
 
     .monthly-account-index {
         font-size: 0.875rem;
+    }
+
+    /*
+        Aylık Hesap masaüstünde çok sütunlu bir finans tablosudur. Genel
+        uygulama kabuğunun max-w-7xl sınırı diğer ekranlar için korunur;
+        yalnız bu ekran, sidebar sonrası kullanılabilir viewport genişliğini
+        neredeyse tamamen kullanır. Böylece sabit dar sütunların toplam
+        satırını gereksiz yere büyütmesi engellenir.
+    */
+    @media (min-width: 1024px) {
+        .monthly-account-index {
+            position: relative;
+            left: 50%;
+            width: calc(100vw - 16rem - 3rem);
+            max-width: none;
+            transform: translateX(-50%);
+        }
+
+        .monthly-account-index .monthly-total-row th,
+        .monthly-account-index .monthly-total-row td {
+            padding-top: 0.7rem;
+            padding-bottom: 0.7rem;
+        }
     }
 
     .monthly-account-index .monthly-table tbody .monthly-day-row:nth-child(odd),
