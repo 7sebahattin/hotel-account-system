@@ -304,7 +304,11 @@ function initMonthlyRowNavigation(row) {
         if (url) window.location.assign(url);
     };
     const interactiveSelector = 'a, button, input, select, textarea, label, summary, [role="button"], [role="link"]';
-    const isInteractive = (target) => target instanceof Element && target.closest(interactiveSelector);
+    const isInteractive = (target) => {
+        if (!(target instanceof Element)) return false;
+        const interactive = target.closest(interactiveSelector);
+        return interactive !== null && interactive !== row;
+    };
 
     row.addEventListener('click', (event) => {
         if (!isInteractive(event.target)) navigate();
