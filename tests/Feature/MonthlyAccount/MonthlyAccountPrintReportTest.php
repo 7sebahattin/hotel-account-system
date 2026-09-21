@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\MonthlyAccount;
 
 use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\MonthlyAccount\Models\MonthlyPaymentProvider;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
@@ -37,8 +38,8 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
             ->assertSee('-1.037.071,26')
             ->assertSee('Garanti BBVA')
             ->assertSee('Yapı Kredi')
-            ->assertSee('GBP · £')
-            ->assertSee('EUR · €')
+            ->assertSee('Garanti BBVA - GBP - £')
+            ->assertSee('Yapı Kredi - EUR - €')
             ->assertSee('11.418,00')
             ->assertSee('≈ 740.755,02')
             ->assertSee('AY TOPLAMI')
@@ -139,8 +140,79 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
         $this->assertStringNotContainsString('POS', $paymentHeaderText);
         $this->assertStringNotContainsString('Link Ödeme', $paymentHeaderText);
         $this->assertStringNotContainsString('Havale', $paymentHeaderText);
-        $this->assertStringContainsString('Garanti BBVA TRY · ₺', $paymentHeaderText);
-        $this->assertStringContainsString('Ziraat Bankası TRY · ₺', $paymentHeaderText);
+        $this->assertStringContainsString('Garanti BBVA - TRY - ₺', $paymentHeaderText);
+        $this->assertStringContainsString('Ziraat Bankası - TRY - ₺', $paymentHeaderText);
+    }
+
+    #[Test]
+    public function print_raporu_legacy_banka_basliklarindaki_tekrarli_yontem_ve_para_birimi_etiketlerini_temizler(): void
+    {
+        $legacyProviders = [
+            'Garanti BBVA - POS - TRY - ₺',
+            'Ziraat Bankası - LİNK ÖDEME - EUR - €',
+            'Garanti BBVA - HAVALE - TRY - ₺',
+        ];
+        MonthlyPaymentProvider::query()->insert(array_map(
+            fn (string $name): array => [
+                'name' => $name,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            $legacyProviders,
+        ));
+
+        $this->createDay($this->admin, [
+            'account_date' => '2026-09-14',
+            'daily_total' => '1.000,00',
+            'items' => [
+                $this->item([
+                    'method' => 'credit_card',
+                    'bank_name' => 'Garanti BBVA - POS - TRY - ₺',
+                    'amount' => '100,00',
+                ]),
+                $this->item([
+                    'method' => 'link',
+                    'bank_name' => 'Ziraat Bankası - LİNK ÖDEME - EUR - €',
+                    'currency' => 'EUR',
+                    'amount' => '100,00',
+                    'conversion_mode' => 'total',
+                    'try_equivalent' => '5.000,00',
+                ]),
+                $this->item([
+                    'method' => 'bank_transfer',
+                    'bank_name' => 'Garanti BBVA - HAVALE - TRY - ₺',
+                    'amount' => '100,00',
+                ]),
+            ],
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('monthly-account.print', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]));
+
+        $response->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+        $paymentHeaders = $xpath->query('//main[contains(@class, "report")]//table/thead/tr[contains(@class, "payment-headers")]/th');
+
+        $this->assertNotFalse($paymentHeaders);
+        $headerTexts = array_map(
+            static fn (DOMNode $header): string => preg_replace('/\s+/u', ' ', trim($header->textContent)) ?? '',
+            iterator_to_array($paymentHeaders),
+        );
+        $joinedHeaders = implode(' | ', $headerTexts);
+
+        $this->assertContains('Garanti BBVA - TRY - ₺', $headerTexts);
+        $this->assertContains('Ziraat Bankası - EUR - €', $headerTexts);
+        $this->assertStringNotContainsString('POS', $joinedHeaders);
+        $this->assertStringNotContainsString('LİNK ÖDEME', $joinedHeaders);
+        $this->assertStringNotContainsString('HAVALE', $joinedHeaders);
+        $this->assertStringNotContainsString('TRY - ₺TRY', $joinedHeaders);
+        $this->assertStringNotContainsString('EUR - €EUR', $joinedHeaders);
     }
 
     #[Test]

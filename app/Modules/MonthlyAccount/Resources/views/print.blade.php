@@ -308,9 +308,21 @@
             foreach ($banks as $bank) { $columns[] = ['method' => $method, 'bank' => $bank, 'label' => $methodLabels[$method]]; }
         }
         $columns[] = ['method' => 'extra', 'bank' => null, 'label' => $methodLabels['extra']];
-        $currencyOrder = collect(\App\Modules\Core\Enums\Currency::cases())
+        $currencyCases = collect(\App\Modules\Core\Enums\Currency::cases());
+        $currencyOrder = $currencyCases
             ->mapWithKeys(fn ($currency, int $index): array => [$currency->value => $index]);
-        $columns = collect($columns)->map(function (array $column) use ($currencyOrder, $summary): array {
+        $currencyTokens = $currencyCases
+            ->flatMap(fn ($currency): array => [$currency->value, $currency->symbol()])
+            ->map(fn (string $token): string => mb_strtoupper(trim($token), 'UTF-8'))
+            ->unique()
+            ->values()
+            ->all();
+        $methodTokens = [
+            'credit_card' => ['POS'],
+            'link' => ['LİNK ÖDEME', 'LINK ÖDEME'],
+            'bank_transfer' => ['HAVALE'],
+        ];
+        $columns = collect($columns)->map(function (array $column) use ($currencyOrder, $currencyTokens, $methodTokens, $summary): array {
             $amounts = $column['bank']
                 ? ($summary['banks'][$column['method']][$column['bank']] ?? [])
                 : ($summary['methods'][$column['method']] ?? []);
@@ -318,6 +330,33 @@
                 ->sortBy(fn (string $code): int => $currencyOrder->get($code, PHP_INT_MAX))
                 ->values()
                 ->all();
+            $column['header_label'] = null;
+
+            if ($column['bank']) {
+                $ignoredMethodTokens = collect($methodTokens[$column['method']] ?? [])
+                    ->map(fn (string $token): string => mb_strtoupper(trim($token), 'UTF-8'))
+                    ->all();
+                $parts = preg_split('/\s*-\s*/u', $column['bank']) ?: [$column['bank']];
+                $providerParts = array_values(array_filter($parts, function (string $part) use ($ignoredMethodTokens, $currencyTokens): bool {
+                    $normalized = mb_strtoupper(trim($part), 'UTF-8');
+
+                    return $normalized !== ''
+                        && ! in_array($normalized, $ignoredMethodTokens, true)
+                        && ! in_array($normalized, $currencyTokens, true);
+                }));
+                $provider = trim(implode(' - ', $providerParts));
+                $currencySuffix = collect($column['currencies'])
+                    ->map(function (string $code): string {
+                        $currency = \App\Modules\Core\Enums\Currency::from($code);
+
+                        return $currency->symbol() === $code
+                            ? $code
+                            : $code.' - '.$currency->symbol();
+                    })
+                    ->implode(' / ');
+
+                $column['header_label'] = trim($provider.($currencySuffix !== '' ? ' - '.$currencySuffix : ''));
+            }
 
             return $column;
         })->all();
@@ -358,16 +397,15 @@
                     @foreach ($columns as $column)
                         <th scope="col" class="payment-head">
                             @if ($column['bank'])
-                                <span class="provider-name">{{ $column['bank'] }}</span>
-                            @endif
-                            @if ($column['currencies'] !== [])
+                                <span class="provider-name">{{ $column['header_label'] }}</span>
+                            @elseif ($column['currencies'] !== [])
                                 <span class="currency-line">
                                     @foreach ($column['currencies'] as $code)
                                         @php($currency = \App\Modules\Core\Enums\Currency::from($code))
                                         <span class="currency-token">{{ $code }}@if ($currency->symbol() !== $code) · {{ $currency->symbol() }}@endif</span>
                                     @endforeach
                                 </span>
-                            @elseif (! $column['bank'])
+                            @else
                                 <span class="column-placeholder" aria-hidden="true">—</span>
                             @endif
                         </th>
