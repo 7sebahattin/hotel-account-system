@@ -8,6 +8,9 @@ use App\Models\User;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Payments\Models\Payment;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -192,6 +195,51 @@ class PaymentListingTest extends TestCase
             ->get(route('payments.index', ['company_id' => $company->id]))
             ->assertOk()
             ->assertSee('company_id='.$company->id, false);
+    }
+
+    #[Test]
+    public function duzenlenebilir_tahsilat_satiri_edit_sayfasini_acar(): void
+    {
+        $payment = Payment::factory()->create([
+            'reference_no' => 'ROW-EDIT',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('payments.index'))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+        $row = $xpath->query('//table//tbody/tr[@data-payment-row-url]')->item(0);
+
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('payments.edit', $payment), $row->getAttribute('data-payment-row-url'));
+        $this->assertSame('0', $row->getAttribute('tabindex'));
+        $this->assertSame('link', $row->getAttribute('role'));
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-payment-row-url]//a')->length);
+        $this->assertSame(
+            1,
+            $xpath->query('//div[contains(@class, "lg:hidden")]//a[@href="'.route('payments.edit', $payment).'"]')->length,
+        );
+    }
+
+    #[Test]
+    public function duzenlenemeyen_tahsilat_satiri_guvenli_sekilde_detaya_gider(): void
+    {
+        $payment = Payment::factory()->cancelled()->create([
+            'reference_no' => 'ROW-SHOW',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('payments.index'))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+        $row = $xpath->query('//table//tbody/tr[@data-payment-row-url]')->item(0);
+
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('payments.show', $payment), $row->getAttribute('data-payment-row-url'));
     }
 
     /** Liste ilişkileri eager-load eder; lazy loading kapalı olduğu için N+1 patlar. */
