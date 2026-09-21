@@ -392,14 +392,13 @@ class DashboardTest extends TestCase
     }
 
     #[Test]
-    public function admin_operasyon_panosunda_hizli_islem_menusunu_gorur(): void
+    public function admin_operasyon_panosunda_hizli_islem_menusu_gosterilmez(): void
     {
         $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
-            ->assertSee('Hızlı işlem')
-            ->assertSee('Tahsilat')
-            ->assertSee('Konaklama')
-            ->assertSee('Yeni Cari Hesap');
+            ->assertDontSee('data-quick-action', false)
+            ->assertDontSee('id="hizli-islem-menu"', false)
+            ->assertDontSee('Hızlı işlem');
     }
 
     #[Test]
@@ -567,30 +566,21 @@ class DashboardTest extends TestCase
 
     // ------------------------------------------------------- Hızlı işlem
 
-    /**
-     * v2.1.1-B: Hızlı İşlem artık TEK, birleşik, yetkiye duyarlı bir listedir
-     * — personel/yönetici için ayrı dallar YOKTUR (Gün-11 tasarımının kasıtlı
-     * yerini alır, kategori artık admin tanımlı olduğu için `?type=` bazlı
-     * tek-tip kısayollar anlamsızlaştı). Personel'in sahip olduğu her yetki
-     * için ilgili kısayol görünür.
-     */
     #[Test]
-    public function personel_hizli_islem_menusunde_sahip_oldugu_yetkilerin_kisayollarini_gorur(): void
+    public function personel_panosunda_hizli_islem_menusu_gosterilmez(): void
     {
         $html = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))->getContent();
 
-        $this->assertStringNotContainsString('Kasa Hareketi', (string) $html);
-        $this->assertStringContainsString('Cari Tahsilat', (string) $html);
-        $this->assertStringContainsString('Yeni Konaklama', (string) $html);
-        $this->assertStringContainsString('Yeni Cari Hesap', (string) $html);
-        $this->assertStringNotContainsString('Kasa Devri', (string) $html);
+        $this->assertStringNotContainsString('data-quick-action', (string) $html);
+        $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
+        $this->assertStringNotContainsString('Hızlı işlem', (string) $html);
     }
 
     #[Test]
     public function hizli_islem_menusunde_yetkisiz_aksiyon_gorunmez(): void
     {
-        // Rolü olmayan (dolayısıyla hiçbir kayıt yetkisi olmayan) kullanıcı
-        // için hızlı işlem widget'ı hiç çizilmez (boş liste → `@if` bloğu).
+        // Hızlı işlem menüsü layout'tan kaldırıldığı için rolü olmayan
+        // kullanıcıda da widget işaretleri çizilmez.
         $html = $this->actingAs(User::factory()->create())->get(route('home'))->getContent();
 
         $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
