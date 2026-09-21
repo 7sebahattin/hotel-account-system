@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\MonthlyAccount\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\MonthlyAccount\Http\Requests\DeleteMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Http\Requests\MonthlyAccountFilterRequest;
@@ -13,6 +14,7 @@ use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
 use App\Modules\MonthlyAccount\Services\MonthlyAccountService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 
 class MonthlyAccountController extends Controller
@@ -96,7 +98,7 @@ class MonthlyAccountController extends Controller
         ]);
     }
 
-    /** @return array{month: CarbonImmutable, owner: \App\Models\User, days: \Illuminate\Database\Eloquent\Collection, summary: array} */
+    /** @return array{month: CarbonImmutable, owner: User, days: Collection<string, MonthlyAccountDay>, summary: array} */
     private function monthData(MonthlyAccountFilterRequest $request): array
     {
         $data = $request->validated();
