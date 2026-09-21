@@ -55,6 +55,10 @@ Route::middleware('auth')->name('statements.')->group(function (): void {
         ->middleware('can:'.Permission::LedgerViewAll->value)
         ->name('index');
 
+    Route::get('statements/print', [StatementController::class, 'printIndex'])
+        ->middleware('can:'.Permission::LedgerViewAll->value)
+        ->name('print-index');
+
     Route::get('companies/{company}/statement', [StatementController::class, 'show'])
         ->middleware('can:'.Permission::LedgerView->value)
         ->withTrashed()

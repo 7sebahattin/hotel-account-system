@@ -152,6 +152,71 @@ class StatementController extends Controller
         ]);
     }
 
+    /**
+     * Firma bakiye listesinin yazdırma görünümü (`ledger.view_all`).
+     *
+     * Sayfalama bilinçli olarak uygulanmaz: yazdırma çıktısı aktif arama,
+     * para birimi, bakiye ve sıralama filtrelerine uyan TÜM firmaları kapsar.
+     */
+    public function printIndex(Request $request, CompanyFilter $filter): View
+    {
+        $currency = Currency::tryFrom((string) $request->query('currency', ''));
+        $hasBalance = $request->query('has_balance') === '1';
+        $balanceSortRaw = (string) $request->query('balance_sort', '');
+        $balanceSort = in_array($balanceSortRaw, ['highest', 'lowest'], true) ? $balanceSortRaw : null;
+
+        if ($balanceSort !== null && $currency === null) {
+            $balanceSort = null;
+        }
+
+        /** @var Collection<int, Company> $matching */
+        $matching = $filter->apply(Company::query())->get(['id', 'name']);
+
+        /** @var array<int, int> $matchingIds */
+        $matchingIds = $matching->pluck('id')->all();
+        $allBalances = $this->statements->balancesForCompanies($matchingIds);
+
+        $rows = $matching->map(fn (Company $company): array => [
+            'id' => $company->getKey(),
+            'sortBalance' => $currency !== null
+                ? ($allBalances[$company->getKey()][$currency->value] ?? Money::zero())
+                : null,
+            'hasAnyBalance' => $currency !== null
+                ? ! ($allBalances[$company->getKey()][$currency->value] ?? Money::zero())->isZero()
+                : collect($allBalances[$company->getKey()] ?? [])->contains(fn (Money $money): bool => ! $money->isZero()),
+        ]);
+
+        if ($hasBalance) {
+            $rows = $rows->filter(fn (array $row): bool => $row['hasAnyBalance'])->values();
+        }
+
+        if ($balanceSort !== null) {
+            $rows = $balanceSort === 'highest'
+                ? $rows->sortByDesc(fn (array $row) => $row['sortBalance']->minorUnits)->values()
+                : $rows->sortBy(fn (array $row) => $row['sortBalance']->minorUnits)->values();
+        }
+
+        /** @var array<int, int> $orderedIds */
+        $orderedIds = $rows->pluck('id')->all();
+        $companiesById = Company::query()->whereIn('id', $orderedIds)->get()->keyBy('id');
+        $companies = collect($orderedIds)
+            ->map(fn (int $id) => $companiesById->get($id))
+            ->filter()
+            ->values();
+
+        return view('companies::statements.index-print', [
+            'companies' => $companies,
+            'filter' => $filter,
+            'balances' => array_intersect_key($allBalances, array_flip($orderedIds)),
+            'fxTotals' => $this->companyFxTotals($orderedIds),
+            'lastDates' => $this->statements->lastEntryDates($orderedIds),
+            'balanceCurrency' => $currency,
+            'hasBalanceOnly' => $hasBalance,
+            'balanceSort' => $balanceSort,
+            'generatedAt' => now(),
+        ]);
+    }
+
     /** Tek firmanın cari ekstresi (`ledger.view`). */
     public function show(Request $request, Company $company): View
     {
