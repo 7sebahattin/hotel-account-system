@@ -16,6 +16,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class MonthlyAccountController extends Controller
 {
@@ -61,6 +62,19 @@ class MonthlyAccountController extends Controller
         $day->load(['owner', 'creator', 'updater', 'currentRevision.items', 'currentRevision.creator', 'revisions.creator']);
 
         return view('monthly-account::show', ['day' => $day, 'revision' => $day->currentRevision]);
+    }
+
+    public function printDay(Request $request, MonthlyAccountDay $day): View
+    {
+        $this->authorize('view', $day);
+        $day->load(['owner', 'creator', 'updater', 'currentRevision.items', 'currentRevision.creator', 'revisions.creator']);
+
+        return view('monthly-account::show-print', [
+            'day' => $day,
+            'revision' => $day->currentRevision,
+            'generatedAt' => now(),
+            'preparedBy' => $request->user(),
+        ]);
     }
 
     public function edit(MonthlyAccountDay $day): View

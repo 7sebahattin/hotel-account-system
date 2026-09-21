@@ -155,7 +155,8 @@ PR açıklamasında açıkça yazılır.
 - Kullanıcıya görünür production değişikliği içeren her PR/release, `config/release.php` içindeki `version` sayısını tam bir kez artırır.
 - Aynı PR içindeki commit sayısı sürüm artışını değiştirmez; branch güncel `main` değerinin bir üstüyle açılır.
 - Docs-only, test-only ve CI-only değişikliklerde sürüm artırılmaz.
-- Paralel branch çakışmasında merge öncesi güncel `main` sürümü yeniden kontrol edilir ve sıradaki doğru integer kullanılır.
+- Paralel branch çakışmasında merge öncesi güncel `main` sürümü yeniden kontrol edilir ve sıradaki doğru sürüm etiketi kullanılır.
+- Varsayılan akış tam sayı artışıdır; kullanıcı açıkça ara sürüm isterse (ör. `v5.1`) `version` string etiketi olarak o değer kullanılabilir ve aynı PR içinde yalnız bir kez değiştirilir.
 - Bu değer canlıdaki UI release göstergesidir; semantic version değildir.
 
 Her PR mümkünse şu bilgileri içermelidir:

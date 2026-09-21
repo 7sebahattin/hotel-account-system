@@ -1,6 +1,8 @@
 @if ($banks !== [])
-    <details class="mt-4 rounded-xl border border-line bg-card p-4">
-        <summary class="min-h-11 cursor-pointer py-3 text-sm font-medium">Banka ve ödeme kuruluşu toplamları</summary>
+    <section class="mt-4 rounded-xl border border-line bg-card p-4" aria-labelledby="monthly-bank-totals-heading">
+        <h2 id="monthly-bank-totals-heading" class="min-h-11 py-3 text-sm font-medium">
+            Banka ve ödeme kuruluşu toplamları
+        </h2>
         <div class="mt-2 grid gap-3 border-t border-line pt-3 sm:grid-cols-2 xl:grid-cols-3">
             @foreach ($banks as $method => $methodBanks)
                 @foreach ($methodBanks as $bankName => $amounts)
@@ -11,5 +13,5 @@
                 @endforeach
             @endforeach
         </div>
-    </details>
+    </section>
 @endif

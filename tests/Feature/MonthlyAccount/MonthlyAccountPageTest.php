@@ -189,6 +189,33 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function gun_ayrintisinda_banka_toplamlari_acik_gosterilir_ve_yazdir_baglantisi_vardir(): void
+    {
+        $day = $this->createDay($this->admin, ['items' => [
+            $this->item(['method' => 'credit_card', 'bank_name' => 'Ziraat Bankası', 'amount' => '3000']),
+        ]]);
+
+        $response = $this->get(route('monthly-account.show', $day))
+            ->assertOk()
+            ->assertSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertSee(route('monthly-account.print-day', $day))
+            ->assertSee('target="_blank"', false);
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $this->assertSame(
+            1,
+            $xpath->query('//section[@aria-labelledby="monthly-bank-totals-heading"]')->length,
+        );
+        $this->assertSame(
+            0,
+            $xpath->query('//details[.//text()[contains(., "Banka ve ödeme kuruluşu toplamları")]]')->length,
+        );
+    }
+
+    #[Test]
     public function patron_ekleme_silme_gormez_personel_kendi_alaninda_ekleme_gorur(): void
     {
         $personel = $this->userWithRole(RoleName::Personel);
