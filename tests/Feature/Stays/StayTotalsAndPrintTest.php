@@ -104,4 +104,28 @@ class StayTotalsAndPrintTest extends TestCase
             ->get(route('stays.print'))
             ->assertOk();
     }
+
+    #[Test]
+    public function yazdirma_islem_zamanini_gosterir_tarihleri_korur_ve_toplamlari_degistirmez(): void
+    {
+        Stay::factory()->create([
+            'check_in_date' => '2026-09-08',
+            'check_out_date' => '2026-09-09',
+            'created_at' => '2026-09-08 15:42:00',
+            'currency' => 'TRY',
+            'amount' => '1250.00',
+        ]);
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.print'))
+            ->assertOk()
+            ->assertSee('İşlem zamanı')
+            ->assertSee('08.09.2026')
+            ->assertSee('09.09.2026')
+            ->assertSee('08.09.2026 15:42');
+
+        $totals = $response->viewData('totals');
+        $this->assertSame('1250.00', $totals['TRY']['total']->toDecimal());
+        $this->assertSame(1, $totals['TRY']['count']);
+    }
 }

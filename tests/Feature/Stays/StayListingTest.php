@@ -7,6 +7,9 @@ namespace Tests\Feature\Stays;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Stays\Models\Stay;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\Test;
@@ -186,5 +189,41 @@ class StayListingTest extends TestCase
             ->assertOk()
             ->assertSee('Konaklamalar')
             ->assertSee('Firma Misafiri');
+    }
+
+    #[Test]
+    public function masaustu_satiri_erisilebilir_tiklanabilir_ve_islem_zamanini_gosterir(): void
+    {
+        $creator = $this->userWithRole(RoleName::Admin);
+        $creator->update(['name' => 'Sercan Çakmak']);
+        $stay = Stay::factory()->create([
+            'guest_name' => 'Örnek Misafir',
+            'created_by' => $creator->id,
+            'created_at' => '2026-09-08 15:42:00',
+        ]);
+
+        $response = $this->index()
+            ->assertOk()
+            ->assertDontSee('İşlemler')
+            ->assertDontSee('Görüntüle')
+            ->assertSee('Sercan Çakmak')
+            ->assertSee('08.09.2026 · 15:42');
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+        $rows = $xpath->query('//table//tbody/tr[@data-stay-row-url]');
+
+        $this->assertNotFalse($rows);
+        $this->assertSame(1, $rows->length);
+        $row = $rows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('stays.show', $stay), $row->getAttribute('data-stay-row-url'));
+        $this->assertSame('0', $row->getAttribute('tabindex'));
+        $this->assertSame('link', $row->getAttribute('role'));
+        $this->assertSame(9, $xpath->query('//table//thead/tr/*')->length);
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//a')->length);
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//button')->length);
+        $this->assertSame(1, $xpath->query('//div[contains(@class, "lg:hidden")]//a[@href="'.route('stays.show', $stay).'"]')->length);
     }
 }

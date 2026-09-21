@@ -48,6 +48,7 @@
         th { border-bottom: 1.5px solid #111; font-weight: 600; white-space: nowrap; }
         tr { page-break-inside: avoid; }
         .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        table .stay-transaction-time { width: 28mm; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .rev { font-style: italic; }
 
         /* Yabancı para biriminin altındaki küçük TL karşılığı (v2.1.1-D §3). */

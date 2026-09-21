@@ -57,18 +57,17 @@
                 <x-ui.th>Cari hesap</x-ui.th>
                 <x-ui.sort-header :filter="$filter" column="amount" align="right">Tutar</x-ui.sort-header>
                 <x-ui.th>Durum</x-ui.th>
-                <x-ui.th>Oluşturan</x-ui.th>
-                <x-ui.th>İşlemler</x-ui.th>
+                <x-ui.th>Oluşturan / İşlem</x-ui.th>
             </tr>
         </thead>
         <tbody>
             @forelse ($stays as $stay)
-                <tr class="border-b border-line last:border-0 hover:bg-well">
-                    <td class="px-4 py-3 whitespace-nowrap">
-                        <a href="{{ route('stays.show', $stay) }}" class="tabular-nums text-tx hover:text-acc">
-                            {{ $stay->check_in_date->format('d.m.Y') }}
-                        </a>
-                    </td>
+                <tr class="stay-row border-b border-line last:border-0"
+                    data-stay-row-url="{{ route('stays.show', $stay) }}"
+                    tabindex="0"
+                    role="link"
+                    aria-label="{{ $stay->guest_name }} konaklamasını görüntüle">
+                    <td class="px-4 py-3 whitespace-nowrap tabular-nums text-tx">{{ $stay->check_in_date->format('d.m.Y') }}</td>
                     <td class="px-4 py-3 whitespace-nowrap tabular-nums text-mut">{{ $stay->check_out_date->format('d.m.Y') }}</td>
                     <td class="px-4 py-3 text-right tabular-nums text-mut">{{ $stay->nights }}</td>
                     <td class="px-4 py-3 text-tx">{{ $stay->guest_name }}</td>
@@ -81,14 +80,14 @@
                     <td class="px-4 py-3">@include('stays::_status', ['stay' => $stay])
                         @include('stays::_payment-status')
                     </td>
-                    <td class="px-4 py-3 text-mut">{{ $stay->creator?->name ?? '—' }}</td>
-                    <td class="px-4 py-3 whitespace-nowrap">
-                        <x-ui.button variant="ghost" :href="route('stays.show', $stay)">Görüntüle</x-ui.button>
+                    <td class="px-4 py-3 text-mut">
+                        <span class="block">{{ $stay->creator?->name ?? '—' }}</span>
+                        <span class="block whitespace-nowrap tabular-nums text-xs">{{ $stay->created_at->format('d.m.Y · H:i') }}</span>
                     </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="10" class="px-4 py-10 text-center text-sm text-mut">
+                    <td colspan="9" class="px-4 py-10 text-center text-sm text-mut">
                         @if ($filter->hasActiveFilters())
                             Bu filtrelerle eşleşen kayıt bulunamadı.
                             <a href="{{ route('stays.index') }}"
