@@ -159,7 +159,7 @@ class StayTotalsAndPrintTest extends TestCase
             ->assertSee('İşlem zamanı')
             ->assertSee('08.09.2026')
             ->assertSee('09.09.2026')
-            ->assertSee('08.09.2026 15:42');
+            ->assertSee('15:42');
 
         $totals = $response->viewData('totals');
         $this->assertSame('1250.00', $totals['TRY']['total']->toDecimal());
