@@ -104,7 +104,7 @@
         </section>
     @endif
 
-    <section style="margin-top: 16px;">
+    <section class="print-section">
         <h2>Ödeme ayrıntıları ({{ $revision->items->count() }})</h2>
         <table>
             <thead>
@@ -146,7 +146,7 @@
         </table>
     </section>
 
-    <section style="margin-top: 16px;">
+    <section class="print-section">
         <h2>Kayıt geçmişi</h2>
         <table>
             <thead>
