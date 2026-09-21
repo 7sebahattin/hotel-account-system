@@ -47,6 +47,26 @@ class StayTotalsAndPrintTest extends TestCase
     }
 
     #[Test]
+    public function toplam_kartlari_liste_tablosundan_once_gosterilir(): void
+    {
+        Stay::factory()->create(['currency' => 'TRY', 'amount' => '1000.00']);
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.index'))
+            ->assertOk()
+            ->assertSee('TRY toplamı')
+            ->assertSee('1.000,00 ₺');
+
+        $html = (string) $response->getContent();
+        $totalsPosition = strpos($html, 'data-stay-totals');
+        $tablePosition = strpos($html, '<table');
+
+        $this->assertNotFalse($totalsPosition);
+        $this->assertNotFalse($tablePosition);
+        $this->assertTrue($totalsPosition < $tablePosition, 'Toplam kartları konaklama tablosundan önce görünmelidir.');
+    }
+
+    #[Test]
     public function toplam_iptal_edilenleri_ayri_gosterir(): void
     {
         Stay::factory()->create(['currency' => 'TRY', 'amount' => '1000.00']);
