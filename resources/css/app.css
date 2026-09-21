@@ -244,6 +244,21 @@
         outline-offset: -2px;
     }
 
+    .statement-row[data-statement-row-url] {
+        cursor: pointer;
+    }
+
+    .statement-row[data-statement-row-url]:hover {
+        background-color: var(--color-well) !important;
+    }
+
+    .statement-row[data-statement-row-url]:focus-visible {
+        position: relative;
+        z-index: 1;
+        outline: 2px solid var(--color-acc-tx);
+        outline-offset: -2px;
+    }
+
     .monthly-account-form .monthly-daily-total {
         border-width: 1.5px;
         border-color: var(--color-tx);

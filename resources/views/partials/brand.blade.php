@@ -30,7 +30,7 @@
         <span class="block truncate text-sm font-semibold tracking-tight text-nav-tx">{{ $name }}</span>
 
         @unless ($compact)
-            <span class="block truncate text-xs text-nav-mut">{{ $tagline }}</span>
+            <span class="block truncate text-xs text-nav-mut">{{ $tagline }} · v{{ config('release.version') }}</span>
         @endunless
     </span>
 </span>
