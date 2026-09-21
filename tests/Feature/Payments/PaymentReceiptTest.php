@@ -139,7 +139,7 @@ class PaymentReceiptTest extends TestCase
             'exchange_rate_to_try' => '52.50',
             'payment_method' => 'other',
             'reference_no' => 'REF-V4-01',
-            'payer_type' => 'company',
+            'payer_type' => 'individual',
             'payer_name' => 'Ödeyen Yetkili',
             'description' => 'Makbuz açıklaması',
         ]);
