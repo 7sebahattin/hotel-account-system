@@ -59,6 +59,7 @@
                 <th>Cari hesap</th>
                 <th class="num">Tutar</th>
                 <th>Durum</th>
+                <th class="stay-transaction-time">İşlem zamanı</th>
             </tr>
         </thead>
         <tbody>
@@ -76,9 +77,10 @@
                         @endif
                     </td>
                     <td>{{ $stay->status->label() }}</td>
+                    <td class="stay-transaction-time num">{{ $stay->created_at->format('d.m.Y H:i') }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7">Bu filtreyle eşleşen kayıt bulunamadı.</td></tr>
+                <tr><td colspan="8">Bu filtreyle eşleşen kayıt bulunamadı.</td></tr>
             @endforelse
         </tbody>
     </table>

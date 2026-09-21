@@ -1,5 +1,6 @@
 import './monthly-account.js';
 import './statements.js';
+import './stays.js';
 
 /*
  * Mobil kenar çubuğu çekmecesi.
