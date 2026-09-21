@@ -46,6 +46,26 @@
         </x-ui.select>
     </x-ui.filter-panel>
 
+    @if ($totals->isNotEmpty())
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-stay-totals>
+            @foreach ($totals as $code => $t)
+                <x-ui.card class="p-4">
+                    <p class="text-xs uppercase tracking-wide text-mut">{{ $code }} toplamı</p>
+                    <p class="mt-1 tabular-nums text-lg text-tx">{{ $t['total']->format($t['currency']) }}</p>
+                    <p class="mt-1 text-xs text-mut">
+                        {{ number_format($t['count'], 0, ',', '.') }} konaklama · bu filtreyle
+                    </p>
+                    @if ($t['cancelledCount'] > 0)
+                        <p class="mt-1 text-xs text-mut">
+                            Aktif: {{ $t['activeTotal']->format($t['currency']) }}
+                            · İptal ({{ $t['cancelledCount'] }}): {{ $t['cancelledTotal']->format($t['currency']) }}
+                        </p>
+                    @endif
+                </x-ui.card>
+            @endforeach
+        </div>
+    @endif
+
     <x-ui.table class="mt-4">
         <thead class="border-b border-line">
             <tr>
@@ -100,26 +120,6 @@
             @endforelse
         </tbody>
     </x-ui.table>
-
-    @if ($totals->isNotEmpty())
-        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            @foreach ($totals as $code => $t)
-                <x-ui.card class="p-4">
-                    <p class="text-xs uppercase tracking-wide text-mut">{{ $code }} toplamı</p>
-                    <p class="mt-1 tabular-nums text-lg text-tx">{{ $t['total']->format($t['currency']) }}</p>
-                    <p class="mt-1 text-xs text-mut">
-                        {{ number_format($t['count'], 0, ',', '.') }} konaklama · bu filtreyle
-                    </p>
-                    @if ($t['cancelledCount'] > 0)
-                        <p class="mt-1 text-xs text-mut">
-                            Aktif: {{ $t['activeTotal']->format($t['currency']) }}
-                            · İptal ({{ $t['cancelledCount'] }}): {{ $t['cancelledTotal']->format($t['currency']) }}
-                        </p>
-                    @endif
-                </x-ui.card>
-            @endforeach
-        </div>
-    @endif
 
     {{-- Mobil: yalnızca hızlı okunması gereken alanlar --}}
     <div class="mt-4 space-y-3 lg:hidden">
