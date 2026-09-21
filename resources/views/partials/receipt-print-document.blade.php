@@ -1,12 +1,12 @@
 <style>
     :root {
-        --receipt-gold: #d49a00;
-        --receipt-gold-soft: #fff9e8;
-        --receipt-ink: #111827;
-        --receipt-muted: #5f6773;
-        --receipt-line: #d7dadd;
-        --receipt-panel: #fbfbfa;
-        --receipt-danger: #a61b1b;
+        --receipt-gold: rgb(212 154 0);
+        --receipt-gold-soft: rgb(255 249 232);
+        --receipt-ink: rgb(17 24 39);
+        --receipt-muted: rgb(95 103 115);
+        --receipt-line: rgb(215 218 221);
+        --receipt-panel: rgb(251 251 250);
+        --receipt-danger: rgb(166 27 27);
     }
 
     .receipt-toolbar {
@@ -19,10 +19,10 @@
     .receipt-toolbar a,
     .receipt-toolbar button {
         min-height: 42px;
-        border: 1px solid #7b828a;
+        border: 1px solid rgb(123 130 138);
         border-radius: 5px;
         padding: 7px 12px;
-        background: #fff;
+        background: rgb(255 255 255);
         color: var(--receipt-ink);
         font: inherit;
         text-decoration: none;
@@ -32,10 +32,10 @@
     .receipt-document {
         max-width: 188mm;
         margin: 0 auto;
-        border: 1px solid #d9dcdf;
+        border: 1px solid rgb(217 220 223);
         border-radius: 3mm;
         padding: 7mm 8mm 6mm;
-        background: #fff;
+        background: rgb(255 255 255);
         color: var(--receipt-ink);
         box-shadow: 0 2mm 8mm rgb(17 24 39 / 7%);
         -webkit-print-color-adjust: exact;
@@ -69,7 +69,7 @@
         line-height: 1;
         font-weight: 850;
         letter-spacing: .025em;
-        color: #0b1524;
+        color: rgb(11 21 36);
     }
 
     .receipt-legal-name {
@@ -81,7 +81,7 @@
 
     .receipt-company-lines {
         margin-top: 2.2mm;
-        color: #2f3741;
+        color: rgb(47 55 65);
         font-size: 7.6pt;
         line-height: 1.45;
     }
@@ -91,7 +91,7 @@
     }
 
     .receipt-company-lines strong {
-        color: #111827;
+        color: rgb(17 24 39);
     }
 
     .receipt-title-block {
@@ -128,8 +128,8 @@
 
     .receipt-title-meta-row .value {
         min-height: 8mm;
-        border: 1px solid #cdd1d5;
-        background: #fff;
+        border: 1px solid rgb(205 209 213);
+        background: rgb(255 255 255);
         padding: 1.8mm 2mm;
         text-align: center;
         font-variant-numeric: tabular-nums;
@@ -155,7 +155,7 @@
 
     .receipt-line-field .value {
         min-height: 7mm;
-        border-bottom: 1px dashed #9fa5ab;
+        border-bottom: 1px dashed rgb(159 165 171);
         padding: 1mm 1.5mm 1.3mm;
         font-size: 10pt;
     }
@@ -194,7 +194,7 @@
         justify-content: flex-end;
         border: 1.4px solid var(--receipt-gold);
         border-radius: 1.5mm;
-        background: #fff;
+        background: rgb(255 255 255);
         padding: 2.5mm 4mm;
         font-size: 15pt;
         font-weight: 800;
@@ -229,8 +229,8 @@
         flex: 0 0 4mm;
         align-items: center;
         justify-content: center;
-        border: 1px solid #4b5563;
-        background: #fff;
+        border: 1px solid rgb(75 85 99);
+        background: rgb(255 255 255);
         font-size: 8pt;
         font-weight: 900;
         line-height: 1;
@@ -254,7 +254,7 @@
 
     .receipt-description-box {
         min-height: 26mm;
-        border-bottom: 1px dashed #9fa5ab;
+        border-bottom: 1px dashed rgb(159 165 171);
         padding: 1.5mm 1mm 2.5mm;
         font-size: 9pt;
         line-height: 1.5;
@@ -284,15 +284,15 @@
         display: flex;
         min-height: 36mm;
         flex-direction: column;
-        border: 1px solid #d5d9dc;
+        border: 1px solid rgb(213 217 220);
         border-radius: 2mm;
-        background: #fff;
+        background: rgb(255 255 255);
         padding: 3mm 4mm;
         text-align: center;
     }
 
     .receipt-signature-title {
-        border-bottom: 1px solid #e3e5e7;
+        border-bottom: 1px solid rgb(227 229 231);
         padding-bottom: 2mm;
         font-size: 8.5pt;
         font-weight: 800;
@@ -305,7 +305,7 @@
         justify-content: center;
         padding: 3mm 2mm 1.5mm;
         font-size: 8pt;
-        color: #39424c;
+        color: rgb(57 66 76);
     }
 
     .receipt-signature-caption {
@@ -326,7 +326,7 @@
         justify-content: space-between;
         gap: 6mm;
         margin-top: 4mm;
-        border-top: 1px solid #d8dcdf;
+        border-top: 1px solid rgb(216 220 223);
         padding-top: 2.5mm;
         color: var(--receipt-muted);
         font-size: 7pt;
@@ -380,7 +380,7 @@
         .receipt-document {
             max-width: none;
             margin: 0;
-            border-color: #cfd3d6;
+            border-color: rgb(207 211 214);
             box-shadow: none;
             break-inside: avoid;
             page-break-inside: avoid;
