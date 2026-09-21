@@ -67,6 +67,29 @@ class PaymentCancellationTest extends TestCase
     }
 
     #[Test]
+    public function iptal_karti_varsayilan_kapali_native_panel_olarak_gosterilir(): void
+    {
+        $payment = $this->makePayment();
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('payments.show', $payment))
+            ->assertOk()
+            ->assertSee('payment-cancel-panel', false)
+            ->assertSee('<summary', false)
+            ->assertSee('Tahsilatı iptal et')
+            ->assertSee('Geri alınamaz')
+            ->assertSee(route('payments.cancel', $payment), false);
+
+        $html = (string) $response->getContent();
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/<details[^>]*payment-cancel-panel[^>]*\sopen(?:\s|>)/',
+            $html,
+            'İptal paneli ilk açılışta kapalı başlamalıdır.',
+        );
+    }
+
+    #[Test]
     public function iptal_gerekcesi_zorunludur(): void
     {
         $payment = $this->makePayment();

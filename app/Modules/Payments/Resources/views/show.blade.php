@@ -137,23 +137,37 @@
     </div>
 
     @can('cancel', $payment)
-        <x-ui.card title="Tahsilatı iptal et" class="mt-4 p-6">
-            <p class="text-sm text-mut">
-                İptal, cari hareketini ve konaklama dağılımlarını geri alır; borcu yeniden açar.
-                Kayıt silinmez, listede kalır. <strong class="text-tx">Bu işlem geri alınamaz.</strong>
-            </p>
+        <details class="payment-cancel-panel mt-4 rounded-xl border border-line bg-card"
+                 @if ($errors->has('cancellation_reason')) open @endif>
+            <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-xl px-6 py-4 select-none hover:bg-well">
+                <span class="text-sm font-medium text-danger">Tahsilatı iptal et</span>
 
-            <form method="POST" action="{{ route('payments.cancel', $payment) }}" class="mt-4 max-w-xl"
-                  onsubmit="return confirm('Bu tahsilat iptal edilsin mi? Cari hareketi ters kaydedilecek ve bu işlem geri alınamayacak.')">
-                @csrf @method('PATCH')
+                <span class="ml-auto text-xs text-mut">Geri alınamaz</span>
 
-                <x-ui.input label="İptal gerekçesi" name="cancellation_reason" required maxlength="255"
-                            placeholder="Örn. yanlış cari hesaba işlendi" />
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
+                     class="payment-cancel-panel-chevron size-4 shrink-0 text-mut" aria-hidden="true">
+                    <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </summary>
 
-                <div class="mt-4">
-                    <x-ui.button type="submit" variant="danger">Tahsilatı iptal et</x-ui.button>
-                </div>
-            </form>
-        </x-ui.card>
+            <div class="border-t border-line px-6 py-5">
+                <p class="text-sm text-mut">
+                    İptal, cari hareketini ve konaklama dağılımlarını geri alır; borcu yeniden açar.
+                    Kayıt silinmez, listede kalır. <strong class="text-tx">Bu işlem geri alınamaz.</strong>
+                </p>
+
+                <form method="POST" action="{{ route('payments.cancel', $payment) }}" class="mt-4 max-w-xl"
+                      onsubmit="return confirm('Bu tahsilat iptal edilsin mi? Cari hareketi ters kaydedilecek ve bu işlem geri alınamayacak.')">
+                    @csrf @method('PATCH')
+
+                    <x-ui.input label="İptal gerekçesi" name="cancellation_reason" required maxlength="255"
+                                placeholder="Örn. yanlış cari hesaba işlendi" />
+
+                    <div class="mt-4">
+                        <x-ui.button type="submit" variant="danger">Tahsilatı iptal et</x-ui.button>
+                    </div>
+                </form>
+            </div>
+        </details>
     @endcan
 @endsection
