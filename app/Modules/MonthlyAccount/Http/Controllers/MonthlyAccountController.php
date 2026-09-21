@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\MonthlyAccount\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\MonthlyAccount\Http\Requests\DeleteMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Http\Requests\MonthlyAccountFilterRequest;
@@ -13,6 +14,7 @@ use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
 use App\Modules\MonthlyAccount\Services\MonthlyAccountService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 
 class MonthlyAccountController extends Controller
@@ -21,16 +23,14 @@ class MonthlyAccountController extends Controller
 
     public function index(MonthlyAccountFilterRequest $request): View
     {
-        $data = $request->validated();
-        $month = CarbonImmutable::createFromFormat('!Y-m', $data['month'] ?? now()->format('Y-m'));
-        $owner = $this->accounts->ownerFor($request->user(), (int) ($data['owner_id'] ?? $request->user()->getKey()));
-        $days = $this->accounts->month($owner, $month);
+        return view('monthly-account::index', $this->monthData($request));
+    }
 
-        return view('monthly-account::index', [
-            'month' => $month,
-            'owner' => $owner,
-            'days' => $days,
-            'summary' => $this->accounts->summarize($days),
+    public function print(MonthlyAccountFilterRequest $request): View
+    {
+        return view('monthly-account::print', $this->monthData($request) + [
+            'generatedAt' => now(),
+            'preparedBy' => $request->user(),
         ]);
     }
 
@@ -96,5 +96,21 @@ class MonthlyAccountController extends Controller
         return redirect()->route('monthly-account.index', [
             'month' => $day->account_date->format('Y-m'), 'owner_id' => $day->owner_id,
         ]);
+    }
+
+    /** @return array{month: CarbonImmutable, owner: User, days: Collection<string, MonthlyAccountDay>, summary: array} */
+    private function monthData(MonthlyAccountFilterRequest $request): array
+    {
+        $data = $request->validated();
+        $month = CarbonImmutable::createFromFormat('!Y-m', $data['month'] ?? now()->format('Y-m'));
+        $owner = $this->accounts->ownerFor($request->user(), (int) ($data['owner_id'] ?? $request->user()->getKey()));
+        $days = $this->accounts->month($owner, $month);
+
+        return [
+            'month' => $month,
+            'owner' => $owner,
+            'days' => $days,
+            'summary' => $this->accounts->summarize($days),
+        ];
     }
 }

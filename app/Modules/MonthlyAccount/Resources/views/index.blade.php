@@ -35,6 +35,7 @@
     <div class="monthly-account monthly-account-index">
         <x-ui.page-header title="Aylık Hesap" :subtitle="$month->translatedFormat('F Y').' · '.$recorded.' gün kayıtlı'">
             <x-slot:actions>
+                <x-ui.button variant="secondary" :href="route('monthly-account.print', ['owner_id' => $owner->id, 'month' => $month->format('Y-m')])" target="_blank" rel="noopener">Yazdır</x-ui.button>
                 @can('createForOwner', [$model, $owner])
                     <x-ui.button :href="route('monthly-account.create', ['owner_id' => $owner->id, 'date' => now()->isSameMonth($month) ? now()->toDateString() : $month->toDateString()])">+ Günlük kayıt</x-ui.button>
                 @endcan
