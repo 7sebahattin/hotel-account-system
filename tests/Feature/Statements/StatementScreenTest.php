@@ -92,6 +92,7 @@ class StatementScreenTest extends TestCase
         $personel = $this->userWithRole(RoleName::Personel);
 
         $this->actingAs($personel)->get(route('statements.index'))->assertForbidden();
+        $this->actingAs($personel)->get(route('statements.print-index'))->assertForbidden();
         $this->actingAs($personel)->get(route('statements.show', $this->company))->assertForbidden();
         $this->actingAs($personel)->get(route('statements.print', $this->company))->assertForbidden();
     }
@@ -129,6 +130,7 @@ class StatementScreenTest extends TestCase
     public function giris_yapmamis_kullanici_erisemez(): void
     {
         $this->get(route('statements.index'))->assertRedirect(route('login'));
+        $this->get(route('statements.print-index'))->assertRedirect(route('login'));
         $this->get(route('statements.show', $this->company))->assertRedirect(route('login'));
     }
 
@@ -347,6 +349,71 @@ class StatementScreenTest extends TestCase
             ->assertOk()
             ->assertSee('Yazdır')
             ->assertSee(route('statements.print', $this->company), false);
+    }
+
+    #[Test]
+    public function bakiye_listesi_yazdirma_gorunumu_filtreleri_korur_ve_navigasyon_gostermez(): void
+    {
+        $this->seedMovements();
+        $other = Company::factory()->create(['name' => 'Başka Firma']);
+        $this->debit($other, '750.00', Currency::TRY);
+
+        $response = $this->actingAs($this->admin)->get(route('statements.print-index', [
+            'q' => 'monarch',
+            'currency' => 'TRY',
+            'has_balance' => '1',
+        ]));
+
+        $response->assertOk()
+            ->assertSee('CARİ EKSTRE · BAKİYE LİSTESİ')
+            ->assertSee('Monarch')
+            ->assertSee('4.000,00 ₺')
+            ->assertSee('02.09.2026')
+            ->assertDontSee('Başka Firma')
+            ->assertDontSee('Ana menü', false)
+            ->assertDontSee('data-sidebar', false)
+            ->assertDontSee('Ekstre</', false);
+    }
+
+    #[Test]
+    public function bakiye_listesi_yazdirma_tum_filtrelenmis_firmalari_sayfalamadan_gosterir(): void
+    {
+        foreach (range(1, 30) as $i) {
+            Company::factory()->create(['name' => sprintf('Yazdır Firma %02d', $i)]);
+        }
+
+        $response = $this->actingAs($this->admin)->get(route('statements.print-index', [
+            'q' => 'Yazdır Firma',
+            'per_page' => 25,
+        ]));
+
+        $response->assertOk()
+            ->assertSee('Yazdır Firma 01')
+            ->assertSee('Yazdır Firma 30');
+
+        $companies = $response->viewData('companies');
+        $this->assertCount(30, $companies);
+    }
+
+    #[Test]
+    public function bakiye_listesinde_yazdir_baglantisi_aktif_filtreleri_korur(): void
+    {
+        $query = [
+            'q' => 'Monarch',
+            'currency' => 'TRY',
+            'has_balance' => '1',
+            'per_page' => '25',
+        ];
+
+        $this->actingAs($this->admin)
+            ->get(route('statements.index', $query))
+            ->assertOk()
+            ->assertSee('Yazdır')
+            ->assertSee(route('statements.print-index', [
+                'q' => 'Monarch',
+                'currency' => 'TRY',
+                'has_balance' => '1',
+            ]));
     }
 
     // ------------------------------------------------------- bakiye listesi
