@@ -83,14 +83,15 @@ return [
     */
 
     'company' => [
-        'legal_name' => env('HOTEL_COMPANY_LEGAL_NAME', env('HOTEL_BRAND_NAME', 'Lemon')),
-        'address' => env('HOTEL_COMPANY_ADDRESS'),
-        'phone' => env('HOTEL_COMPANY_PHONE'),
-        'email' => env('HOTEL_COMPANY_EMAIL'),
-        'tax_office' => env('HOTEL_COMPANY_TAX_OFFICE'),
-        'tax_number' => env('HOTEL_COMPANY_TAX_NUMBER'),
-        'trade_registry_no' => env('HOTEL_COMPANY_TRADE_REGISTRY_NO'),
-        'mersis_no' => env('HOTEL_COMPANY_MERSIS_NO'),
+        'receipt_brand_name' => env('HOTEL_RECEIPT_BRAND_NAME', 'LEMON HOTEL'),
+        'legal_name' => env('HOTEL_COMPANY_LEGAL_NAME', 'KURTOĞLU MÜHENDİSLİK HİZ. İNŞ. TİC. VE TUR. LTD. ŞTİ.'),
+        'address' => env('HOTEL_COMPANY_ADDRESS', 'Arapsuyu Mh. Belediye Cd. No:16A/1 · Konyaaltı / ANTALYA'),
+        'phone' => env('HOTEL_COMPANY_PHONE', '0 (242) 229 29 70'),
+        'email' => env('HOTEL_COMPANY_EMAIL', 'lemonhotel@hotmail.com'),
+        'tax_office' => env('HOTEL_COMPANY_TAX_OFFICE', 'Antalya Kurumlar'),
+        'tax_number' => env('HOTEL_COMPANY_TAX_NUMBER', '5950075226'),
+        'trade_registry_no' => env('HOTEL_COMPANY_TRADE_REGISTRY_NO', '16292'),
+        'mersis_no' => env('HOTEL_COMPANY_MERSIS_NO', '0595 0075 2260 0012'),
     ],
 
     /*
