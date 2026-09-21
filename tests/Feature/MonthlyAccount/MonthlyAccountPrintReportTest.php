@@ -216,6 +216,65 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function gunluk_print_raporu_ozet_banka_odeme_ve_kayit_gecmisini_gosterir(): void
+    {
+        $day = $this->createDay($this->admin, [
+            'account_date' => '2026-09-13',
+            'daily_total' => '125.087,98',
+            'note' => 'Gün sonu kontrol notu',
+            'items' => [
+                $this->item([
+                    'method' => 'cash',
+                    'amount' => '68.264,19',
+                    'note' => 'Nakit tahsilat',
+                ]),
+                $this->item([
+                    'method' => 'credit_card',
+                    'bank_name' => 'Ziraat Bankası',
+                    'currency' => 'EUR',
+                    'amount' => '260,00',
+                    'conversion_mode' => 'total',
+                    'try_equivalent' => '14.605,50',
+                    'note' => 'Kart tahsilatı',
+                ]),
+            ],
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('monthly-account.print-day', $day))
+            ->assertOk()
+            ->assertSee('GÜNLÜK HESAP RAPORU')
+            ->assertSee('13 Eylül 2026')
+            ->assertSee('125.087,98')
+            ->assertSee('82.869,69')
+            ->assertSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertSee('Ziraat Bankası')
+            ->assertSee('260,00')
+            ->assertSee('14.605,50')
+            ->assertSee('Ödeme ayrıntıları (2)')
+            ->assertSee('Gün sonu kontrol notu')
+            ->assertSee('Nakit tahsilat')
+            ->assertSee('Kart tahsilatı')
+            ->assertSee('Kayıt geçmişi')
+            ->assertSee('Sürüm 1')
+            ->assertDontSee('sidebar', false)
+            ->assertDontSee('Günü sil')
+            ->assertDontSee('Düzenle');
+    }
+
+    #[Test]
+    public function kullanici_baska_ownerin_gunluk_print_endpointinden_veri_goremez(): void
+    {
+        $owner = $this->userWithRole(RoleName::Personel);
+        $intruder = $this->userWithRole(RoleName::Personel);
+        $day = $this->createDay($owner, ['daily_total' => '9000']);
+
+        $this->actingAs($intruder)
+            ->get(route('monthly-account.print-day', $day))
+            ->assertForbidden();
+    }
+
+    #[Test]
     public function kullanici_baska_ownerin_print_endpointinden_veri_goremez(): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
