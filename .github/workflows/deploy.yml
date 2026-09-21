@@ -420,8 +420,23 @@ jobs:
 
           pending="$(list_dir "${base}storage/app/")"
           framework="$(list_dir "${base}storage/framework/")"
+
+          # Önceki deploy marker'ı kaldıysa, bakım kabuğundaki TEK SEFERLİK
+          # finalize tetikleyicisini bir HTTP GET ile uyandır. Bu yeni bir
+          # deploy/migrate endpoint'i açmaz; deploy/maintenance-trigger.php
+          # zaten bakım modunda gelen ilk isteğin bekleyen marker'ı finalize
+          # etmesi için tasarlanmıştır. Cron yine yedek olarak kalır.
           if printf '%s\n' "$pending" | grep -qx 'deploy-pending'; then
-            echo "::error::Önceki yayın hâlâ bekliyor. Dosya aktarımı başlatılmadı."
+            echo "Önceki bekleyen yayın bulundu; bakım tetikleyicisi uyandırılıyor…"
+            http_code="$(curl -sS -L --max-time 120 -o /dev/null -w '%{http_code}' "https://${TARGET_DOMAIN}/" || true)"
+            echo "Tetikleyici isteği tamamlandı (HTTP ${http_code:-yok}); marker yeniden kontrol ediliyor."
+            sleep 5
+            pending="$(list_dir "${base}storage/app/")"
+            framework="$(list_dir "${base}storage/framework/")"
+          fi
+
+          if printf '%s\n' "$pending" | grep -qx 'deploy-pending'; then
+            echo "::error::Önceki yayın tetikleme sonrası da bekliyor. Dosya aktarımı başlatılmadı."
             exit 1
           fi
           if printf '%s\n' "$framework" | grep -qx 'down'; then
@@ -540,6 +555,18 @@ jobs:
           dry-run: ${{ steps.mode.outputs.live != 'true' }}
           dangerous-clean-slate: false
           log-level: standard
+
+      - name: Finalize tetikleyicisini uyandır
+        if: steps.mode.outputs.live == 'true'
+        run: |
+          # Bakım kabuğu (deploy/maintenance-trigger.php), bekleyen marker varsa
+          # ilk HTTP isteğinde finalize.php'yi çalıştırır. Cron gecikse bile
+          # deploy'un kendi isteği "ilk ziyaretçi" olur. HTTP kodu tek başına
+          # başarı ölçütü değildir; kesin doğrulama bir sonraki FTPS adımında
+          # marker + deploy-completed.json üzerinden yapılır.
+          set -u
+          http_code="$(curl -sS -L --max-time 120 -o /dev/null -w '%{http_code}' "https://${TARGET_DOMAIN}/" || true)"
+          echo "Finalize tetikleyicisi çağrıldı (HTTP ${http_code:-yok}); kesin sonuç FTPS ile doğrulanacak."
 
       # Sunucu tarafının GERÇEKTEN bittiğini buradan görürüz: finalize başarıyla
       # tamamlandığında `deploy/finalize.php` işaret dosyasını SİLER. Dizini
