@@ -49,7 +49,7 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
             'owner_id' => $owner->id,
             'month' => '2026-09',
         ]))->assertOk()
-            ->assertSee(route('monthly-account.print', ['owner_id' => $owner->id, 'month' => '2026-09']), false)
+            ->assertSee(route('monthly-account.print', ['owner_id' => $owner->id, 'month' => '2026-09']))
             ->assertSee('target="_blank"', false);
     }
 
