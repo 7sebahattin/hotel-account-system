@@ -48,8 +48,45 @@
         th { border-bottom: 1.5px solid #111; font-weight: 600; white-space: nowrap; }
         tr { page-break-inside: avoid; }
         .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-        table .stay-transaction-time { width: 28mm; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .rev { font-style: italic; }
+
+        /* Konaklama raporu: tarih ve başlık hizalarını net, kompakt ve tutarlı tut. */
+        .stays-print-table { table-layout: fixed; font-size: 9.5pt; }
+        .stays-print-table col.stay-col-date { width: 10%; }
+        .stays-print-table col.stay-col-guest { width: 20%; }
+        .stays-print-table col.stay-col-room { width: 10%; }
+        .stays-print-table col.stay-col-company { width: 18%; }
+        .stays-print-table col.stay-col-amount { width: 11%; }
+        .stays-print-table col.stay-col-status { width: 8%; }
+        .stays-print-table col.stay-col-transaction { width: 13%; }
+        .stays-print-table th,
+        .stays-print-table td { padding: 5px 6px; vertical-align: middle; }
+        .stays-print-table thead th {
+            background: #eef1f4;
+            color: #111;
+            border-top: 1px solid #9aa1a8;
+            border-bottom: 1.5px solid #4f5963;
+            font-weight: 700;
+        }
+        .stays-print-table tbody td { border-bottom-color: #cfd4d9; }
+        .stays-print-table .stay-date-cell {
+            text-align: left;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .stays-print-table .stay-amount-cell {
+            text-align: right;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .stays-print-table .stay-transaction-time {
+            text-align: left;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+        .stays-print-table .stay-transaction-date,
+        .stays-print-table .stay-transaction-clock { display: block; }
+        .stays-print-table .stay-transaction-clock { color: #444; font-size: 9pt; }
 
         /* Yabancı para biriminin altındaki küçük TL karşılığı (v2.1.1-D §3). */
         .fx { display: block; font-size: 8.5pt; color: #666; font-weight: 400; font-variant-numeric: tabular-nums; }

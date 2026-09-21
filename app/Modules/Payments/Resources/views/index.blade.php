@@ -64,11 +64,19 @@
         </thead>
         <tbody>
             @forelse ($payments as $payment)
-                <tr class="border-b border-line last:border-0 hover:bg-well">
-                    <td class="px-4 py-3 whitespace-nowrap">
-                        <a href="{{ route('payments.show', $payment) }}" class="tabular-nums text-tx hover:text-acc">
-                            {{ $payment->payment_date->format('d.m.Y') }}
-                        </a>
+                @php
+                    $canUpdatePayment = auth()->user()->can('update', $payment);
+                    $paymentRowUrl = $canUpdatePayment
+                        ? route('payments.edit', $payment)
+                        : route('payments.show', $payment);
+                @endphp
+                <tr class="payment-row border-b border-line last:border-0"
+                    data-payment-row-url="{{ $paymentRowUrl }}"
+                    tabindex="0"
+                    role="link"
+                    aria-label="{{ $payment->company?->name ?? 'Tahsilat' }} tahsilatını {{ $canUpdatePayment ? 'düzenle' : 'görüntüle' }}">
+                    <td class="px-4 py-3 whitespace-nowrap tabular-nums text-tx">
+                        {{ $payment->payment_date->format('d.m.Y') }}
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $payment->company?->name ?? '—' }}</td>
                     <td class="px-4 py-3 text-right whitespace-nowrap tabular-nums text-tx">
@@ -99,7 +107,12 @@
     {{-- Mobil: yalnızca hızlı okunması gereken alanlar --}}
     <div class="mt-4 space-y-3 lg:hidden">
         @forelse ($payments as $payment)
-            <a href="{{ route('payments.show', $payment) }}" class="block">
+            @php
+                $paymentCardUrl = auth()->user()->can('update', $payment)
+                    ? route('payments.edit', $payment)
+                    : route('payments.show', $payment);
+            @endphp
+            <a href="{{ $paymentCardUrl }}" class="block">
                 <x-ui.card>
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">

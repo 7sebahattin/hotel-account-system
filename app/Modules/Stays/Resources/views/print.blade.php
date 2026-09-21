@@ -49,15 +49,25 @@
     @endif
 
     <div class="scroll-x">
-    <table>
+    <table class="stays-print-table">
+        <colgroup>
+            <col class="stay-col-date">
+            <col class="stay-col-date">
+            <col class="stay-col-guest">
+            <col class="stay-col-room">
+            <col class="stay-col-company">
+            <col class="stay-col-amount">
+            <col class="stay-col-status">
+            <col class="stay-col-transaction">
+        </colgroup>
         <thead>
             <tr>
-                <th>Giriş</th>
-                <th>Çıkış</th>
+                <th class="stay-date-cell">Giriş</th>
+                <th class="stay-date-cell">Çıkış</th>
                 <th>Misafir</th>
                 <th>Oda</th>
                 <th>Cari hesap</th>
-                <th class="num">Tutar</th>
+                <th class="stay-amount-cell">Tutar</th>
                 <th>Durum</th>
                 <th class="stay-transaction-time">İşlem zamanı</th>
             </tr>
@@ -65,19 +75,22 @@
         <tbody>
             @forelse ($stays as $stay)
                 <tr @class(['rev' => $stay->isCancelled()])>
-                    <td class="num">{{ $stay->check_in_date->format('d.m.Y') }}</td>
-                    <td class="num">{{ $stay->check_out_date->format('d.m.Y') }}</td>
+                    <td class="stay-date-cell">{{ $stay->check_in_date->format('d.m.Y') }}</td>
+                    <td class="stay-date-cell">{{ $stay->check_out_date->format('d.m.Y') }}</td>
                     <td>{{ $stay->guest_name }}</td>
                     <td>{{ $stay->roomLabel() ?? '—' }}</td>
                     <td>{{ $stay->company?->name ?? '—' }}</td>
-                    <td class="num">
+                    <td class="stay-amount-cell">
                         {{ $stay->amountMoney()->format($stay->currency) }}
                         @if ($stay->try_equivalent !== null)
                             <span class="fx">≈ {{ $stay->tryEquivalentMoney()->format(\App\Modules\Core\Enums\Currency::TRY) }}</span>
                         @endif
                     </td>
                     <td>{{ $stay->status->label() }}</td>
-                    <td class="stay-transaction-time num">{{ $stay->created_at->format('d.m.Y H:i') }}</td>
+                    <td class="stay-transaction-time">
+                        <span class="stay-transaction-date">{{ $stay->created_at->format('d.m.Y') }}</span>
+                        <span class="stay-transaction-clock">{{ $stay->created_at->format('H:i') }}</span>
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="8">Bu filtreyle eşleşen kayıt bulunamadı.</td></tr>

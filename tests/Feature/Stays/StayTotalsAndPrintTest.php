@@ -7,6 +7,9 @@ namespace Tests\Feature\Stays;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Stays\Models\Stay;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -41,6 +44,26 @@ class StayTotalsAndPrintTest extends TestCase
         $this->assertSame(2, $totals['TRY']['count']);
         $this->assertSame('300.00', $totals['EUR']['total']->toDecimal());
         $this->assertSame(1, $totals['EUR']['count']);
+    }
+
+    #[Test]
+    public function toplam_kartlari_liste_tablosundan_once_gosterilir(): void
+    {
+        Stay::factory()->create(['currency' => 'TRY', 'amount' => '1000.00']);
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.index'))
+            ->assertOk()
+            ->assertSee('TRY toplamı')
+            ->assertSee('1.000,00 ₺');
+
+        $html = (string) $response->getContent();
+        $totalsPosition = strpos($html, 'data-stay-totals');
+        $tablePosition = strpos($html, '<table');
+
+        $this->assertNotFalse($totalsPosition);
+        $this->assertNotFalse($tablePosition);
+        $this->assertTrue($totalsPosition < $tablePosition, 'Toplam kartları konaklama tablosundan önce görünmelidir.');
     }
 
     #[Test]
@@ -106,6 +129,40 @@ class StayTotalsAndPrintTest extends TestCase
     }
 
     #[Test]
+    public function yazdirma_tablosu_tarih_basliklarini_ve_hucrelerini_ayni_hizada_tutar(): void
+    {
+        Stay::factory()->create([
+            'check_in_date' => '2026-09-08',
+            'check_out_date' => '2026-09-09',
+            'created_at' => '2026-09-10 09:12:00',
+        ]);
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.print'))
+            ->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $tables = $xpath->query('//table[contains(concat(" ", normalize-space(@class), " "), " stays-print-table ")]');
+        $this->assertNotFalse($tables);
+        $this->assertSame(1, $tables->length);
+
+        $dateHeaders = $xpath->query('//table[contains(@class, "stays-print-table")]/thead/tr/th[contains(@class, "stay-date-cell")]');
+        $dateCells = $xpath->query('//table[contains(@class, "stays-print-table")]/tbody/tr/td[contains(@class, "stay-date-cell")]');
+        $this->assertNotFalse($dateHeaders);
+        $this->assertNotFalse($dateCells);
+        $this->assertSame(2, $dateHeaders->length);
+        $this->assertSame(2, $dateCells->length);
+
+        $transaction = $xpath->query('//table[contains(@class, "stays-print-table")]/tbody/tr/td[contains(@class, "stay-transaction-time")]')->item(0);
+        $this->assertInstanceOf(DOMElement::class, $transaction);
+        $this->assertStringContainsString('10.09.2026', $transaction->textContent);
+        $this->assertStringContainsString('09:12', $transaction->textContent);
+    }
+
+    #[Test]
     public function yazdirma_islem_zamanini_gosterir_tarihleri_korur_ve_toplamlari_degistirmez(): void
     {
         Stay::factory()->create([
@@ -122,7 +179,7 @@ class StayTotalsAndPrintTest extends TestCase
             ->assertSee('İşlem zamanı')
             ->assertSee('08.09.2026')
             ->assertSee('09.09.2026')
-            ->assertSee('08.09.2026 15:42');
+            ->assertSee('15:42');
 
         $totals = $response->viewData('totals');
         $this->assertSame('1250.00', $totals['TRY']['total']->toDecimal());
