@@ -150,6 +150,14 @@ PR açıklamasında açıkça yazılır.
 
 ## 7. PR standardı
 
+### Release version kuralı
+
+- Kullanıcıya görünür production değişikliği içeren her PR/release, `config/release.php` içindeki `version` sayısını tam bir kez artırır.
+- Aynı PR içindeki commit sayısı sürüm artışını değiştirmez; branch güncel `main` değerinin bir üstüyle açılır.
+- Docs-only, test-only ve CI-only değişikliklerde sürüm artırılmaz.
+- Paralel branch çakışmasında merge öncesi güncel `main` sürümü yeniden kontrol edilir ve sıradaki doğru integer kullanılır.
+- Bu değer canlıdaki UI release göstergesidir; semantic version değildir.
+
 Her PR mümkünse şu bilgileri içermelidir:
 
 ```text

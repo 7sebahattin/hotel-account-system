@@ -48,17 +48,18 @@
                 <x-ui.sort-header :filter="$filter" column="name">Firma</x-ui.sort-header>
                 <x-ui.th>Bakiye</x-ui.th>
                 <x-ui.th>Son hareket</x-ui.th>
-                <x-ui.th></x-ui.th>
             </tr>
         </thead>
         <tbody>
             @forelse ($companies as $company)
                 @php $companyBalances = $balances[$company->id] ?? []; @endphp
-                <tr class="border-b border-line last:border-0 hover:bg-well">
+                <tr class="statement-row border-b border-line last:border-0 hover:bg-well"
+                    data-statement-row-url="{{ route('statements.show', $company) }}"
+                    tabindex="0"
+                    role="link"
+                    aria-label="{{ $company->name }} cari ekstresini aç">
                     <td class="px-4 py-3">
-                        <a href="{{ route('statements.show', $company) }}" class="text-tx hover:text-acc">
-                            {{ $company->name }}
-                        </a>
+                        <span class="text-tx">{{ $company->name }}</span>
                     </td>
                     <td class="px-4 py-3">
                         @include('companies::statements._balances', ['companyBalances' => $companyBalances, 'companyFx' => $fxTotals[$company->id] ?? []])
@@ -68,13 +69,10 @@
                             ? \Illuminate\Support\Carbon::parse($lastDates[$company->id])->format('d.m.Y')
                             : '—' }}
                     </td>
-                    <td class="px-4 py-3 text-right">
-                        <x-ui.button variant="ghost" :href="route('statements.show', $company)">Ekstre</x-ui.button>
-                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="px-4 py-10 text-center text-sm text-mut">
+                    <td colspan="3" class="px-4 py-10 text-center text-sm text-mut">
                         @if ($filter->hasActiveFilters())
                             Bu filtrelerle eşleşen firma bulunamadı.
                             <a href="{{ route('statements.index') }}"

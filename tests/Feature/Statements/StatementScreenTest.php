@@ -15,6 +15,9 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Models\Stay;
 use App\Modules\Stays\Services\StayService;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -135,6 +138,47 @@ class StatementScreenTest extends TestCase
     }
 
     // ------------------------------------------------------------------ UI
+
+    #[Test]
+    public function ekstre_listesi_masaustu_satiri_erisilebilir_ve_tiklanabilirdir(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('statements.index'));
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+        $rows = $xpath->query('//table//tbody/tr[@data-statement-row-url]');
+
+        $this->assertNotFalse($rows);
+        $this->assertSame(1, $rows->length);
+        $row = $rows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('statements.show', $this->company), $row->getAttribute('data-statement-row-url'));
+        $this->assertSame('0', $row->getAttribute('tabindex'));
+        $this->assertSame('link', $row->getAttribute('role'));
+        $this->assertSame(3, $xpath->query('//table//thead/tr/*')->length);
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-statement-row-url]//a')->length);
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-statement-row-url]//button')->length);
+        $this->assertSame(1, $xpath->query('//div[contains(@class, "lg:hidden")]//a[@href="'.route('statements.show', $this->company).'"]')->length);
+    }
+
+    #[Test]
+    public function sidebar_release_surumu_merkezi_config_kaynagindan_render_edilir(): void
+    {
+        $this->actingAs($this->admin)
+            ->get(route('home'))
+            ->assertOk()
+            ->assertSee('Cari Takip')
+            ->assertSee('v1');
+
+        config()->set('release.version', 42);
+
+        $this->actingAs($this->admin)
+            ->get(route('home'))
+            ->assertOk()
+            ->assertSee('Cari Takip')
+            ->assertSee('v42');
+    }
 
     #[Test]
     public function ekstre_islem_turlerini_turkce_gosterir_ham_source_type_gostermez(): void
