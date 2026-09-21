@@ -5,26 +5,295 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $month->translatedFormat('F Y') }} Aylık Hesap Raporu</title>
     <style>
-        :root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        :root {
+            color-scheme: light;
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+        }
+
         * { box-sizing: border-box; }
-        body { margin: 0; background: #fff; color: #18212b; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 9pt; line-height: 1.35; }
-        .toolbar { display: flex; gap: 8px; margin: 12px auto; max-width: 1100px; }
-        .toolbar a, .toolbar button { min-height: 38px; border: 1px solid #67717c; border-radius: 4px; padding: 7px 12px; background: #fff; color: #18212b; cursor: pointer; font: inherit; text-decoration: none; }
-        .report { max-width: 1100px; margin: 0 auto; }
-        .report-head { border-bottom: 2px solid #354150; padding-bottom: 10px; }
-        .brand { font-size: 10pt; font-weight: 750; letter-spacing: .12em; } .product { color: #4e5965; font-size: 8.5pt; }
-        h1 { margin: 9px 0 10px; font-size: 17pt; letter-spacing: .035em; }
-        .meta { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px 14px; font-size: 8.5pt; } .meta dt { color: #59636e; } .meta dd { margin: 1px 0 0; font-weight: 650; }
-        .summaries { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 16px; }
-        .summary { min-height: 61px; border: 1px solid #87919c; border-top: 3px solid #354150; padding: 8px 10px; } .summary dt { color: #4e5965; font-size: 8pt; font-weight: 700; letter-spacing: .04em; } .summary dd { margin: 6px 0 0; font-size: 13pt; font-weight: 750; font-variant-numeric: tabular-nums; }
-        table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; } caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
-        thead { display: table-header-group; } th, td { border: 1px solid #aeb5bc; padding: 3px 3px; vertical-align: top; overflow-wrap: break-word; } th { background: #e8ebee; text-align: center; font-weight: 750; line-height: 1.2; } .group-head { background: #dce1e6; } .day-col { text-align: left; } td { text-align: right; font-variant-numeric: tabular-nums; } tbody tr { break-inside: avoid; page-break-inside: avoid; }
-        .total-row th, .total-row td { background: #e0e5e9; border-top: 2px solid #354150; border-bottom: 2px solid #354150; font-weight: 750; } .date-sub { display: block; color: #59636e; font-size: 7.5pt; font-weight: 400; } .print-amount { margin-bottom: 2px; } .print-amount:last-child { margin-bottom: 0; } .print-amount-primary { display: block; font-weight: 650; white-space: nowrap; } .print-amount-fx { display: block; color: #59636e; font-size: 7.5pt; white-space: nowrap; } .print-empty { color: #69737d; }
-        .payment-col { width: calc(60% / var(--payment-columns)); }
-        .foot { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #87919c; color: #59636e; font-size: 8pt; margin-top: 12px; padding-top: 5px; }
-        @page { size: A4 landscape; margin: 8mm; }
-        @media screen and (max-width: 760px) { body { padding: 10px; } .meta, .summaries { grid-template-columns: 1fr; } .report { overflow-x: auto; } table { min-width: 900px; } }
-        @media print { body { padding: 0; } .toolbar { display: none; } .report { max-width: none; } table { font-size: 8pt; } th, td { padding: 2px; } }
+
+        body {
+            margin: 0;
+            background: #fff;
+            color: #18212b;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-size: 9pt;
+            line-height: 1.35;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            max-width: 1100px;
+            margin: 12px auto;
+        }
+
+        .toolbar a,
+        .toolbar button {
+            min-height: 38px;
+            border: 1px solid #67717c;
+            border-radius: 4px;
+            padding: 7px 12px;
+            background: #fff;
+            color: #18212b;
+            cursor: pointer;
+            font: inherit;
+            text-decoration: none;
+        }
+
+        .report {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .report-head {
+            border-bottom: 2px solid #354150;
+            padding-bottom: 10px;
+        }
+
+        .brand {
+            font-size: 10pt;
+            font-weight: 750;
+            letter-spacing: .12em;
+        }
+
+        .product {
+            color: #4e5965;
+            font-size: 8.5pt;
+        }
+
+        h1 {
+            margin: 9px 0 10px;
+            font-size: 17pt;
+            letter-spacing: .035em;
+        }
+
+        .meta {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px 14px;
+            font-size: 8.5pt;
+        }
+
+        .meta dt { color: #59636e; }
+
+        .meta dd {
+            margin: 1px 0 0;
+            font-weight: 650;
+        }
+
+        .summaries {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 12px 0 16px;
+        }
+
+        .summary {
+            min-height: 61px;
+            border: 1px solid #87919c;
+            border-top: 3px solid #354150;
+            padding: 8px 10px;
+        }
+
+        .summary dt {
+            color: #4e5965;
+            font-size: 8pt;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+
+        .summary dd {
+            margin: 6px 0 0;
+            font-size: 13pt;
+            font-weight: 750;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .print-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+            font-family: "Aptos Narrow", "Arial Narrow", system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-size: 9pt;
+        }
+
+        .print-table.print-cols-dense { font-size: 8.5pt; }
+        .print-table.print-cols-very-dense { font-size: 8pt; }
+
+        .print-table caption {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+        }
+
+        .print-table col.day-column { width: 16mm; }
+        .print-table col.daily-total-column { width: 23mm; }
+        .print-table col.receipt-total-column { width: 26mm; }
+
+        .print-table thead { display: table-header-group; }
+
+        .print-table th,
+        .print-table td {
+            border: 1px solid #aeb5bc;
+            padding: 1.4mm 1mm;
+            vertical-align: top;
+            overflow: hidden;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        .print-table.print-cols-dense th,
+        .print-table.print-cols-dense td {
+            padding: 1.2mm .8mm;
+        }
+
+        .print-table.print-cols-very-dense th,
+        .print-table.print-cols-very-dense td {
+            padding: .9mm .45mm;
+        }
+
+        .print-table th {
+            background: #e8ebee;
+            text-align: center;
+            font-weight: 750;
+            line-height: 1.18;
+            white-space: normal;
+        }
+
+        .print-table td {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .print-table tbody tr {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .group-head {
+            background: #dce1e6;
+            font-size: 8pt;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+        }
+
+        .payment-head {
+            font-weight: 650;
+        }
+
+        .provider-name {
+            display: block;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        .currency-line {
+            display: block;
+            margin-top: .55mm;
+            color: #4e5965;
+            font-size: 8pt;
+            font-weight: 600;
+            line-height: 1.15;
+        }
+
+        .currency-token {
+            display: block;
+            white-space: nowrap;
+        }
+
+        .column-placeholder { color: #69737d; }
+
+        .day-col { text-align: left; }
+
+        .date-main {
+            display: block;
+            white-space: nowrap;
+        }
+
+        .date-sub {
+            display: block;
+            margin-top: .35mm;
+            color: #59636e;
+            font-size: 8pt;
+            font-weight: 400;
+            white-space: normal;
+        }
+
+        .money-cell {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        .money-nowrap,
+        .print-amount-primary,
+        .print-amount-fx {
+            display: block;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            overflow-wrap: normal;
+            word-break: normal;
+        }
+
+        .print-amount { margin-bottom: .8mm; }
+        .print-amount:last-child { margin-bottom: 0; }
+        .print-amount-primary { font-weight: 650; }
+
+        .print-amount-fx {
+            margin-top: .2mm;
+            color: #59636e;
+            font-size: 8pt;
+            font-weight: 400;
+        }
+
+        .print-empty { color: #69737d; }
+
+        .total-row th,
+        .total-row td {
+            background: #e0e5e9;
+            border-top: 2px solid #354150;
+            border-bottom: 2px solid #354150;
+            font-weight: 750;
+        }
+
+        .empty-row {
+            padding: 5mm;
+            text-align: center;
+        }
+
+        .foot {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-top: 1px solid #87919c;
+            margin-top: 12px;
+            padding-top: 5px;
+            color: #59636e;
+            font-size: 8pt;
+        }
+
+        @page {
+            size: A4 landscape;
+            margin: 6mm;
+        }
+
+        @media screen and (max-width: 760px) {
+            body { padding: 10px; }
+            .meta, .summaries { grid-template-columns: 1fr; }
+            .report { overflow-x: auto; }
+            .print-table { min-width: 900px; }
+        }
+
+        @media print {
+            body { padding: 0; }
+            .toolbar { display: none; }
+            .report { max-width: none; }
+        }
     </style>
 </head>
 <body>
@@ -39,6 +308,25 @@
             foreach ($banks as $bank) { $columns[] = ['method' => $method, 'bank' => $bank, 'label' => $methodLabels[$method]]; }
         }
         $columns[] = ['method' => 'extra', 'bank' => null, 'label' => $methodLabels['extra']];
+        $currencyOrder = collect(\App\Modules\Core\Enums\Currency::cases())
+            ->mapWithKeys(fn ($currency, int $index): array => [$currency->value => $index]);
+        $columns = collect($columns)->map(function (array $column) use ($currencyOrder, $summary): array {
+            $amounts = $column['bank']
+                ? ($summary['banks'][$column['method']][$column['bank']] ?? [])
+                : ($summary['methods'][$column['method']] ?? []);
+            $column['currencies'] = collect(array_keys($amounts))
+                ->sortBy(fn (string $code): int => $currencyOrder->get($code, PHP_INT_MAX))
+                ->values()
+                ->all();
+
+            return $column;
+        })->all();
+        $columnCount = count($columns) + 3;
+        $densityClass = match (true) {
+            $columnCount <= 10 => 'print-cols-normal',
+            $columnCount <= 13 => 'print-cols-dense',
+            default => 'print-cols-very-dense',
+        };
         $recorded = $days->filter(fn ($day) => ! $day->isDeleted())->count();
         $storedDates = $days->keys()->sort()->values();
         $listedDayNumbers = $storedDates->isEmpty() ? [] : range((int) substr($storedDates->first(), 8, 2), (int) substr($storedDates->last(), 8, 2));
@@ -47,20 +335,71 @@
     <main class="report">
         <header class="report-head"><div class="brand">LEMON</div><div class="product">Cari Takip</div><h1>AYLIK HESAP RAPORU</h1><dl class="meta"><div><dt>Dönem</dt><dd>{{ $month->translatedFormat('F Y') }}</dd></div><div><dt>Hesap sahibi</dt><dd>{{ $owner->name }}</dd></div><div><dt>Kayıtlı gün</dt><dd>{{ $recorded }}</dd></div><div><dt>Rapor tarihi</dt><dd>{{ $generatedAt->format('d.m.Y H:i') }}</dd></div><div><dt>Hazırlayan</dt><dd>{{ $preparedBy->name }}</dd></div></dl></header>
         <dl class="summaries"><div class="summary"><dt>GÜNLÜK LİSTE TOPLAMI</dt><dd>{{ $summary['daily_total']->format($try) }}</dd></div><div class="summary"><dt>ALINAN ÖDEMELER · TL KARŞILIĞI</dt><dd>{{ $summary['receipt_total']->format($try) }}</dd></div><div class="summary"><dt>LİSTEYE GÖRE FARK</dt><dd>{{ $summary['difference']->format($try) }}</dd></div></dl>
-        <table style="--payment-columns: {{ count($columns) }};">
+        <table class="print-table {{ $densityClass }}" data-column-count="{{ $columnCount }}">
             <caption>{{ $month->translatedFormat('F Y') }} aylık hesap ödeme ayrıntıları</caption>
-            <colgroup><col style="width: 15%;"><col style="width: 12%;">@foreach ($columns as $column)<col class="payment-col">@endforeach<col style="width: 13%;"></colgroup>
-            <thead><tr><th scope="col" rowspan="2" class="day-col">Gün</th><th scope="col" rowspan="2">Günlük Liste<br>TL</th>@foreach (collect($columns)->groupBy('method') as $method => $methodColumns)<th scope="colgroup" colspan="{{ count($methodColumns) }}" class="group-head">{{ $methodLabels[$method] }}</th>@endforeach<th scope="col" rowspan="2">Ödemeler<br>TL Karşılığı</th></tr><tr>@foreach ($columns as $column)<th scope="col">{{ $column['bank'] ?? $column['label'] }}</th>@endforeach</tr></thead>
+            <colgroup>
+                <col class="day-column">
+                <col class="daily-total-column">
+                @foreach ($columns as $column)
+                    <col class="payment-column">
+                @endforeach
+                <col class="receipt-total-column">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th scope="col" rowspan="2" class="day-col">Gün</th>
+                    <th scope="col" rowspan="2">Günlük Liste<br>TL</th>
+                    @foreach (collect($columns)->groupBy('method') as $method => $methodColumns)
+                        <th scope="colgroup" colspan="{{ count($methodColumns) }}" class="group-head">{{ $methodLabels[$method] }}</th>
+                    @endforeach
+                    <th scope="col" rowspan="2">Ödemeler<br>TL Karşılığı</th>
+                </tr>
+                <tr class="payment-headers">
+                    @foreach ($columns as $column)
+                        <th scope="col" class="payment-head">
+                            @if ($column['bank'])
+                                <span class="provider-name">{{ $column['bank'] }}</span>
+                            @endif
+                            @if ($column['currencies'] !== [])
+                                <span class="currency-line">
+                                    @foreach ($column['currencies'] as $code)
+                                        @php($currency = \App\Modules\Core\Enums\Currency::from($code))
+                                        <span class="currency-token">{{ $code }}@if ($currency->symbol() !== $code) · {{ $currency->symbol() }}@endif</span>
+                                    @endforeach
+                                </span>
+                            @elseif (! $column['bank'])
+                                <span class="column-placeholder" aria-hidden="true">—</span>
+                            @endif
+                        </th>
+                    @endforeach
+                </tr>
+            </thead>
             <tbody>
                 @forelse ($listedDayNumbers as $number)
                     @php($date = $month->setDay($number))
                     @php($day = $days->get($date->toDateString()))
                     @php($daySummary = $day && ! $day->isDeleted() ? $day->currentRevision->summary() : null)
-                    <tr><th scope="row" class="day-col">{{ $date->translatedFormat('d F') }}<span class="date-sub">{{ $date->translatedFormat('l') }}@if ($day?->isDeleted()) · Silindi @endif</span></th><td>{{ $daySummary ? $daySummary['daily_total']->format($try) : '—' }}</td>@foreach ($columns as $column)@php($amounts = $column['bank'] ? ($daySummary['banks'][$column['method']][$column['bank']] ?? []) : ($daySummary['methods'][$column['method']] ?? []))<td>@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>@endforeach<td>{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</td></tr>
+                    <tr>
+                        <th scope="row" class="day-col"><span class="date-main">{{ $date->translatedFormat('d F') }}</span><span class="date-sub">{{ $date->translatedFormat('l') }}@if ($day?->isDeleted()) · Silindi @endif</span></th>
+                        <td class="money-cell"><span class="money-nowrap">{{ $daySummary ? $daySummary['daily_total']->format($try) : '—' }}</span></td>
+                        @foreach ($columns as $column)
+                            @php($amounts = $column['bank'] ? ($daySummary['banks'][$column['method']][$column['bank']] ?? []) : ($daySummary['methods'][$column['method']] ?? []))
+                            <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
+                        @endforeach
+                        <td class="money-cell"><span class="money-nowrap">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</span></td>
+                    </tr>
                 @empty
-                    <tr><td colspan="{{ count($columns) + 3 }}" style="text-align:center; padding:18px;">Bu ay için kayıt yok.</td></tr>
+                    <tr><td colspan="{{ count($columns) + 3 }}" class="empty-row">Bu ay için kayıt yok.</td></tr>
                 @endforelse
-                <tr class="total-row"><th scope="row">AY TOPLAMI</th><td>{{ $summary['daily_total']->format($try) }}</td>@foreach ($columns as $column)@php($amounts = $column['bank'] ? ($summary['banks'][$column['method']][$column['bank']] ?? []) : ($summary['methods'][$column['method']] ?? []))<td>@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>@endforeach<td>{{ $summary['receipt_total']->format($try) }}</td></tr>
+                <tr class="total-row">
+                    <th scope="row" class="day-col">AY TOPLAMI</th>
+                    <td class="money-cell"><span class="money-nowrap">{{ $summary['daily_total']->format($try) }}</span></td>
+                    @foreach ($columns as $column)
+                        @php($amounts = $column['bank'] ? ($summary['banks'][$column['method']][$column['bank']] ?? []) : ($summary['methods'][$column['method']] ?? []))
+                        <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
+                    @endforeach
+                    <td class="money-cell"><span class="money-nowrap">{{ $summary['receipt_total']->format($try) }}</span></td>
+                </tr>
             </tbody>
         </table>
         <footer class="foot"><span>Lemon Cari Takip · {{ $month->translatedFormat('F Y') }} Aylık Hesap Raporu</span><span>Oluşturulma: {{ $generatedAt->format('d.m.Y H:i') }}</span></footer>
