@@ -38,6 +38,8 @@
         background: #fff;
         color: var(--receipt-ink);
         box-shadow: 0 2mm 8mm rgb(17 24 39 / 7%);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     .receipt-cancelled {
@@ -236,8 +238,8 @@
 
     .receipt-method[data-checked="true"] .receipt-method-box {
         border-color: var(--receipt-gold);
-        background: var(--receipt-gold);
-        color: #fff;
+        background: var(--receipt-gold-soft);
+        color: var(--receipt-ink);
     }
 
     .receipt-description {
