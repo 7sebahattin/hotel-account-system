@@ -116,10 +116,46 @@ class PaymentReceiptTest extends TestCase
             ->assertSee($payment->receipt_no)
             ->assertSee('Monarch')
             ->assertSee('5.000,00 ₺')
-            ->assertSee('Havale / EFT')
+            ->assertSee('Havale/EFT')
             ->assertSee('DEKONT-42')
-            ->assertSee('TAHSİLAT MAKBUZU')
-            ->assertSee('fatura/e-Arşiv fatura DEĞİLDİR');
+            ->assertSee('TAHSİLAT')
+            ->assertSee('MAKBUZU')
+            ->assertSee('LEMON HOTEL')
+            ->assertSee('Teslim Eden (Ödeyen)')
+            ->assertSee('Teslim Alan (Firma Yetkilisi)')
+            ->assertSee($admin->name)
+            ->assertSee('Diğer')
+            ->assertSee('data-receipt-template="v4"', false)
+            ->assertSee('fatura/e-Arşiv fatura değildir');
+    }
+
+    #[Test]
+    public function makbuz_referans_kur_odeyen_ve_diger_odeme_secenegini_tutarlı_gosterir(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $payment = $this->makePayment($admin, [
+            'currency' => 'EUR',
+            'amount' => '100.00',
+            'exchange_rate_to_try' => '52.50',
+            'payment_method' => 'other',
+            'reference_no' => 'REF-V4-01',
+            'payer_type' => 'company',
+            'payer_name' => 'Ödeyen Yetkili',
+            'description' => 'Makbuz açıklaması',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('payments.receipt', $payment));
+
+        $response->assertOk()
+            ->assertSee('Monarch')
+            ->assertSee('Ödeyen: Ödeyen Yetkili')
+            ->assertSee('REF-V4-01')
+            ->assertSee('Kur:')
+            ->assertSee('TL karşılığı:')
+            ->assertSee('Makbuz açıklaması')
+            ->assertSee('Diğer')
+            ->assertSee('data-receipt-method="other"', false)
+            ->assertSee('data-checked="true"', false);
     }
 
     #[Test]
