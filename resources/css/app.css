@@ -523,4 +523,26 @@
     .filter-panel[open] > summary .filter-panel-chevron {
         transform: rotate(180deg);
     }
+
+
+    /*
+        Tahsilat detayındaki yüksek riskli iptal aksiyonu varsayılan olarak
+        kapalıdır. Native <details>/<summary> kullanıldığı için JS gerekmez;
+        klavye ve erişilebilirlik tarayıcının kendi davranışıyla korunur.
+    */
+    .payment-cancel-panel > summary {
+        list-style: none;
+    }
+
+    .payment-cancel-panel > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .payment-cancel-panel-chevron {
+        transition: transform 150ms ease;
+    }
+
+    .payment-cancel-panel[open] > summary .payment-cancel-panel-chevron {
+        transform: rotate(180deg);
+    }
 }
