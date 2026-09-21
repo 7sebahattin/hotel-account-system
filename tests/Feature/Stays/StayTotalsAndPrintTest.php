@@ -7,6 +7,9 @@ namespace Tests\Feature\Stays;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Stays\Models\Stay;
+use DOMDocument;
+use DOMElement;
+use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -103,6 +106,40 @@ class StayTotalsAndPrintTest extends TestCase
         $this->actingAs($this->userWithRole(RoleName::Personel))
             ->get(route('stays.print'))
             ->assertOk();
+    }
+
+    #[Test]
+    public function yazdirma_tablosu_tarih_basliklarini_ve_hucrelerini_ayni_hizada_tutar(): void
+    {
+        Stay::factory()->create([
+            'check_in_date' => '2026-09-08',
+            'check_out_date' => '2026-09-09',
+            'created_at' => '2026-09-10 09:12:00',
+        ]);
+
+        $response = $this->actingAs($this->userWithRole(RoleName::Admin))
+            ->get(route('stays.print'))
+            ->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $tables = $xpath->query('//table[contains(concat(" ", normalize-space(@class), " "), " stays-print-table ")]');
+        $this->assertNotFalse($tables);
+        $this->assertSame(1, $tables->length);
+
+        $dateHeaders = $xpath->query('//table[contains(@class, "stays-print-table")]/thead/tr/th[contains(@class, "stay-date-cell")]');
+        $dateCells = $xpath->query('//table[contains(@class, "stays-print-table")]/tbody/tr/td[contains(@class, "stay-date-cell")]');
+        $this->assertNotFalse($dateHeaders);
+        $this->assertNotFalse($dateCells);
+        $this->assertSame(2, $dateHeaders->length);
+        $this->assertSame(2, $dateCells->length);
+
+        $transaction = $xpath->query('//table[contains(@class, "stays-print-table")]/tbody/tr/td[contains(@class, "stay-transaction-time")]')->item(0);
+        $this->assertInstanceOf(DOMElement::class, $transaction);
+        $this->assertStringContainsString('10.09.2026', $transaction->textContent);
+        $this->assertStringContainsString('09:12', $transaction->textContent);
     }
 
     #[Test]
