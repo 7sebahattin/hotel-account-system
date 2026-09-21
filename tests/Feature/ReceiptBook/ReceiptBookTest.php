@@ -119,8 +119,48 @@ class ReceiptBookTest extends TestCase
         $this->actingAs($admin)
             ->get(route('receipt-book.print', $entry))
             ->assertOk()
-            ->assertSee('TAHSİLAT MAKBUZU')
+            ->assertSee('TAHSİLAT')
+            ->assertSee('MAKBUZU')
+            ->assertSee('LEMON HOTEL')
+            ->assertSee('KURTOĞLU MÜHENDİSLİK')
+            ->assertSee('Örnek Müşteri')
+            ->assertSee('1.500,00 ₺')
+            ->assertSee('Bin Beş Yüz Türk Lirası')
+            ->assertSee('Nakit')
+            ->assertSee('Diğer')
+            ->assertSee('Teslim Alan (Firma Yetkilisi)')
+            ->assertSee($admin->name)
+            ->assertSee('data-receipt-template="v4"', false)
             ->assertSee($entry->receipt_no);
+    }
+
+    #[Test]
+    public function yazdirma_kur_bilgisini_ve_odeme_seklini_referans_duzeninde_gosterir(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $this->actingAs($admin)
+            ->post(route('receipt-book.store'), $this->payload([
+                'currency' => 'EUR',
+                'amount' => '100,00',
+                'exchange_rate_to_try' => '52,50',
+                'payment_method' => 'credit_card',
+                'description' => 'Kartlı makbuz',
+            ]))
+            ->assertSessionDoesntHaveErrors();
+
+        $entry = ReceiptBookEntry::query()->firstOrFail();
+
+        $this->actingAs($admin)
+            ->get(route('receipt-book.print', $entry))
+            ->assertOk()
+            ->assertSee('100,00 €')
+            ->assertSee('K. Kartı')
+            ->assertSee('Kur:')
+            ->assertSee('TL karşılığı:')
+            ->assertSee('Kartlı makbuz')
+            ->assertSee('data-receipt-method="credit_card"', false)
+            ->assertSee('data-checked="true"', false);
     }
 
     #[Test]
