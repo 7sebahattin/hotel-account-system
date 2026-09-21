@@ -6,6 +6,8 @@ namespace Tests\Feature\MonthlyAccount;
 
 use App\Modules\Authorization\Enums\RoleName;
 use DOMDocument;
+use DOMElement;
+use DOMNode;
 use DOMXPath;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -35,9 +37,13 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
             ->assertSee('-1.037.071,26')
             ->assertSee('Garanti BBVA')
             ->assertSee('Yapı Kredi')
+            ->assertSee('GBP · £')
+            ->assertSee('EUR · €')
             ->assertSee('11.418,00')
             ->assertSee('≈ 740.755,02')
             ->assertSee('AY TOPLAMI')
+            ->assertSee('table-layout: auto', false)
+            ->assertDontSee('table-layout: fixed', false)
             ->assertDontSee('sidebar', false)
             ->assertDontSee('bottom-nav', false)
             ->assertDontSee('+ Günlük kayıt');
@@ -101,15 +107,40 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
         $xpath = new DOMXPath($dom);
         $tables = $xpath->query('//main[contains(@class, "report")]//table');
         $rowHeaders = $xpath->query('//main[contains(@class, "report")]//table/tbody/tr/th[@scope="row"]');
+        $groupHeaders = $xpath->query('//main[contains(@class, "report")]//table/thead/tr[1]/th[@scope="colgroup"]');
+        $paymentHeaders = $xpath->query('//main[contains(@class, "report")]//table/thead/tr[contains(@class, "payment-headers")]/th');
+        $columnDefinitions = $xpath->query('//main[contains(@class, "report")]//table/colgroup/col');
 
         $this->assertNotFalse($tables);
         $this->assertSame(1, $tables->length);
+        $table = $tables->item(0);
+        $this->assertInstanceOf(DOMElement::class, $table);
+        $this->assertStringContainsString('print-cols-very-dense', $table->getAttribute('class'));
+        $this->assertSame('17', $table->getAttribute('data-column-count'));
+        $this->assertNotFalse($columnDefinitions);
+        $this->assertSame(17, $columnDefinitions->length);
         $this->assertNotFalse($rowHeaders);
         $this->assertSame(4, $rowHeaders->length);
         $this->assertStringStartsWith('01 Eylül', trim($rowHeaders->item(0)->textContent));
         $this->assertStringStartsWith('02 Eylül', trim($rowHeaders->item(1)->textContent));
         $this->assertStringStartsWith('03 Eylül', trim($rowHeaders->item(2)->textContent));
         $this->assertSame('AY TOPLAMI', trim($rowHeaders->item(3)->textContent));
+
+        $this->assertNotFalse($groupHeaders);
+        $this->assertSame(
+            ['Nakit', 'Kredi Kartı', 'Link Ödeme', 'Havale', 'Ekstra'],
+            array_map(static fn (DOMNode $header): string => trim($header->textContent), iterator_to_array($groupHeaders)),
+        );
+        $this->assertNotFalse($paymentHeaders);
+        $paymentHeaderText = implode(' ', array_map(
+            static fn (DOMNode $header): string => preg_replace('/\s+/u', ' ', trim($header->textContent)) ?? '',
+            iterator_to_array($paymentHeaders),
+        ));
+        $this->assertStringNotContainsString('POS', $paymentHeaderText);
+        $this->assertStringNotContainsString('Link Ödeme', $paymentHeaderText);
+        $this->assertStringNotContainsString('Havale', $paymentHeaderText);
+        $this->assertStringContainsString('Garanti BBVA TRY · ₺', $paymentHeaderText);
+        $this->assertStringContainsString('Ziraat Bankası TRY · ₺', $paymentHeaderText);
     }
 
     #[Test]
