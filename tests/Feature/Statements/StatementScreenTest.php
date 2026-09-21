@@ -16,6 +16,7 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Models\Stay;
 use App\Modules\Stays\Services\StayService;
 use DOMDocument;
+use DOMElement;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -148,8 +149,10 @@ class StatementScreenTest extends TestCase
         $xpath = new DOMXPath($dom);
         $rows = $xpath->query('//table//tbody/tr[@data-statement-row-url]');
 
+        $this->assertNotFalse($rows);
         $this->assertSame(1, $rows->length);
         $row = $rows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $row);
         $this->assertSame(route('statements.show', $this->company), $row->getAttribute('data-statement-row-url'));
         $this->assertSame('0', $row->getAttribute('tabindex'));
         $this->assertSame('link', $row->getAttribute('role'));
