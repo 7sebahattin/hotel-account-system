@@ -3,7 +3,13 @@
 
 @section('content')
     <x-ui.page-header title="Cari Ekstre" :count="$companies->total()"
-                      subtitle="Ekstresini görmek istediğiniz firmayı seçin." />
+                      subtitle="Ekstresini görmek istediğiniz firmayı seçin.">
+        <x-slot:actions>
+            <x-ui.button variant="secondary"
+                         :href="route('statements.print-index', request()->except(['page', 'per_page']))"
+                         target="_blank" rel="noopener">Yazdır</x-ui.button>
+        </x-slot:actions>
+    </x-ui.page-header>
 
     <x-ui.filter-panel :count="$filter->activeFilterCount()"
                        :clear-href="route('statements.index')"
