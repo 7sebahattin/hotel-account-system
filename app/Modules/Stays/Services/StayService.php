@@ -407,7 +407,7 @@ class StayService
 
                 return [$stay->getKey() => [
                     'edited' => $edited,
-                    'user' => $actor?->name ?? 'Kullanıcı bulunamadı',
+                    'user' => $actor->name,
                     'at' => $at->toDateTimeString(),
                 ]];
             })
