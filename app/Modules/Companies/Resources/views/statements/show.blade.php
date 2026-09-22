@@ -182,7 +182,7 @@
                     <td class="px-4 py-3 whitespace-nowrap text-xs">
                         @if ($sourceMeta)
                             <span class="block font-medium text-tx">{{ $sourceMeta['edited'] ? 'Düzenleyen' : 'Oluşturan' }}: {{ $sourceMeta['user'] }}</span>
-                            <span class="mt-0.5 block tabular-nums text-mut">{{ IlluminateSupportCarbon::parse($sourceMeta['at'])->format('d.m.Y H:i') }}</span>
+                            <span class="mt-0.5 block tabular-nums text-mut">{{ $sourceMeta['at'] }}</span>
                         @else
                             <span class="text-mut">Kaynak kayıt bulunamadı</span>
                         @endif
@@ -253,7 +253,7 @@
                     <span class="text-xs">
                         @if ($sourceMeta)
                             <span class="block font-medium text-tx">{{ $sourceMeta['edited'] ? 'Düzenleyen' : 'Oluşturan' }}: {{ $sourceMeta['user'] }}</span>
-                            <span class="mt-0.5 block tabular-nums text-mut">{{ IlluminateSupportCarbon::parse($sourceMeta['at'])->format('d.m.Y H:i') }}</span>
+                            <span class="mt-0.5 block tabular-nums text-mut">{{ $sourceMeta['at'] }}</span>
                         @else
                             <span class="text-mut">Kaynak kayıt bulunamadı</span>
                         @endif
