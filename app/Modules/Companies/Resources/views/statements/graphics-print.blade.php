@@ -16,8 +16,14 @@
         .graphics-bars { margin-top: 6px; }
         .graphics-bar-row { display: grid; grid-template-columns: 48mm minmax(50mm, 1fr) 35mm; gap: 6px; align-items: center; margin-top: 4px; }
         .graphics-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .graphics-bar-track { height: 5mm; border: 1px solid currentColor; padding: 1px; }
-        .graphics-bar-fill { height: 100%; background: currentColor; opacity: .35; }
+        .graphics-bar-svg {
+            display: block;
+            width: 100%;
+            height: 5mm;
+            color: currentColor;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
         .graphics-bar-value { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
         .graphics-activity { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
         .graphics-activity-item { border: 1px solid currentColor; padding: 6px 7px; page-break-inside: avoid; }
@@ -75,9 +81,13 @@
                         @foreach ($group['rows'] as $row)
                             <div class="graphics-bar-row">
                                 <div class="graphics-bar-label">{{ $row['company']->name }}</div>
-                                <div class="graphics-bar-track">
-                                    <div class="graphics-bar-fill" style="width: {{ $row['barPercent'] }}%"></div>
-                                </div>
+                                <svg class="graphics-bar-svg" viewBox="0 0 100 10"
+                                     preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                                    <rect x="0" y="0" width="{{ $row['barPercent'] }}" height="10"
+                                          fill="currentColor" />
+                                    <rect x="0.5" y="0.5" width="99" height="9"
+                                          fill="none" stroke="currentColor" stroke-width="1" />
+                                </svg>
                                 <div class="graphics-bar-value">{{ $row['balance']->format($group['currency']) }}</div>
                             </div>
                         @endforeach
