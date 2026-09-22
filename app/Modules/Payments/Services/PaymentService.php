@@ -268,7 +268,7 @@ class PaymentService
 
                 return [$payment->getKey() => [
                     'edited' => $edited,
-                    'user' => $actor?->name ?? 'Kullanıcı bulunamadı',
+                    'user' => $actor->name,
                     'at' => $at->toDateTimeString(),
                 ]];
             })
