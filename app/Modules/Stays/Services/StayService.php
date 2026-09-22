@@ -384,7 +384,6 @@ class StayService
         return Stay::query()->whereIn('id', $ids)->pluck('id')->all();
     }
 
-
     /**
      * Cari ekstre kaynak satırları için oluşturan/düzenleyen bilgisini toplu getirir.
      *
