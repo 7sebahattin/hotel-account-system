@@ -245,6 +245,37 @@ class PaymentService
         return Payment::query()->whereIn('id', $ids)->pluck('id')->all();
     }
 
+
+    /**
+     * Cari ekstre kaynak satırları için oluşturan/düzenleyen bilgisini toplu getirir.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, array{edited: bool, user: string, at: string}>
+     */
+    public function statementSourceInfoFor(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Payment::query()
+            ->with(['creator:id,name', 'updater:id,name'])
+            ->whereIn('id', $ids)
+            ->get(['id', 'created_by', 'updated_by', 'created_at', 'updated_at'])
+            ->mapWithKeys(function (Payment $payment): array {
+                $edited = $payment->updated_at->gt($payment->created_at);
+                $actor = $edited ? $payment->updater : $payment->creator;
+                $at = $edited ? $payment->updated_at : $payment->created_at;
+
+                return [$payment->getKey() => [
+                    'edited' => $edited,
+                    'user' => $actor?->name ?? 'Kullanıcı bulunamadı',
+                    'at' => $at->toDateTimeString(),
+                ]];
+            })
+            ->all();
+    }
+
     /**
      * `id` ile tek tahsilat — FxCorrection modülünün tek bilmesi GEREKEN
      * erişim yoludur (§4.3/1: o modül `Payment::class`i hiç KULLANMAZ).
