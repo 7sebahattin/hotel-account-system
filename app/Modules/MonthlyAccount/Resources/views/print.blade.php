@@ -411,21 +411,6 @@
             'link' => ['LİNK ÖDEME', 'LINK ÖDEME'],
             'bank_transfer' => ['HAVALE'],
         ];
-        $receiptBreakdownMethods = [
-            'cash' => 'Nakit',
-            'credit_card' => 'Kredi Kartı',
-            'link' => 'Link Ödeme',
-            'bank_transfer' => 'Havale',
-            'extra' => 'Ekstra',
-        ];
-        $methodTryTotal = static function (array $accountSummary, string $method) {
-            $total = \App\Modules\Core\Support\Money::zero();
-            foreach (($accountSummary['methods'][$method] ?? []) as $amount) {
-                $total = $total->add($amount['try_equivalent']);
-            }
-
-            return $total;
-        };
         $columns = collect($columns)->map(function (array $column) use ($currencyOrder, $currencyTokens, $methodTokens, $summary): array {
             $amounts = $column['bank']
                 ? ($summary['banks'][$column['method']][$column['bank']] ?? [])
@@ -536,17 +521,7 @@
                             <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                         @endforeach
                         <td class="money-cell receipt-total-cell">
-                            @if ($daySummary)
-                                <div class="receipt-breakdown" data-print-receipt-breakdown="day">
-                                    @foreach ($receiptBreakdownMethods as $method => $label)
-                                        @php($methodTotal = $methodTryTotal($daySummary, $method))
-                                        <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
-                                    @endforeach
-                                    <div class="receipt-breakdown-line receipt-breakdown-total"><span class="receipt-breakdown-label">Toplam:</span><span class="receipt-breakdown-value">{{ $daySummary['receipt_total']->format($try) }}</span></div>
-                                </div>
-                            @else
-                                <span class="money-nowrap">—</span>
-                            @endif
+                            <x-monthly-receipt-breakdown :summary-data="$daySummary" data-print-receipt-breakdown="day" />
                         </td>
                     </tr>
                 @empty
@@ -560,13 +535,7 @@
                         <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                     @endforeach
                     <td class="money-cell receipt-total-cell">
-                        <div class="receipt-breakdown" data-print-receipt-breakdown="month">
-                            @foreach ($receiptBreakdownMethods as $method => $label)
-                                @php($methodTotal = $methodTryTotal($summary, $method))
-                                <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
-                            @endforeach
-                            <div class="receipt-breakdown-line receipt-breakdown-total"><span class="receipt-breakdown-label">Toplam:</span><span class="receipt-breakdown-value">{{ $summary['receipt_total']->format($try) }}</span></div>
-                        </div>
+                        <x-monthly-receipt-breakdown :summary-data="$summary" data-print-receipt-breakdown="month" />
                     </td>
                 </tr>
             </tbody>
