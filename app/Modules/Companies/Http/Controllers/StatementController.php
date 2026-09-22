@@ -19,6 +19,7 @@ use App\Modules\Stays\Services\StayService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -217,6 +218,21 @@ class StatementController extends Controller
         ]);
     }
 
+    /** Borçlu carilerin read-only grafik dashboard'u (`ledger.view_all`). */
+    public function graphics(Request $request, CompanyFilter $filter): View
+    {
+        return view('companies::statements.graphics', $this->graphicsData($request, $filter));
+    }
+
+    /** Grafik dashboard'unun sayfalamasız yazdırma görünümü. */
+    public function printGraphics(Request $request, CompanyFilter $filter): View
+    {
+        return view('companies::statements.graphics-print', [
+            ...$this->graphicsData($request, $filter),
+            'generatedAt' => now(),
+        ]);
+    }
+
     /** Tek firmanın cari ekstresi (`ledger.view`). */
     public function show(Request $request, Company $company): View
     {
@@ -230,6 +246,170 @@ class StatementController extends Controller
     public function print(Request $request, Company $company): View
     {
         return view('companies::statements.print', $this->statementData($request, $company));
+    }
+
+    /**
+     * Borç grafiklerinin TEK veri üretim yolu. Ekran ve print aynı sonucu kullanır.
+     * Bakiye hesabı yeniden yazılmaz; LedgerStatementService'in mevcut bulk
+     * bakiyeleri kullanılır. Farklı para birimleri hiçbir aşamada birleştirilmez.
+     *
+     * @return array<string, mixed>
+     */
+    private function graphicsData(Request $request, CompanyFilter $filter): array
+    {
+        $selectedCurrency = Currency::tryFrom((string) $request->query('currency', ''));
+
+        /** @var Collection<int, Company> $companies */
+        $companies = $filter->apply(Company::query())->get(['id', 'name']);
+
+        /** @var array<int, int> $companyIds */
+        $companyIds = $companies->pluck('id')->all();
+        $allBalances = $this->statements->balancesForCompanies($companyIds);
+        $lastDates = $this->statements->lastEntryDates($companyIds);
+
+        /** @var array<string, list<array{company: Company, balance: Money, lastDate: ?string, daysSince: ?int}>> $rowsByCurrency */
+        $rowsByCurrency = [];
+        /** @var array<string, Money> $totalsByCurrency */
+        $totalsByCurrency = [];
+        /** @var array<string, int> $countsByCurrency */
+        $countsByCurrency = [];
+
+        foreach (Currency::cases() as $currency) {
+            if ($selectedCurrency !== null && $currency !== $selectedCurrency) {
+                continue;
+            }
+
+            $rowsByCurrency[$currency->value] = [];
+            $totalsByCurrency[$currency->value] = Money::zero();
+            $countsByCurrency[$currency->value] = 0;
+        }
+
+        /** @var array<int, true> $debtorCompanyIds */
+        $debtorCompanyIds = [];
+        /** @var list<array{company: Company, currency: Currency, balance: Money, lastDate: ?string, daysSince: ?int}> $detailRows */
+        $detailRows = [];
+
+        foreach ($companies as $company) {
+            $lastDate = $lastDates[$company->id] ?? null;
+            $daysSince = $this->activityDaysSince($lastDate);
+
+            foreach ($allBalances[$company->id] ?? [] as $code => $balance) {
+                $currency = Currency::tryFrom($code);
+
+                if ($currency === null || ! isset($rowsByCurrency[$code]) || ! $balance->isPositive()) {
+                    continue;
+                }
+
+                $row = [
+                    'company' => $company,
+                    'balance' => $balance,
+                    'lastDate' => $lastDate,
+                    'daysSince' => $daysSince,
+                ];
+
+                $rowsByCurrency[$code][] = $row;
+                $totalsByCurrency[$code] = $totalsByCurrency[$code]->add($balance);
+                $countsByCurrency[$code]++;
+                $debtorCompanyIds[$company->id] = true;
+                $detailRows[] = $row + ['currency' => $currency];
+            }
+        }
+
+        /** @var list<array{currency: Currency, total: Money, companyCount: int, rows: list<array{company: Company, balance: Money, lastDate: ?string, daysSince: ?int, barPercent: int}>}> $currencyGroups */
+        $currencyGroups = [];
+
+        foreach (Currency::cases() as $currency) {
+            $code = $currency->value;
+
+            if (! isset($rowsByCurrency[$code]) || $rowsByCurrency[$code] === []) {
+                continue;
+            }
+
+            $rows = $rowsByCurrency[$code];
+            usort($rows, static fn (array $a, array $b): int => $b['balance']->minorUnits <=> $a['balance']->minorUnits);
+            $maxMinorUnits = $rows[0]['balance']->minorUnits;
+
+            $rowsWithBars = array_map(static function (array $row) use ($maxMinorUnits): array {
+                $row['barPercent'] = max(4, intdiv($row['balance']->minorUnits * 100, $maxMinorUnits));
+
+                return $row;
+            }, $rows);
+
+            $currencyGroups[] = [
+                'currency' => $currency,
+                'total' => $totalsByCurrency[$code],
+                'companyCount' => $countsByCurrency[$code],
+                'rows' => $rowsWithBars,
+            ];
+        }
+
+        $currencyOrder = array_flip(array_map(static fn (Currency $currency): string => $currency->value, Currency::cases()));
+        usort($detailRows, static function (array $a, array $b) use ($currencyOrder): int {
+            $currencyCompare = ($currencyOrder[$a['currency']->value] ?? PHP_INT_MAX)
+                <=> ($currencyOrder[$b['currency']->value] ?? PHP_INT_MAX);
+
+            return $currencyCompare !== 0
+                ? $currencyCompare
+                : $b['balance']->minorUnits <=> $a['balance']->minorUnits;
+        });
+
+        /** @var array<string, array{label: string, count: int, percent: int}> $activityBuckets */
+        $activityBuckets = [
+            'recent' => ['label' => '0–30 gün', 'count' => 0, 'percent' => 0],
+            'middle' => ['label' => '31–90 gün', 'count' => 0, 'percent' => 0],
+            'old' => ['label' => '91+ gün', 'count' => 0, 'percent' => 0],
+            'none' => ['label' => 'Hareket tarihi yok', 'count' => 0, 'percent' => 0],
+        ];
+
+        foreach (array_keys($debtorCompanyIds) as $companyId) {
+            $daysSince = $this->activityDaysSince($lastDates[$companyId] ?? null);
+            $bucket = match (true) {
+                $daysSince === null => 'none',
+                $daysSince <= 30 => 'recent',
+                $daysSince <= 90 => 'middle',
+                default => 'old',
+            };
+            $activityBuckets[$bucket]['count']++;
+        }
+
+        $uniqueDebtorCount = count($debtorCompanyIds);
+
+        if ($uniqueDebtorCount > 0) {
+            foreach ($activityBuckets as &$bucket) {
+                $bucket['percent'] = intdiv($bucket['count'] * 100, $uniqueDebtorCount);
+            }
+            unset($bucket);
+        }
+
+        $search = trim((string) $request->query('q', ''));
+        $filterParts = [];
+
+        if ($search !== '') {
+            $filterParts[] = 'Cari: '.$search;
+        }
+
+        if ($selectedCurrency !== null) {
+            $filterParts[] = 'Para birimi: '.$selectedCurrency->value;
+        }
+
+        return [
+            'selectedCurrency' => $selectedCurrency,
+            'activeFilterCount' => ($search !== '' ? 1 : 0) + ($selectedCurrency !== null ? 1 : 0),
+            'uniqueDebtorCount' => $uniqueDebtorCount,
+            'currencyGroups' => $currencyGroups,
+            'activityBuckets' => array_values($activityBuckets),
+            'detailRows' => $detailRows,
+            'filterSummary' => $filterParts === [] ? 'Filtre yok' : implode(' · ', $filterParts),
+        ];
+    }
+
+    private function activityDaysSince(?string $lastDate): ?int
+    {
+        if ($lastDate === null) {
+            return null;
+        }
+
+        return max(0, (int) Carbon::parse($lastDate)->startOfDay()->diffInDays(today(), false));
     }
 
     /**
