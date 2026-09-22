@@ -309,19 +309,20 @@
             min-width: 34mm;
         }
 
-        .receipt-total-primary {
-            font-weight: 750;
-        }
-
         .receipt-breakdown {
-            margin-top: .8mm;
-            padding-top: .65mm;
-            border-top: 1px solid rgb(203 213 225);
             color: rgb(71 85 105);
             font-size: 7.2pt;
             font-weight: 500;
             line-height: 1.25;
             text-align: left;
+        }
+
+        .receipt-breakdown-total {
+            margin-top: .7mm;
+            padding-top: .7mm;
+            border-top: 1px solid rgb(148 163 184);
+            color: #18212b;
+            font-weight: 750;
         }
 
         .receipt-breakdown-line {
@@ -411,9 +412,11 @@
             'bank_transfer' => ['HAVALE'],
         ];
         $receiptBreakdownMethods = [
+            'cash' => 'Nakit',
             'credit_card' => 'Kredi Kartı',
             'link' => 'Link Ödeme',
             'bank_transfer' => 'Havale',
+            'extra' => 'Ekstra',
         ];
         $methodTryTotal = static function (array $accountSummary, string $method) {
             $total = \App\Modules\Core\Support\Money::zero();
@@ -533,18 +536,16 @@
                             <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                         @endforeach
                         <td class="money-cell receipt-total-cell">
-                            <span class="money-nowrap receipt-total-primary">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</span>
                             @if ($daySummary)
-                                <div class="receipt-breakdown">
+                                <div class="receipt-breakdown" data-print-receipt-breakdown="day">
                                     @foreach ($receiptBreakdownMethods as $method => $label)
                                         @php($methodTotal = $methodTryTotal($daySummary, $method))
                                         <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
                                     @endforeach
-                                    @php($extraTotal = $methodTryTotal($daySummary, 'extra'))
-                                    @if (! $extraTotal->isZero())
-                                        <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">Ekstra:</span><span class="receipt-breakdown-value">{{ $extraTotal->format($try) }}</span></div>
-                                    @endif
+                                    <div class="receipt-breakdown-line receipt-breakdown-total"><span class="receipt-breakdown-label">Toplam:</span><span class="receipt-breakdown-value">{{ $daySummary['receipt_total']->format($try) }}</span></div>
                                 </div>
+                            @else
+                                <span class="money-nowrap">—</span>
                             @endif
                         </td>
                     </tr>
@@ -559,16 +560,12 @@
                         <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                     @endforeach
                     <td class="money-cell receipt-total-cell">
-                        <span class="money-nowrap receipt-total-primary">{{ $summary['receipt_total']->format($try) }}</span>
-                        <div class="receipt-breakdown">
+                        <div class="receipt-breakdown" data-print-receipt-breakdown="month">
                             @foreach ($receiptBreakdownMethods as $method => $label)
                                 @php($methodTotal = $methodTryTotal($summary, $method))
                                 <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
                             @endforeach
-                            @php($extraTotal = $methodTryTotal($summary, 'extra'))
-                            @if (! $extraTotal->isZero())
-                                <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">Ekstra:</span><span class="receipt-breakdown-value">{{ $extraTotal->format($try) }}</span></div>
-                            @endif
+                            <div class="receipt-breakdown-line receipt-breakdown-total"><span class="receipt-breakdown-label">Toplam:</span><span class="receipt-breakdown-value">{{ $summary['receipt_total']->format($try) }}</span></div>
                         </div>
                     </td>
                 </tr>
