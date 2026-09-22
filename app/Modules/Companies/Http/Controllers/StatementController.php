@@ -426,22 +426,22 @@ class StatementController extends Controller
             'criteria' => $criteria,
             'currencies' => Currency::cases(),
             'types' => LedgerEntryType::filterable(),
-            'existingSources' => $this->existingSources($statement->rows),
+            'statementSources' => $this->statementSources($statement->rows),
             'fx' => $this->tlEquivalents($company->getKey(), $criteria),
         ];
     }
 
     /**
-     * Hangi kaynak kayıtların hâlâ var olduğu — kaynak tipi başına TEK sorgu.
+     * Ekstre satırlarının kaynak bağlantısı + oluşturan/düzenleyen bilgisi.
      *
-     * Ledger'ın doğruluğu kaynak kayda bağlı değildir: kayıt silinmiş olsa
-     * bile ekstre satırı geçerlidir. Bu yüzden bağlantı vermeden önce varlığı
-     * toplu olarak sorulur; satır başına sorgu (N+1) atılmaz.
+     * Kaynak tipi başına TEK toplu sorgu yapılır; Companies modülü Stay/Payment
+     * modellerini doğrudan tanımaz. Kaynak kayıt yoksa ilgili anahtar dönmez ve
+     * ekstre satırı yine geçerli kalır.
      *
      * @param  array<int, StatementRow>  $rows
-     * @return array<string, array<int, int>>
+     * @return array<string, array<int, array{edited: bool, user: string, at: string}>>
      */
-    private function existingSources(array $rows): array
+    private function statementSources(array $rows): array
     {
         $ids = ['stay' => [], 'payment' => []];
 
@@ -454,8 +454,8 @@ class StatementController extends Controller
         }
 
         return [
-            'stay' => $this->stays->existingIds(array_values(array_unique($ids['stay']))),
-            'payment' => $this->payments->existingIds(array_values(array_unique($ids['payment']))),
+            'stay' => $this->stays->statementSourceInfoFor(array_values(array_unique($ids['stay']))),
+            'payment' => $this->payments->statementSourceInfoFor(array_values(array_unique($ids['payment']))),
         ];
     }
 

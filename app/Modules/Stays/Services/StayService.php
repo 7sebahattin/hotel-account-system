@@ -385,6 +385,36 @@ class StayService
     }
 
     /**
+     * Cari ekstre kaynak satırları için oluşturan/düzenleyen bilgisini toplu getirir.
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, array{edited: bool, user: string, at: string}>
+     */
+    public function statementSourceInfoFor(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Stay::query()
+            ->with(['creator:id,name', 'updater:id,name'])
+            ->whereIn('id', $ids)
+            ->get(['id', 'created_by', 'updated_by', 'created_at', 'updated_at'])
+            ->mapWithKeys(function (Stay $stay): array {
+                $edited = $stay->updated_at->gt($stay->created_at);
+                $actor = $edited ? $stay->updater : $stay->creator;
+                $at = $edited ? $stay->updated_at : $stay->created_at;
+
+                return [$stay->getKey() => [
+                    'edited' => $edited,
+                    'user' => $actor->name,
+                    'at' => $at->format('d.m.Y H:i'),
+                ]];
+            })
+            ->all();
+    }
+
+    /**
      * Bir odanın herhangi bir konaklamada kullanılıp kullanılmadığı — Room
      * modülünün silme koruması bu sorguya dayanır (CLAUDE.md §4.3/1: Rooms
      * modülü Stay modelini doğrudan KULLANMAZ, bu servis üzerinden sorar).

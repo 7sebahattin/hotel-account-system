@@ -39,7 +39,7 @@ final readonly class StatementCriteria
             currency: Currency::tryFrom((string) $request->query('currency', '')),
             type: LedgerEntryType::tryFrom((string) $request->query('type', '')),
             search: $request->filled('q') ? trim((string) $request->query('q')) : null,
-            newestFirst: $request->query('direction') === 'desc',
+            newestFirst: $request->query('direction', 'desc') !== 'asc',
         );
     }
 
@@ -57,7 +57,7 @@ final readonly class StatementCriteria
             'currency' => $this->currency?->value,
             'type' => $this->type?->value,
             'q' => $this->search,
-            'direction' => $this->newestFirst ? 'desc' : null,
+            'direction' => $this->newestFirst ? null : 'asc',
         ], fn ($value) => $value !== null && $value !== '');
     }
 }
