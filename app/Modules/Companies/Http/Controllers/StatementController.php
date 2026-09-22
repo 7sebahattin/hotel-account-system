@@ -345,8 +345,8 @@ class StatementController extends Controller
 
         $currencyOrder = array_flip(array_map(static fn (Currency $currency): string => $currency->value, Currency::cases()));
         usort($detailRows, static function (array $a, array $b) use ($currencyOrder): int {
-            $currencyCompare = ($currencyOrder[$a['currency']->value] ?? PHP_INT_MAX)
-                <=> ($currencyOrder[$b['currency']->value] ?? PHP_INT_MAX);
+            $currencyCompare = $currencyOrder[$a['currency']->value]
+                <=> $currencyOrder[$b['currency']->value];
 
             return $currencyCompare !== 0
                 ? $currencyCompare
