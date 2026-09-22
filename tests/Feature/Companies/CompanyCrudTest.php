@@ -98,6 +98,36 @@ class CompanyCrudTest extends TestCase
     }
 
     #[Test]
+    public function firma_detayinda_masaustu_acilir_bilgiler_ve_mobil_kartlar_gosterilir(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $company = Company::factory()->create([
+            'tax_office' => 'Kadıköy',
+            'tax_number' => '1234567890',
+            'phone' => '0216 555 44 33',
+            'email' => 'info@ilgaz.example',
+            'contact_person' => 'Ayşe Yılmaz',
+            'city' => 'İstanbul',
+            'address' => 'Bağdat Caddesi No:1',
+            'notes' => 'Acente anlaşması var.',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('companies.show', $company));
+
+        $response->assertOk()
+            ->assertSee('Bilgiler')
+            ->assertSee('Kayıt bilgisi')
+            ->assertSee('Kadıköy')
+            ->assertSee('1234567890')
+            ->assertSee('Bağdat Caddesi No:1')
+            ->assertSee('Acente anlaşması var.')
+            ->assertSee('lg:hidden', false)
+            ->assertSee('<summary', false);
+
+        $this->assertSame(2, substr_count($response->getContent(), '<details'));
+    }
+
+    #[Test]
     public function pasif_firma_kaydedilebilir_ve_listede_isaretlenir(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);

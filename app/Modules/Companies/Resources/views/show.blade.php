@@ -133,54 +133,40 @@
         </section>
     @endcan
 
-    <div class="mt-4 grid gap-4 lg:grid-cols-3">
+    <div class="mt-4 grid gap-4 lg:hidden">
         <x-ui.card title="Bilgiler" class="p-6 lg:col-span-2">
-            <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                @foreach ([
-                    'Vergi dairesi' => $company->tax_office,
-                    'Vergi numarası' => $company->tax_number,
-                    'Telefon' => $company->phone,
-                    'E-posta' => $company->email,
-                    'Yetkili kişi' => $company->contact_person,
-                    'Şehir' => $company->city,
-                ] as $label => $value)
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-mut">{{ $label }}</dt>
-                        <dd class="mt-0.5 text-sm text-tx">{{ $value ?: '—' }}</dd>
-                    </div>
-                @endforeach
-
-                <div class="sm:col-span-2">
-                    <dt class="text-xs uppercase tracking-wide text-mut">Adres</dt>
-                    <dd class="mt-0.5 text-sm whitespace-pre-line text-tx">{{ $company->address ?: '—' }}</dd>
-                </div>
-
-                <div class="sm:col-span-2">
-                    <dt class="text-xs uppercase tracking-wide text-mut">Notlar</dt>
-                    <dd class="mt-0.5 text-sm whitespace-pre-line text-tx">{{ $company->notes ?: '—' }}</dd>
-                </div>
-            </dl>
+            @include('companies::_details-information')
         </x-ui.card>
 
         <x-ui.card title="Kayıt bilgisi" class="p-6">
-            <dl class="space-y-3 text-sm">
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Oluşturan</dt>
-                    <dd class="mt-0.5 text-tx">
-                        {{ $company->creator?->name ?? '—' }}
-                        <span class="text-mut">· {{ $company->created_at->format('d.m.Y H:i') }}</span>
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Son güncelleyen</dt>
-                    <dd class="mt-0.5 text-tx">
-                        {{ $company->updater?->name ?? '—' }}
-                        <span class="text-mut">· {{ $company->updated_at->format('d.m.Y H:i') }}</span>
-                    </dd>
-                </div>
-            </dl>
-
+            @include('companies::_audit-information')
         </x-ui.card>
+    </div>
+
+    <div class="mt-4 hidden space-y-3 lg:block">
+        <details class="group rounded-xl border border-line bg-card">
+            <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 text-sm font-medium text-tx focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acc-tx">
+                <span>Bilgiler</span>
+                <svg class="size-4 shrink-0 text-mut transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" />
+                </svg>
+            </summary>
+            <div class="border-t border-line px-4 py-4">
+                @include('companies::_details-information', ['compact' => true])
+            </div>
+        </details>
+
+        <details class="group rounded-xl border border-line bg-card">
+            <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 text-sm font-medium text-tx focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acc-tx">
+                <span>Kayıt bilgisi</span>
+                <svg class="size-4 shrink-0 text-mut transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" />
+                </svg>
+            </summary>
+            <div class="border-t border-line px-4 py-4">
+                @include('companies::_audit-information', ['compact' => true])
+            </div>
+        </details>
     </div>
 
     <x-ui.card class="mt-4 p-6">
