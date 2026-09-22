@@ -112,6 +112,29 @@
             padding: 8px 10px;
         }
 
+        .summary-daily {
+            background: rgb(248 251 255);
+            border-top-color: rgb(34 48 74);
+        }
+
+        .summary-receipt {
+            background: rgb(246 253 248);
+            border-top-color: rgb(21 128 61);
+        }
+
+        .summary-difference {
+            background: rgb(255 250 243);
+            border-top-color: rgb(138 106 47);
+        }
+
+        .summary-receipt dd {
+            color: rgb(21 128 61);
+        }
+
+        .summary-difference dd {
+            color: rgb(180 83 9);
+        }
+
         .summary dt {
             color: #4e5965;
             font-size: 8pt;
@@ -454,7 +477,7 @@
             </div>
             <dl class="meta"><div><dt>Dönem</dt><dd>{{ $month->translatedFormat('F Y') }}</dd></div><div><dt>Hesap sahibi</dt><dd>{{ $owner->name }}</dd></div><div><dt>Kayıtlı gün</dt><dd>{{ $recorded }}</dd></div><div><dt>Rapor tarihi</dt><dd>{{ $generatedAt->format('d.m.Y H:i') }}</dd></div><div><dt>Hazırlayan</dt><dd>{{ $preparedBy->name }}</dd></div></dl>
         </header>
-        <dl class="summaries"><div class="summary"><dt>GÜNLÜK LİSTE TOPLAMI</dt><dd>{{ $summary['daily_total']->format($try) }}</dd></div><div class="summary"><dt>ALINAN ÖDEMELER · TL KARŞILIĞI</dt><dd>{{ $summary['receipt_total']->format($try) }}</dd></div><div class="summary"><dt>LİSTEYE GÖRE FARK</dt><dd>{{ $summary['difference']->format($try) }}</dd></div></dl>
+        <dl class="summaries"><div class="summary summary-daily"><dt>GÜNLÜK LİSTE TOPLAMI</dt><dd>{{ $summary['daily_total']->format($try) }}</dd></div><div class="summary summary-receipt"><dt>ALINAN ÖDEMELER · TL KARŞILIĞI</dt><dd>{{ $summary['receipt_total']->format($try) }}</dd></div><div class="summary summary-difference"><dt>LİSTEYE GÖRE FARK</dt><dd>{{ $summary['difference']->format($try) }}</dd></div></dl>
         <table class="print-table {{ $densityClass }}" data-column-count="{{ $columnCount }}">
             <caption>{{ $month->translatedFormat('F Y') }} aylık hesap ödeme ayrıntıları</caption>
             <colgroup>
