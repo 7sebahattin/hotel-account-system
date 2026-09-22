@@ -52,6 +52,18 @@
             padding-bottom: 10px;
         }
 
+        .report-title-row {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .brand-lockup {
+            justify-self: start;
+        }
+
         .brand {
             font-size: 10pt;
             font-weight: 750;
@@ -64,9 +76,12 @@
         }
 
         h1 {
-            margin: 9px 0 10px;
+            grid-column: 2;
+            margin: 0;
+            text-align: center;
             font-size: 17pt;
             letter-spacing: .035em;
+            white-space: nowrap;
         }
 
         .meta {
@@ -95,6 +110,29 @@
             border: 1px solid #87919c;
             border-top: 3px solid #354150;
             padding: 8px 10px;
+        }
+
+        .summary-daily {
+            background: rgb(248 251 255);
+            border-top-color: rgb(34 48 74);
+        }
+
+        .summary-receipt {
+            background: rgb(246 253 248);
+            border-top-color: rgb(21 128 61);
+        }
+
+        .summary-difference {
+            background: rgb(255 250 243);
+            border-top-color: rgb(138 106 47);
+        }
+
+        .summary-receipt dd {
+            color: rgb(21 128 61);
+        }
+
+        .summary-difference dd {
+            color: rgb(180 83 9);
         }
 
         .summary dt {
@@ -132,7 +170,7 @@
 
         .print-table col.day-column { width: 16mm; }
         .print-table col.daily-total-column { width: 23mm; }
-        .print-table col.receipt-total-column { width: 26mm; }
+        .print-table col.receipt-total-column { width: 36mm; }
 
         .print-table thead { display: table-header-group; }
 
@@ -179,6 +217,16 @@
             font-size: 8pt;
             letter-spacing: .025em;
             text-transform: uppercase;
+        }
+
+        .group-head-credit-card {
+            background: rgb(220 252 231);
+            color: rgb(20 83 45);
+        }
+
+        .group-head-link {
+            background: rgb(255 237 213);
+            color: rgb(154 52 18);
         }
 
         .payment-head {
@@ -253,6 +301,42 @@
 
         .print-empty { color: #69737d; }
 
+        .receipt-total-cell {
+            min-width: 34mm;
+        }
+
+        .receipt-total-primary {
+            font-weight: 750;
+        }
+
+        .receipt-breakdown {
+            margin-top: .8mm;
+            padding-top: .65mm;
+            border-top: 1px solid rgb(203 213 225);
+            color: rgb(71 85 105);
+            font-size: 7.2pt;
+            font-weight: 500;
+            line-height: 1.25;
+            text-align: left;
+        }
+
+        .receipt-breakdown-line {
+            display: flex;
+            justify-content: space-between;
+            gap: 1.2mm;
+        }
+
+        .receipt-breakdown-label {
+            white-space: nowrap;
+        }
+
+        .receipt-breakdown-value {
+            margin-left: auto;
+            white-space: nowrap;
+            font-weight: 650;
+            font-variant-numeric: tabular-nums;
+        }
+
         .total-row th,
         .total-row td {
             background: #e0e5e9;
@@ -322,6 +406,19 @@
             'link' => ['LİNK ÖDEME', 'LINK ÖDEME'],
             'bank_transfer' => ['HAVALE'],
         ];
+        $receiptBreakdownMethods = [
+            'credit_card' => 'Kredi Kartı',
+            'link' => 'Link Ödeme',
+            'bank_transfer' => 'Havale',
+        ];
+        $methodTryTotal = static function (array $accountSummary, string $method) {
+            $total = \App\Modules\Core\Support\Money::zero();
+            foreach (($accountSummary['methods'][$method] ?? []) as $amount) {
+                $total = $total->add($amount['try_equivalent']);
+            }
+
+            return $total;
+        };
         $columns = collect($columns)->map(function (array $column) use ($currencyOrder, $currencyTokens, $methodTokens, $summary): array {
             $amounts = $column['bank']
                 ? ($summary['banks'][$column['method']][$column['bank']] ?? [])
@@ -372,8 +469,15 @@
     @endphp
     <nav class="toolbar" aria-label="Rapor işlemleri"><a href="{{ route('monthly-account.index', ['owner_id' => $owner->id, 'month' => $month->format('Y-m')]) }}">← Aylık Hesaba Dön</a><button type="button" onclick="window.print()">Yazdır</button></nav>
     <main class="report">
-        <header class="report-head"><div class="brand">LEMON</div><div class="product">Cari Takip</div><h1>AYLIK HESAP RAPORU</h1><dl class="meta"><div><dt>Dönem</dt><dd>{{ $month->translatedFormat('F Y') }}</dd></div><div><dt>Hesap sahibi</dt><dd>{{ $owner->name }}</dd></div><div><dt>Kayıtlı gün</dt><dd>{{ $recorded }}</dd></div><div><dt>Rapor tarihi</dt><dd>{{ $generatedAt->format('d.m.Y H:i') }}</dd></div><div><dt>Hazırlayan</dt><dd>{{ $preparedBy->name }}</dd></div></dl></header>
-        <dl class="summaries"><div class="summary"><dt>GÜNLÜK LİSTE TOPLAMI</dt><dd>{{ $summary['daily_total']->format($try) }}</dd></div><div class="summary"><dt>ALINAN ÖDEMELER · TL KARŞILIĞI</dt><dd>{{ $summary['receipt_total']->format($try) }}</dd></div><div class="summary"><dt>LİSTEYE GÖRE FARK</dt><dd>{{ $summary['difference']->format($try) }}</dd></div></dl>
+        <header class="report-head">
+            <div class="report-title-row">
+                <div class="brand-lockup"><div class="brand">LEMON</div><div class="product">Cari Takip</div></div>
+                <h1>AYLIK HESAP RAPORU</h1>
+                <div aria-hidden="true"></div>
+            </div>
+            <dl class="meta"><div><dt>Dönem</dt><dd>{{ $month->translatedFormat('F Y') }}</dd></div><div><dt>Hesap sahibi</dt><dd>{{ $owner->name }}</dd></div><div><dt>Kayıtlı gün</dt><dd>{{ $recorded }}</dd></div><div><dt>Rapor tarihi</dt><dd>{{ $generatedAt->format('d.m.Y H:i') }}</dd></div><div><dt>Hazırlayan</dt><dd>{{ $preparedBy->name }}</dd></div></dl>
+        </header>
+        <dl class="summaries"><div class="summary summary-daily"><dt>GÜNLÜK LİSTE TOPLAMI</dt><dd>{{ $summary['daily_total']->format($try) }}</dd></div><div class="summary summary-receipt"><dt>ALINAN ÖDEMELER · TL KARŞILIĞI</dt><dd>{{ $summary['receipt_total']->format($try) }}</dd></div><div class="summary summary-difference"><dt>LİSTEYE GÖRE FARK</dt><dd>{{ $summary['difference']->format($try) }}</dd></div></dl>
         <table class="print-table {{ $densityClass }}" data-column-count="{{ $columnCount }}">
             <caption>{{ $month->translatedFormat('F Y') }} aylık hesap ödeme ayrıntıları</caption>
             <colgroup>
@@ -389,7 +493,7 @@
                     <th scope="col" rowspan="2" class="day-col">Gün</th>
                     <th scope="col" rowspan="2">Günlük Liste<br>TL</th>
                     @foreach (collect($columns)->groupBy('method') as $method => $methodColumns)
-                        <th scope="colgroup" colspan="{{ count($methodColumns) }}" class="group-head">{{ $methodLabels[$method] }}</th>
+                        <th scope="colgroup" colspan="{{ count($methodColumns) }}" class="group-head @if ($method === 'credit_card') group-head-credit-card @elseif ($method === 'link') group-head-link @endif">{{ $methodLabels[$method] }}</th>
                     @endforeach
                     <th scope="col" rowspan="2">Ödemeler<br>TL Karşılığı</th>
                 </tr>
@@ -424,7 +528,21 @@
                             @php($amounts = $column['bank'] ? ($daySummary['banks'][$column['method']][$column['bank']] ?? []) : ($daySummary['methods'][$column['method']] ?? []))
                             <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                         @endforeach
-                        <td class="money-cell"><span class="money-nowrap">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</span></td>
+                        <td class="money-cell receipt-total-cell">
+                            <span class="money-nowrap receipt-total-primary">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</span>
+                            @if ($daySummary)
+                                <div class="receipt-breakdown">
+                                    @foreach ($receiptBreakdownMethods as $method => $label)
+                                        @php($methodTotal = $methodTryTotal($daySummary, $method))
+                                        <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
+                                    @endforeach
+                                    @php($extraTotal = $methodTryTotal($daySummary, 'extra'))
+                                    @if (! $extraTotal->isZero())
+                                        <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">Ekstra:</span><span class="receipt-breakdown-value">{{ $extraTotal->format($try) }}</span></div>
+                                    @endif
+                                </div>
+                            @endif
+                        </td>
                     </tr>
                 @empty
                     <tr><td colspan="{{ count($columns) + 3 }}" class="empty-row">Bu ay için kayıt yok.</td></tr>
@@ -436,7 +554,19 @@
                         @php($amounts = $column['bank'] ? ($summary['banks'][$column['method']][$column['bank']] ?? []) : ($summary['methods'][$column['method']] ?? []))
                         <td class="money-cell">@include('monthly-account::_print_amounts', ['amounts' => $amounts])</td>
                     @endforeach
-                    <td class="money-cell"><span class="money-nowrap">{{ $summary['receipt_total']->format($try) }}</span></td>
+                    <td class="money-cell receipt-total-cell">
+                        <span class="money-nowrap receipt-total-primary">{{ $summary['receipt_total']->format($try) }}</span>
+                        <div class="receipt-breakdown">
+                            @foreach ($receiptBreakdownMethods as $method => $label)
+                                @php($methodTotal = $methodTryTotal($summary, $method))
+                                <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">{{ $label }}:</span><span class="receipt-breakdown-value">{{ $methodTotal->format($try) }}</span></div>
+                            @endforeach
+                            @php($extraTotal = $methodTryTotal($summary, 'extra'))
+                            @if (! $extraTotal->isZero())
+                                <div class="receipt-breakdown-line"><span class="receipt-breakdown-label">Ekstra:</span><span class="receipt-breakdown-value">{{ $extraTotal->format($try) }}</span></div>
+                            @endif
+                        </div>
+                    </td>
                 </tr>
             </tbody>
         </table>

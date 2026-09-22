@@ -63,6 +63,61 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function aylik_liste_ve_print_ozet_kartlari_ayni_renkli_vurgulari_kullanir(): void
+    {
+        $this->createDay($this->admin, [
+            'account_date' => '2026-09-14',
+            'daily_total' => '1.000,00',
+            'items' => [$this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '750,00'])],
+        ]);
+
+        $indexResponse = $this->actingAs($this->admin)->get(route('monthly-account.index', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]))->assertOk();
+
+        $indexDom = new DOMDocument;
+        @$indexDom->loadHTML('<?xml encoding="UTF-8">'.(string) $indexResponse->getContent());
+        $indexXpath = new DOMXPath($indexDom);
+        $daily = $indexXpath->query('//*[@data-monthly-summary="daily"]');
+        $receipt = $indexXpath->query('//*[@data-monthly-summary="receipt"]');
+        $difference = $indexXpath->query('//*[@data-monthly-summary="difference"]');
+
+        $this->assertNotFalse($daily);
+        $this->assertNotFalse($receipt);
+        $this->assertNotFalse($difference);
+        $this->assertSame(1, $daily->length);
+        $this->assertSame(1, $receipt->length);
+        $this->assertSame(1, $difference->length);
+
+        $dailyCard = $daily->item(0);
+        $receiptCard = $receipt->item(0);
+        $differenceCard = $difference->item(0);
+        $this->assertInstanceOf(DOMElement::class, $dailyCard);
+        $this->assertInstanceOf(DOMElement::class, $receiptCard);
+        $this->assertInstanceOf(DOMElement::class, $differenceCard);
+        $this->assertStringContainsString('bg-info-bg', $dailyCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-nav-well', $dailyCard->getAttribute('class'));
+        $this->assertStringContainsString('bg-success-bg', $receiptCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-success', $receiptCard->getAttribute('class'));
+        $this->assertStringContainsString('bg-acc-bg', $differenceCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-acc-tx', $differenceCard->getAttribute('class'));
+
+        $printResponse = $this->get(route('monthly-account.print', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]))->assertOk();
+
+        $printDom = new DOMDocument;
+        @$printDom->loadHTML('<?xml encoding="UTF-8">'.(string) $printResponse->getContent());
+        $printXpath = new DOMXPath($printDom);
+
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-daily")]')->length);
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-receipt")]')->length);
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-difference")]')->length);
+    }
+
+    #[Test]
     public function print_raporu_gunleri_artarak_tek_tabloda_ve_ay_toplamini_sonda_gosterir(): void
     {
         $providers = ['Garanti BBVA', 'İş Bankası', 'Yapı Kredi', 'Ziraat Bankası'];
@@ -142,6 +197,60 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
         $this->assertStringNotContainsString('Havale', $paymentHeaderText);
         $this->assertStringContainsString('Garanti BBVA - TRY - ₺', $paymentHeaderText);
         $this->assertStringContainsString('Ziraat Bankası - TRY - ₺', $paymentHeaderText);
+    }
+
+    #[Test]
+    public function print_raporu_odeme_tl_karsiliginda_yontem_kirimlarini_renkli_grup_basliklarini_ve_ortali_rapor_basligini_gosterir(): void
+    {
+        $this->createDay($this->admin, [
+            'account_date' => '2026-09-14',
+            'daily_total' => '1.000,00',
+            'items' => [
+                $this->item(['method' => 'cash', 'amount' => '10,00']),
+                $this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '100,00']),
+                $this->item(['method' => 'link', 'bank_name' => 'Yapı Kredi', 'amount' => '200,00']),
+                $this->item(['method' => 'bank_transfer', 'bank_name' => 'Garanti BBVA', 'amount' => '300,00']),
+                $this->item(['method' => 'extra', 'amount' => '40,00']),
+            ],
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('monthly-account.print', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]));
+
+        $response->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $titleRows = $xpath->query('//header[contains(@class, "report-head")]/div[contains(@class, "report-title-row")]');
+        $title = $xpath->query('//header[contains(@class, "report-head")]//h1');
+        $creditCardHeaders = $xpath->query('//th[contains(@class, "group-head-credit-card")]');
+        $linkHeaders = $xpath->query('//th[contains(@class, "group-head-link")]');
+        $breakdowns = $xpath->query('//td[contains(@class, "receipt-total-cell")]/div[contains(@class, "receipt-breakdown")]');
+
+        $this->assertNotFalse($titleRows);
+        $this->assertSame(1, $titleRows->length);
+        $this->assertNotFalse($title);
+        $this->assertSame('AYLIK HESAP RAPORU', trim($title->item(0)->textContent));
+        $this->assertNotFalse($creditCardHeaders);
+        $this->assertSame(1, $creditCardHeaders->length);
+        $this->assertSame('Kredi Kartı', trim($creditCardHeaders->item(0)->textContent));
+        $this->assertNotFalse($linkHeaders);
+        $this->assertSame(1, $linkHeaders->length);
+        $this->assertSame('Link Ödeme', trim($linkHeaders->item(0)->textContent));
+        $this->assertNotFalse($breakdowns);
+        $this->assertSame(2, $breakdowns->length);
+
+        foreach ($breakdowns as $breakdown) {
+            $text = preg_replace('/\s+/u', ' ', trim($breakdown->textContent)) ?? '';
+            $this->assertStringContainsString('Kredi Kartı:100,00 ₺', $text);
+            $this->assertStringContainsString('Link Ödeme:200,00 ₺', $text);
+            $this->assertStringContainsString('Havale:300,00 ₺', $text);
+            $this->assertStringContainsString('Ekstra:40,00 ₺', $text);
+        }
     }
 
     #[Test]
