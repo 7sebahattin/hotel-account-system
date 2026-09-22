@@ -89,12 +89,19 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
         $this->assertSame(1, $daily->length);
         $this->assertSame(1, $receipt->length);
         $this->assertSame(1, $difference->length);
-        $this->assertStringContainsString('bg-info-bg', $daily->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
-        $this->assertStringContainsString('border-t-nav-well', $daily->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
-        $this->assertStringContainsString('bg-success-bg', $receipt->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
-        $this->assertStringContainsString('border-t-success', $receipt->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
-        $this->assertStringContainsString('bg-acc-bg', $difference->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
-        $this->assertStringContainsString('border-t-acc-tx', $difference->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+
+        $dailyCard = $daily->item(0);
+        $receiptCard = $receipt->item(0);
+        $differenceCard = $difference->item(0);
+        $this->assertInstanceOf(DOMElement::class, $dailyCard);
+        $this->assertInstanceOf(DOMElement::class, $receiptCard);
+        $this->assertInstanceOf(DOMElement::class, $differenceCard);
+        $this->assertStringContainsString('bg-info-bg', $dailyCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-nav-well', $dailyCard->getAttribute('class'));
+        $this->assertStringContainsString('bg-success-bg', $receiptCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-success', $receiptCard->getAttribute('class'));
+        $this->assertStringContainsString('bg-acc-bg', $differenceCard->getAttribute('class'));
+        $this->assertStringContainsString('border-t-acc-tx', $differenceCard->getAttribute('class'));
 
         $printResponse = $this->get(route('monthly-account.print', [
             'owner_id' => $this->admin->id,
