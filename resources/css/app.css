@@ -73,6 +73,10 @@
     --color-danger-bg: #fef2f2; /* metinle 5.91 */
     --color-info-bg: #eff6ff;
 
+    /* Aylık Hesap ödeme yöntemi grup başlıkları — kullanıcı onaylı ayırt edici zeminler. */
+    --color-payment-card-bg: #b7e4c7;
+    --color-payment-link-bg: #f7c891;
+
     /*
         Cari yön renkleri. Kırmızı BİLEREK kullanılmaz: kırmızı bu uygulamada
         "iptal / tehlike" demektir; borç hatalı bir durum değildir.

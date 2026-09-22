@@ -75,7 +75,7 @@
                         <th scope="col" class="text-left">Gün</th>
                         <th scope="col">Günlük liste<br><span class="font-normal">TL</span></th>
                         @foreach ($columns as $column)
-                            <th scope="col">
+                            <th scope="col" class="@if ($column['method'] === 'credit_card') bg-payment-card-bg @elseif ($column['method'] === 'link') bg-payment-link-bg @endif">
                                 <span class="block">{{ $column['label'] }}</span>
                                 @if ($column['bank'])
                                     <span class="font-normal">({{ $column['bank'] }})</span>
