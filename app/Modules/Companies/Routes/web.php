@@ -59,6 +59,14 @@ Route::middleware('auth')->name('statements.')->group(function (): void {
         ->middleware('can:'.Permission::LedgerViewAll->value)
         ->name('print-index');
 
+    Route::get('statements/graphics', [StatementController::class, 'graphics'])
+        ->middleware('can:'.Permission::LedgerViewAll->value)
+        ->name('graphics');
+
+    Route::get('statements/graphics/print', [StatementController::class, 'printGraphics'])
+        ->middleware('can:'.Permission::LedgerViewAll->value)
+        ->name('graphics-print');
+
     Route::get('companies/{company}/statement', [StatementController::class, 'show'])
         ->middleware('can:'.Permission::LedgerView->value)
         ->withTrashed()
