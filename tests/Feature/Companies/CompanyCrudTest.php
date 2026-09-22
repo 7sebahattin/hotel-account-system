@@ -124,7 +124,10 @@ class CompanyCrudTest extends TestCase
             ->assertSee('lg:hidden', false)
             ->assertSee('<summary', false);
 
-        $this->assertSame(2, substr_count($response->getContent(), '<details'));
+        $this->assertSame(
+            2,
+            substr_count($response->getContent(), '<details class="group rounded-xl border border-line bg-card">'),
+        );
     }
 
     #[Test]
