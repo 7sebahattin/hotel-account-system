@@ -71,6 +71,7 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
         $this->get(route('monthly-account.index', ['owner_id' => $owner->id, 'month' => '2026-09']))->assertForbidden();
         $this->get(route('monthly-account.create', ['owner_id' => $owner->id]))->assertForbidden();
         $this->get(route('monthly-account.show', $day))->assertForbidden();
+        $this->get(route('monthly-account.print-day', $day))->assertForbidden();
         $this->get(route('monthly-account.edit', $day))->assertForbidden();
         $this->put(route('monthly-account.update', $day), $this->payload($intruder, ['version' => 1, 'daily_total' => '999']))->assertForbidden();
         $this->delete(route('monthly-account.destroy', $day), ['version' => 1])->assertForbidden();
@@ -131,7 +132,7 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
         foreach (['index', 'create'] as $action) {
             $this->get(route('monthly-account.'.$action))->assertForbidden();
         }
-        foreach (['show', 'edit'] as $action) {
+        foreach (['show', 'print-day', 'edit'] as $action) {
             $this->get(route('monthly-account.'.$action, $day))->assertForbidden();
         }
         $this->post(route('monthly-account.store'), $this->payload($unprivileged))->assertForbidden();
@@ -195,7 +196,7 @@ class MonthlyAccountAccessTest extends MonthlyAccountTestCase
         foreach (['index', 'create'] as $action) {
             $this->get(route('monthly-account.'.$action))->assertRedirect(route('login'));
         }
-        foreach (['show', 'edit'] as $action) {
+        foreach (['show', 'print-day', 'edit'] as $action) {
             $this->get(route('monthly-account.'.$action, $day))->assertRedirect(route('login'));
         }
         $this->post(route('monthly-account.store'), $this->payload($this->admin))->assertRedirect(route('login'));

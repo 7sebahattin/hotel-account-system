@@ -3,7 +3,6 @@
 
 @section('content')
     @php
-        $revision = $day->currentRevision;
         $summary = $revision->summary();
         $try = \App\Modules\Core\Enums\Currency::TRY;
         $methodLabels = ['cash' => 'Nakit', 'credit_card' => 'Kredi kartı', 'link' => 'Link ödemesi', 'bank_transfer' => 'Havale', 'extra' => 'Ekstra tahsilat'];
@@ -12,6 +11,7 @@
         <x-ui.page-header :title="$day->account_date->translatedFormat('d F Y, l')" subtitle="Aylık Hesap">
             <x-slot:actions>
                 <x-ui.button variant="secondary" :href="route('monthly-account.index', ['month' => $day->account_date->format('Y-m'), 'owner_id' => $day->owner_id])">Aylık liste</x-ui.button>
+                <x-ui.button variant="secondary" :href="route('monthly-account.print-day', $day)" target="_blank" rel="noopener">Yazdır</x-ui.button>
                 @can('update', $day)
                     <x-ui.button :href="route('monthly-account.edit', $day)">{{ $day->isDeleted() ? 'Yeniden etkinleştir' : 'Düzenle' }}</x-ui.button>
                 @endcan

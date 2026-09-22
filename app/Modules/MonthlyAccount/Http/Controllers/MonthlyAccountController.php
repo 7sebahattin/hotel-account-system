@@ -11,11 +11,13 @@ use App\Modules\MonthlyAccount\Http\Requests\DeleteMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Http\Requests\MonthlyAccountFilterRequest;
 use App\Modules\MonthlyAccount\Http\Requests\SaveMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
+use App\Modules\MonthlyAccount\Models\MonthlyAccountRevision;
 use App\Modules\MonthlyAccount\Services\MonthlyAccountService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class MonthlyAccountController extends Controller
 {
@@ -58,9 +60,18 @@ class MonthlyAccountController extends Controller
     public function show(MonthlyAccountDay $day): View
     {
         $this->authorize('view', $day);
-        $day->load(['owner', 'creator', 'updater', 'currentRevision.items', 'currentRevision.creator', 'revisions.creator']);
 
-        return view('monthly-account::show', ['day' => $day, 'revision' => $day->currentRevision]);
+        return view('monthly-account::show', $this->dayData($day));
+    }
+
+    public function printDay(Request $request, MonthlyAccountDay $day): View
+    {
+        $this->authorize('view', $day);
+
+        return view('monthly-account::show-print', $this->dayData($day) + [
+            'generatedAt' => now(),
+            'preparedBy' => $request->user(),
+        ]);
     }
 
     public function edit(MonthlyAccountDay $day): View
@@ -96,6 +107,17 @@ class MonthlyAccountController extends Controller
         return redirect()->route('monthly-account.index', [
             'month' => $day->account_date->format('Y-m'), 'owner_id' => $day->owner_id,
         ]);
+    }
+
+    /** @return array{day: MonthlyAccountDay, revision: MonthlyAccountRevision} */
+    private function dayData(MonthlyAccountDay $day): array
+    {
+        $day->load(['owner', 'creator', 'updater', 'currentRevision.items', 'currentRevision.creator', 'revisions.creator']);
+
+        /** @var MonthlyAccountRevision $revision */
+        $revision = $day->currentRevision;
+
+        return ['day' => $day, 'revision' => $revision];
     }
 
     /** @return array{month: CarbonImmutable, owner: User, days: Collection<string, MonthlyAccountDay>, summary: array} */

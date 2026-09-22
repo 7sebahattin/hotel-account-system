@@ -216,6 +216,74 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function gunluk_print_raporu_gercek_view_renderinda_tum_rapor_bolumlerini_gosterir(): void
+    {
+        $day = $this->createDay($this->admin, [
+            'account_date' => '2026-09-13',
+            'daily_total' => '125.087,98',
+            'note' => 'Gün sonu kontrol notu',
+            'items' => [
+                $this->item(['method' => 'cash', 'amount' => '68.264,19', 'bank_name' => null, 'note' => 'Nakit tahsilat']),
+                $this->item(['method' => 'credit_card', 'bank_name' => 'Ziraat Bankası', 'currency' => 'EUR', 'amount' => '260,00', 'conversion_mode' => 'total', 'try_equivalent' => '14.605,50', 'note' => 'Kart tahsilatı']),
+            ],
+        ]);
+
+        $this->actingAs($this->admin)->get(route('monthly-account.print-day', $day))
+            ->assertOk()
+            ->assertSee('GÜNLÜK HESAP RAPORU')
+            ->assertSee('13 Eylül 2026')
+            ->assertSee('Günlük Liste Toplamı')
+            ->assertSee('125.087,98')
+            ->assertSee('Alınan Ödemeler · TL Karşılığı')
+            ->assertSee('82.869,69')
+            ->assertSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertSee('Ziraat Bankası')
+            ->assertSee('260,00')
+            ->assertSee('14.605,50')
+            ->assertSee('Kur:')
+            ->assertSee('Ödeme ayrıntıları (2)')
+            ->assertSee('Nakit tahsilat')
+            ->assertSee('Kart tahsilatı')
+            ->assertSee('Gün sonu kontrol notu')
+            ->assertSee('Kayıt geçmişi')
+            ->assertSee('Sürüm 1')
+            ->assertDontSee('sidebar', false)
+            ->assertDontSee('Günü sil')
+            ->assertDontSee('Düzenle');
+    }
+
+    #[Test]
+    public function gunluk_print_nakit_not_yokken_ve_silinmis_gunde_500_uretmeden_render_eder(): void
+    {
+        $cashDay = $this->createDay($this->admin, [
+            'account_date' => '2026-09-13',
+            'note' => null,
+            'items' => [$this->item(['method' => 'cash', 'bank_name' => null, 'note' => null])],
+        ]);
+        $deletedDay = $this->createDay($this->admin, ['account_date' => '2026-09-14']);
+        $this->delete(route('monthly-account.destroy', $deletedDay), ['version' => 1])->assertRedirect();
+
+        $this->actingAs($this->admin)->get(route('monthly-account.print-day', $cashDay))
+            ->assertOk()
+            ->assertSee('Ödeme ayrıntıları (1)')
+            ->assertDontSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertDontSee('Günlük not');
+        $this->get(route('monthly-account.print-day', $deletedDay->fresh()))
+            ->assertOk()
+            ->assertSee('Silinmiş kayıt');
+    }
+
+    #[Test]
+    public function kullanici_baska_ownerin_gunluk_print_endpointinden_veri_goremez(): void
+    {
+        $owner = $this->userWithRole(RoleName::Personel);
+        $intruder = $this->userWithRole(RoleName::Personel);
+        $day = $this->createDay($owner);
+
+        $this->actingAs($intruder)->get(route('monthly-account.print-day', $day))->assertForbidden();
+    }
+
+    #[Test]
     public function kullanici_baska_ownerin_print_endpointinden_veri_goremez(): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
