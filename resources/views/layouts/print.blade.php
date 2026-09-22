@@ -95,8 +95,6 @@
         .foot { margin-top: 14px; border-top: 1px solid #999; padding-top: 6px;
                 font-size: 9pt; color: #444; display: flex; justify-content: space-between; gap: 12px; }
 
-        .print-section { margin-top: 16px; }
-
         .toolbar { margin-bottom: 14px; display: flex; gap: 8px; }
         /*
             Araç çubuğu yalnızca EKRANDA vardır (yazdırmada gizlenir) ve parmakla
