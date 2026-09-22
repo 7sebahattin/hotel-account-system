@@ -245,7 +245,6 @@ class PaymentService
         return Payment::query()->whereIn('id', $ids)->pluck('id')->all();
     }
 
-
     /**
      * Cari ekstre kaynak satırları için oluşturan/düzenleyen bilgisini toplu getirir.
      *
