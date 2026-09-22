@@ -31,14 +31,6 @@
             'bank_transfer' => 'Havale',
             'extra' => 'Ekstra',
         ];
-        $methodTryTotal = static function (array $accountSummary, string $method) {
-            $total = \App\Modules\Core\Support\Money::zero();
-            foreach (($accountSummary['methods'][$method] ?? []) as $amount) {
-                $total = $total->add($amount['try_equivalent']);
-            }
-
-            return $total;
-        };
         $monthParams = ['owner_id' => $owner->id];
         $recorded = $days->filter(fn ($day) => ! $day->isDeleted())->count();
         $storedDates = $days->keys()->sort()->values();
@@ -112,10 +104,14 @@
                         @endforeach
                         <td>
                             <div class="space-y-0.5 text-[11px] leading-tight" data-monthly-receipt-breakdown="month">
-                                @foreach ($receiptBreakdownMethods as $method => $label)
-                                    @php($methodTotal = $methodTryTotal($summary, $method))
+                                <?php foreach ($receiptBreakdownMethods as $method => $label):
+                                    $methodTotal = \App\Modules\Core\Support\Money::zero();
+                                    foreach (($summary['methods'][$method] ?? []) as $amount) {
+                                        $methodTotal = $methodTotal->add($amount['try_equivalent']);
+                                    }
+                                ?>
                                     <div class="flex justify-between gap-2"><span>{{ $label }}</span><span class="tabular-nums">{{ $methodTotal->format($try) }}</span></div>
-                                @endforeach
+                                <?php endforeach; ?>
                                 <div class="mt-1 flex justify-between gap-2 border-t border-nav-line pt-1 font-semibold"><span>Toplam</span><span class="tabular-nums">{{ $summary['receipt_total']->format($try) }}</span></div>
                             </div>
                         </td>
@@ -157,17 +153,21 @@
                                 <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                             @endforeach
                             <td>
-                                @if ($daySummary)
+                                <?php if ($daySummary): ?>
                                     <div class="space-y-0.5 text-[11px] leading-tight" data-monthly-receipt-breakdown="day">
-                                        @foreach ($receiptBreakdownMethods as $method => $label)
-                                            @php($methodTotal = $methodTryTotal($daySummary, $method))
+                                        <?php foreach ($receiptBreakdownMethods as $method => $label):
+                                            $methodTotal = \App\Modules\Core\Support\Money::zero();
+                                            foreach (($daySummary['methods'][$method] ?? []) as $amount) {
+                                                $methodTotal = $methodTotal->add($amount['try_equivalent']);
+                                            }
+                                        ?>
                                             <div class="flex justify-between gap-2"><span class="text-mut">{{ $label }}</span><span class="tabular-nums">{{ $methodTotal->format($try) }}</span></div>
-                                        @endforeach
+                                        <?php endforeach; ?>
                                         <div class="mt-1 flex justify-between gap-2 border-t border-line pt-1 font-semibold"><span>Toplam</span><span class="tabular-nums">{{ $daySummary['receipt_total']->format($try) }}</span></div>
                                     </div>
-                                @else
+                                <?php else: ?>
                                     —
-                                @endif
+                                <?php endif; ?>
                             </td>
                         </tr>
                     @empty
