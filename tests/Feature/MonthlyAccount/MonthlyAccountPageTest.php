@@ -84,6 +84,31 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function aylik_liste_kredi_karti_ve_link_odeme_basliklarini_renkli_zeminle_gosterir(): void
+    {
+        $this->createDay($this->admin, ['items' => [
+            $this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '2000']),
+            $this->item(['method' => 'link', 'bank_name' => 'Yapı Kredi', 'amount' => '1000']),
+        ]]);
+
+        $response = $this->get(route('monthly-account.index', ['month' => '2026-09']))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $cardHeaders = $xpath->query('//table[contains(@class, "monthly-table")]/thead/tr[1]/th[contains(concat(" ", normalize-space(@class), " "), " bg-payment-card-bg ")]');
+        $linkHeaders = $xpath->query('//table[contains(@class, "monthly-table")]/thead/tr[1]/th[contains(concat(" ", normalize-space(@class), " "), " bg-payment-link-bg ")]');
+
+        $this->assertNotFalse($cardHeaders);
+        $this->assertNotFalse($linkHeaders);
+        $this->assertSame(1, $cardHeaders->length);
+        $this->assertSame(1, $linkHeaders->length);
+        $this->assertStringContainsString('Kredi kartı', $cardHeaders->item(0)->textContent);
+        $this->assertStringContainsString('Link ödeme', $linkHeaders->item(0)->textContent);
+    }
+
+    #[Test]
     public function ay_listesi_yalniz_secilen_sahibin_o_aydaki_gunlerini_ve_toplamlarini_getirir(): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
