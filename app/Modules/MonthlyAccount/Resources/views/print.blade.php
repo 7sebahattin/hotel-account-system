@@ -202,6 +202,10 @@
             white-space: normal;
         }
 
+        .print-table thead th {
+            vertical-align: middle;
+        }
+
         .print-table td {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -220,13 +224,13 @@
         }
 
         .group-head-credit-card {
-            background: rgb(220 252 231);
-            color: rgb(20 83 45);
+            background: rgb(183 228 199);
+            color: #18212b;
         }
 
         .group-head-link {
-            background: rgb(255 237 213);
-            color: rgb(154 52 18);
+            background: rgb(247 200 145);
+            color: #18212b;
         }
 
         .payment-head {
