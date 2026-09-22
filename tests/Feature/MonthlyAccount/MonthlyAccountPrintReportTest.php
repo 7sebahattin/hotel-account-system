@@ -213,6 +213,7 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
             'daily_total' => '1.000,00',
             'items' => [
                 $this->item(['method' => 'cash', 'amount' => '10,00']),
+                $this->item(['method' => 'cash', 'currency' => 'USD', 'amount' => '2,00', 'conversion_mode' => 'total', 'try_equivalent' => '70,00']),
                 $this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '100,00']),
                 $this->item(['method' => 'link', 'bank_name' => 'Yapı Kredi', 'amount' => '200,00']),
                 $this->item(['method' => 'bank_transfer', 'bank_name' => 'Garanti BBVA', 'amount' => '300,00']),
@@ -252,10 +253,14 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
 
         foreach ($breakdowns as $breakdown) {
             $text = preg_replace('/\s+/u', ' ', trim($breakdown->textContent)) ?? '';
-            $this->assertStringContainsString('Kredi Kartı:100,00 ₺', $text);
-            $this->assertStringContainsString('Link Ödeme:200,00 ₺', $text);
-            $this->assertStringContainsString('Havale:300,00 ₺', $text);
-            $this->assertStringContainsString('Ekstra:40,00 ₺', $text);
+            $this->assertStringContainsString('Nakit: 80,00 ₺', $text);
+            $this->assertStringContainsString('Kredi kartı: 100,00 ₺', $text);
+            $this->assertStringContainsString('Link ödeme: 200,00 ₺', $text);
+            $this->assertStringContainsString('Havale: 300,00 ₺', $text);
+            $this->assertStringContainsString('Ekstra: 40,00 ₺', $text);
+            $this->assertStringContainsString('Toplam: 720,00 ₺', $text);
+            $this->assertStringNotContainsString('USD', $text);
+            $this->assertMatchesRegularExpression('/Nakit: 80,00 ₺.*Kredi kartı: 100,00 ₺.*Link ödeme: 200,00 ₺.*Havale: 300,00 ₺.*Ekstra: 40,00 ₺.*Toplam: 720,00 ₺/u', $text);
         }
     }
 

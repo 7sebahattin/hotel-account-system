@@ -95,7 +95,9 @@
                             @endphp
                             <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                         @endforeach
-                        <td class="tabular-nums">{{ $summary['receipt_total']->format($try) }}</td>
+                        <td>
+                            <x-monthly-receipt-breakdown :summary-data="$summary" data-monthly-receipt-breakdown="month" />
+                        </td>
                     </tr>
                 </thead>
                 <tbody>
@@ -133,7 +135,9 @@
                                 @endphp
                                 <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                             @endforeach
-                            <td class="font-semibold tabular-nums">{{ $daySummary ? $daySummary['receipt_total']->format($try) : '—' }}</td>
+                            <td>
+                                <x-monthly-receipt-breakdown :summary-data="$daySummary" data-monthly-receipt-breakdown="day" />
+                            </td>
                         </tr>
                     @empty
                         <tr>
