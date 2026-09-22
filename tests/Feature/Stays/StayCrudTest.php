@@ -91,7 +91,8 @@ class StayCrudTest extends TestCase
             ->assertSee('Acente rezervasyonu')
             ->assertSee('Cari hesap kartına git')
             ->assertSee('lg:hidden', false)
-            ->assertDontSee('<details', false);
+            ->assertSee('mt-6 hidden gap-4 lg:grid lg:grid-cols-3', false)
+            ->assertDontSee('<details class="group rounded-xl border border-line bg-card">', false);
     }
 
     #[Test]
