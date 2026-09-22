@@ -109,6 +109,46 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function aylik_liste_odeme_tl_karsiligi_sutununda_yontem_toplamlarini_sirasiyle_gosterir(): void
+    {
+        $this->createDay($this->admin, ['items' => [
+            $this->item(['method' => 'cash', 'amount' => '10,00']),
+            $this->item(['method' => 'cash', 'currency' => 'USD', 'amount' => '2,00', 'conversion_mode' => 'total', 'try_equivalent' => '70,00']),
+            $this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '100,00']),
+            $this->item(['method' => 'link', 'bank_name' => 'Yapı Kredi', 'amount' => '200,00']),
+            $this->item(['method' => 'bank_transfer', 'bank_name' => 'Garanti BBVA', 'amount' => '300,00']),
+            $this->item(['method' => 'extra', 'amount' => '40,00']),
+        ]]);
+
+        $response = $this->get(route('monthly-account.index', ['month' => '2026-09']))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $dayBreakdowns = $xpath->query('//*[@data-monthly-receipt-breakdown="day"]');
+        $monthBreakdowns = $xpath->query('//*[@data-monthly-receipt-breakdown="month"]');
+
+        $this->assertNotFalse($dayBreakdowns);
+        $this->assertNotFalse($monthBreakdowns);
+        $this->assertSame(1, $dayBreakdowns->length);
+        $this->assertSame(1, $monthBreakdowns->length);
+
+        foreach ([$dayBreakdowns->item(0), $monthBreakdowns->item(0)] as $breakdown) {
+            $this->assertNotNull($breakdown);
+            $text = preg_replace('/\s+/u', ' ', trim($breakdown->textContent)) ?? '';
+            $this->assertStringContainsString('Nakit 80,00 ₺', $text);
+            $this->assertStringContainsString('Kredi kartı 100,00 ₺', $text);
+            $this->assertStringContainsString('Link ödeme 200,00 ₺', $text);
+            $this->assertStringContainsString('Havale 300,00 ₺', $text);
+            $this->assertStringContainsString('Ekstra 40,00 ₺', $text);
+            $this->assertStringContainsString('Toplam 720,00 ₺', $text);
+            $this->assertStringNotContainsString('USD', $text);
+            $this->assertMatchesRegularExpression('/Nakit 80,00 ₺.*Kredi kartı 100,00 ₺.*Link ödeme 200,00 ₺.*Havale 300,00 ₺.*Ekstra 40,00 ₺.*Toplam 720,00 ₺/u', $text);
+        }
+    }
+
+    #[Test]
     public function ay_listesi_yalniz_secilen_sahibin_o_aydaki_gunlerini_ve_toplamlarini_getirir(): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
