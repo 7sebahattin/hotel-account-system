@@ -55,10 +55,16 @@
             </div>
         </form>
 
-        <div class="mt-3 grid gap-3 rounded-lg border border-line bg-card p-3 sm:grid-cols-3">
-            <x-ui.stat label="Günlük liste toplamları" :value="$summary['daily_total']->format($try)" hint="Elle girilen liste tutarları" />
-            <x-ui.stat label="Alınan ödemeler · TL karşılığı" :value="$summary['receipt_total']->format($try)" hint="Nakit, kart, link, havale ve ekstra" />
-            <x-ui.stat label="Listeye göre fark" :value="$summary['difference']->format($try)" hint="Ödemeler − günlük liste toplamları" />
+        <div class="mt-3 grid gap-3 sm:grid-cols-3" data-monthly-summaries>
+            <div class="rounded-lg border border-line border-t-4 border-t-nav-well bg-info-bg p-3 shadow-sm" data-monthly-summary="daily">
+                <x-ui.stat class="[&_.text-mut]:text-tx" label="Günlük liste toplamları" :value="$summary['daily_total']->format($try)" hint="Elle girilen liste tutarları" />
+            </div>
+            <div class="rounded-lg border border-line border-t-4 border-t-success bg-success-bg p-3 shadow-sm" data-monthly-summary="receipt">
+                <x-ui.stat class="[&_.text-mut]:text-tx" label="Alınan ödemeler · TL karşılığı" :value="$summary['receipt_total']->format($try)" tone="credit" hint="Nakit, kart, link, havale ve ekstra" />
+            </div>
+            <div class="rounded-lg border border-line border-t-4 border-t-acc-tx bg-acc-bg p-3 shadow-sm" data-monthly-summary="difference">
+                <x-ui.stat class="[&_.text-mut]:text-tx" label="Listeye göre fark" :value="$summary['difference']->format($try)" tone="debit" hint="Ödemeler − günlük liste toplamları" />
+            </div>
         </div>
 
         <div class="monthly-table-wrap mt-3 hidden rounded-lg border border-line bg-card 2xl:block">
