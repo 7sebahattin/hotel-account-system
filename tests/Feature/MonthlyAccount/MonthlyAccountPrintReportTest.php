@@ -63,6 +63,54 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function aylik_liste_ve_print_ozet_kartlari_ayni_renkli_vurgulari_kullanir(): void
+    {
+        $this->createDay($this->admin, [
+            'account_date' => '2026-09-14',
+            'daily_total' => '1.000,00',
+            'items' => [$this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '750,00'])],
+        ]);
+
+        $indexResponse = $this->actingAs($this->admin)->get(route('monthly-account.index', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]))->assertOk();
+
+        $indexDom = new DOMDocument;
+        @$indexDom->loadHTML('<?xml encoding="UTF-8">'.(string) $indexResponse->getContent());
+        $indexXpath = new DOMXPath($indexDom);
+        $daily = $indexXpath->query('//*[@data-monthly-summary="daily"]');
+        $receipt = $indexXpath->query('//*[@data-monthly-summary="receipt"]');
+        $difference = $indexXpath->query('//*[@data-monthly-summary="difference"]');
+
+        $this->assertNotFalse($daily);
+        $this->assertNotFalse($receipt);
+        $this->assertNotFalse($difference);
+        $this->assertSame(1, $daily->length);
+        $this->assertSame(1, $receipt->length);
+        $this->assertSame(1, $difference->length);
+        $this->assertStringContainsString('bg-info-bg', $daily->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+        $this->assertStringContainsString('border-t-nav-well', $daily->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+        $this->assertStringContainsString('bg-success-bg', $receipt->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+        $this->assertStringContainsString('border-t-success', $receipt->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+        $this->assertStringContainsString('bg-acc-bg', $difference->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+        $this->assertStringContainsString('border-t-acc-tx', $difference->item(0)->attributes->getNamedItem('class')?->nodeValue ?? '');
+
+        $printResponse = $this->get(route('monthly-account.print', [
+            'owner_id' => $this->admin->id,
+            'month' => '2026-09',
+        ]))->assertOk();
+
+        $printDom = new DOMDocument;
+        @$printDom->loadHTML('<?xml encoding="UTF-8">'.(string) $printResponse->getContent());
+        $printXpath = new DOMXPath($printDom);
+
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-daily")]')->length);
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-receipt")]')->length);
+        $this->assertSame(1, $printXpath->query('//div[contains(@class, "summary-difference")]')->length);
+    }
+
+    #[Test]
     public function print_raporu_gunleri_artarak_tek_tabloda_ve_ay_toplamini_sonda_gosterir(): void
     {
         $providers = ['Garanti BBVA', 'İş Bankası', 'Yapı Kredi', 'Ziraat Bankası'];
