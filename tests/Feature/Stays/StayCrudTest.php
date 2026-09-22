@@ -66,6 +66,36 @@ class StayCrudTest extends TestCase
     }
 
     #[Test]
+    public function konaklama_detayi_masaustunde_acik_bilgi_satirini_ve_cari_baglanti_butonunu_gosterir(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $stay = Stay::factory()->create([
+            'company_id' => $this->company->id,
+            'created_by' => $admin->id,
+            'updated_by' => $admin->id,
+            'guest_name' => 'Detay Misafiri',
+            'check_in_date' => '2026-09-07',
+            'check_out_date' => '2026-09-10',
+            'nights' => 3,
+            'amount' => '9000.00',
+            'notes' => 'Acente rezervasyonu',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('stays.show', $stay));
+
+        $response->assertOk()
+            ->assertSee('Konaklama bilgileri')
+            ->assertSee('Kayıt bilgisi')
+            ->assertSee('07.09.2026')
+            ->assertSee('10.09.2026')
+            ->assertSee('Acente rezervasyonu')
+            ->assertSee('Cari hesap kartına git')
+            ->assertSee('lg:hidden', false)
+            ->assertSee('mt-6 hidden gap-4 lg:grid lg:grid-cols-3', false)
+            ->assertDontSee('<details class="group rounded-xl border border-line bg-card">', false);
+    }
+
+    #[Test]
     public function gece_sayisi_sunucuda_hesaplanir(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);

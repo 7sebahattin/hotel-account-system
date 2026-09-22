@@ -55,75 +55,34 @@
         </x-ui.alert>
     @endif
 
-    <div class="mt-6 grid gap-4 lg:grid-cols-3">
+    <div class="mt-6 grid gap-4 lg:hidden">
         <x-ui.card title="Konaklama bilgileri" class="p-6 lg:col-span-2">
-            <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Giriş</dt>
-                    <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $stay->check_in_date->format('d.m.Y') }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Çıkış</dt>
-                    <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $stay->check_out_date->format('d.m.Y') }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Gece</dt>
-                    <dd class="mt-0.5 text-sm tabular-nums text-tx">{{ $stay->nights }}</dd>
-                </div>
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Ücretlendirme</dt>
-                    <dd class="mt-0.5 text-sm text-tx">{{ $stay->pricing_mode->label() }}</dd>
-                </div>
-                @if ($stay->isDailyPriced())
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-mut">Günlük ücret</dt>
-                        <dd class="mt-0.5 text-sm tabular-nums text-tx">
-                            {{ $stay->dailyRateMoney()?->format($stay->currency) }}
-                        </dd>
-                    </div>
-                @endif
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Toplam</dt>
-                    <dd class="mt-0.5 text-sm tabular-nums text-tx">
-                        {{ $stay->amountMoney()->format($stay->currency) }}
-                        @if ($stay->isDailyPriced())
-                            <span class="block text-xs text-mut">
-                                {{ $stay->nights }} gece × {{ $stay->dailyRateMoney()?->format($stay->currency) }}
-                            </span>
-                        @endif
-                        <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" />
-                        @if ($stay->isMissingExchangeRate())
-                            <span class="mt-0.5 block text-xs text-mut">Kur bilgisi eksik (geçmiş kayıt).</span>
-                        @endif
-                    </dd>
-                </div>
-                <div class="sm:col-span-2">
-                    <dt class="text-xs uppercase tracking-wide text-mut">Notlar</dt>
-                    <dd class="mt-0.5 text-sm whitespace-pre-line text-tx">{{ $stay->notes ?: '—' }}</dd>
-                </div>
-            </dl>
+            @include('stays::_stay-information')
         </x-ui.card>
 
         <x-ui.card title="Kayıt bilgisi" class="p-6">
-            <dl class="space-y-3 text-sm">
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Oluşturan</dt>
-                    <dd class="mt-0.5 text-tx">
-                        {{ $stay->creator?->name ?? '—' }}
-                        <span class="text-mut">· {{ $stay->created_at->format('d.m.Y H:i') }}</span>
-                    </dd>
-                </div>
-                <div>
-                    <dt class="text-xs uppercase tracking-wide text-mut">Son güncelleyen</dt>
-                    <dd class="mt-0.5 text-tx">
-                        {{ $stay->updater?->name ?? '—' }}
-                        <span class="text-mut">· {{ $stay->updated_at->format('d.m.Y H:i') }}</span>
-                    </dd>
-                </div>
-            </dl>
+            @include('stays::_audit-information')
 
             @if ($stay->company)
                 <div class="mt-6">
+                    <x-ui.button variant="secondary" :href="route('companies.show', $stay->company)">
+                        Cari hesap kartına git
+                    </x-ui.button>
+                </div>
+            @endif
+        </x-ui.card>
+    </div>
+
+    <div class="mt-6 hidden gap-4 lg:grid lg:grid-cols-3">
+        <x-ui.card title="Konaklama bilgileri" class="p-4 lg:col-span-2">
+            @include('stays::_stay-information', ['compact' => true])
+        </x-ui.card>
+
+        <x-ui.card title="Kayıt bilgisi" class="p-4">
+            @include('stays::_audit-information', ['compact' => true])
+
+            @if ($stay->company)
+                <div class="mt-4">
                     <x-ui.button variant="secondary" :href="route('companies.show', $stay->company)">
                         Cari hesap kartına git
                     </x-ui.button>

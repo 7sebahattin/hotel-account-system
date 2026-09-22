@@ -40,7 +40,6 @@
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
                 ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
                 ['route' => 'monthly-account.providers.index', 'label' => 'Banka / Ödeme Kuruluşları', 'can' => Permission::MonthlyAccountManageProviders->value, 'icon' => 'building'],
-                ['route' => 'fx-correction.index', 'label' => 'Geçmiş Döviz Düzeltme', 'can' => Permission::FxCorrectHistorical->value, 'icon' => 'log'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
         ],
@@ -81,7 +80,6 @@
         'roles.index' => ['roles.*'],
         'rooms.index' => ['rooms.*'],
         'monthly-account.providers.index' => ['monthly-account.providers.*'],
-        'fx-correction.index' => ['fx-correction.*'],
         'audit.index' => ['audit.*'],
     ];
 
