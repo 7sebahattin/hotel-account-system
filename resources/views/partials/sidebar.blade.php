@@ -25,6 +25,7 @@
                 // tutuldu, karışıklık riskine karşı (§9).
                 ['route' => 'receipt-book.index', 'label' => 'Tahsilat Makbuzları', 'can' => Permission::ReceiptBookView->value, 'icon' => 'log'],
                 ['route' => 'statements.index', 'label' => 'Cari Ekstre', 'can' => Permission::LedgerViewAll->value, 'icon' => 'ledger'],
+                ['route' => 'statements.graphics', 'label' => 'Grafik', 'can' => Permission::LedgerViewAll->value, 'icon' => 'chart'],
             ],
         ],
         [
@@ -74,7 +75,8 @@
         'stays.index' => ['stays.*'],
         'payments.index' => ['payments.*'],
         'receipt-book.index' => ['receipt-book.*'],
-        'statements.index' => ['statements.*'],
+        'statements.index' => ['statements.index', 'statements.print-index', 'statements.show', 'statements.print'],
+        'statements.graphics' => ['statements.graphics', 'statements.graphics-print'],
         'monthly-account.index' => ['monthly-account.index', 'monthly-account.create', 'monthly-account.show', 'monthly-account.edit'],
         'users.index' => ['users.*'],
         'roles.index' => ['roles.*'],
