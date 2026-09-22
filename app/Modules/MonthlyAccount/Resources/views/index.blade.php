@@ -24,13 +24,6 @@
         }
 
         $columns[] = ['method' => 'extra', 'bank' => null, 'label' => 'Ekstra'];
-        $receiptBreakdownMethods = [
-            'cash' => 'Nakit',
-            'credit_card' => 'Kredi kartı',
-            'link' => 'Link ödeme',
-            'bank_transfer' => 'Havale',
-            'extra' => 'Ekstra',
-        ];
         $monthParams = ['owner_id' => $owner->id];
         $recorded = $days->filter(fn ($day) => ! $day->isDeleted())->count();
         $storedDates = $days->keys()->sort()->values();
@@ -103,17 +96,7 @@
                             <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                         @endforeach
                         <td>
-                            <div class="space-y-0.5 text-[11px] leading-tight" data-monthly-receipt-breakdown="month">
-                                <?php foreach ($receiptBreakdownMethods as $method => $label):
-                                    $methodTotal = \App\Modules\Core\Support\Money::zero();
-                                    foreach (($summary['methods'][$method] ?? []) as $amount) {
-                                        $methodTotal = $methodTotal->add($amount['try_equivalent']);
-                                    }
-                                ?>
-                                    <div class="flex justify-between gap-2"><span>{{ $label }}</span><span class="tabular-nums">{{ $methodTotal->format($try) }}</span></div>
-                                <?php endforeach; ?>
-                                <div class="mt-1 flex justify-between gap-2 border-t border-nav-line pt-1 font-semibold"><span>Toplam</span><span class="tabular-nums">{{ $summary['receipt_total']->format($try) }}</span></div>
-                            </div>
+                            <x-monthly-receipt-breakdown :summary-data="$summary" data-monthly-receipt-breakdown="month" />
                         </td>
                     </tr>
                 </thead>
@@ -153,21 +136,7 @@
                                 <td>@include('monthly-account::_amounts', ['amounts' => $amounts])</td>
                             @endforeach
                             <td>
-                                <?php if ($daySummary): ?>
-                                    <div class="space-y-0.5 text-[11px] leading-tight" data-monthly-receipt-breakdown="day">
-                                        <?php foreach ($receiptBreakdownMethods as $method => $label):
-                                            $methodTotal = \App\Modules\Core\Support\Money::zero();
-                                            foreach (($daySummary['methods'][$method] ?? []) as $amount) {
-                                                $methodTotal = $methodTotal->add($amount['try_equivalent']);
-                                            }
-                                        ?>
-                                            <div class="flex justify-between gap-2"><span class="text-mut">{{ $label }}</span><span class="tabular-nums">{{ $methodTotal->format($try) }}</span></div>
-                                        <?php endforeach; ?>
-                                        <div class="mt-1 flex justify-between gap-2 border-t border-line pt-1 font-semibold"><span>Toplam</span><span class="tabular-nums">{{ $daySummary['receipt_total']->format($try) }}</span></div>
-                                    </div>
-                                <?php else: ?>
-                                    —
-                                <?php endif; ?>
+                                <x-monthly-receipt-breakdown :summary-data="$daySummary" data-monthly-receipt-breakdown="day" />
                             </td>
                         </tr>
                     @empty
