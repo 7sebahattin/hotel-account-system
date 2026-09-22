@@ -191,10 +191,10 @@ class MonthlyAccountPrintReportTest extends MonthlyAccountTestCase
 
         foreach ($breakdowns as $breakdown) {
             $text = preg_replace('/\s+/u', ' ', trim($breakdown->textContent)) ?? '';
-            $this->assertStringContainsString('Kredi Kartı: 100,00 ₺', $text);
-            $this->assertStringContainsString('Link Ödeme: 200,00 ₺', $text);
-            $this->assertStringContainsString('Havale: 300,00 ₺', $text);
-            $this->assertStringContainsString('Ekstra: 40,00 ₺', $text);
+            $this->assertStringContainsString('Kredi Kartı:100,00 ₺', $text);
+            $this->assertStringContainsString('Link Ödeme:200,00 ₺', $text);
+            $this->assertStringContainsString('Havale:300,00 ₺', $text);
+            $this->assertStringContainsString('Ekstra:40,00 ₺', $text);
         }
     }
 
