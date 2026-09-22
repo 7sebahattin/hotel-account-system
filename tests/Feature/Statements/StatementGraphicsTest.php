@@ -158,6 +158,22 @@ class StatementGraphicsTest extends TestCase
     }
 
     #[Test]
+    public function print_grafik_cubuklari_arka_plan_grafikleri_ayarindan_bagimsiz_svg_olarak_render_edilir(): void
+    {
+        $company = Company::factory()->create(['name' => 'Yazdirma Grafik Firma']);
+        $this->debit($company, '1250.00', Currency::TRY, '2026-09-20');
+
+        $this->actingAs($this->admin)
+            ->get(route('statements.graphics-print', ['currency' => 'TRY']))
+            ->assertOk()
+            ->assertSee('class="graphics-bar-svg"', false)
+            ->assertSee('fill="currentColor"', false)
+            ->assertSee('width="100"', false)
+            ->assertDontSee('graphics-bar-fill', false)
+            ->assertDontSee('background: currentColor', false);
+    }
+
+    #[Test]
     public function print_sayfalama_uygulamadan_tum_eslesen_borclulari_yazdirir(): void
     {
         foreach (range(1, 28) as $index) {
