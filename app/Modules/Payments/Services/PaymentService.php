@@ -269,7 +269,7 @@ class PaymentService
                 return [$payment->getKey() => [
                     'edited' => $edited,
                     'user' => $actor->name,
-                    'at' => $at->toDateTimeString(),
+                    'at' => $at->format('d.m.Y H:i'),
                 ]];
             })
             ->all();
