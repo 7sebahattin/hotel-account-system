@@ -163,6 +163,105 @@ class StatementScreenTest extends TestCase
     }
 
     #[Test]
+    public function firma_ekstresi_varsayilan_en_yeni_kaynak_ustte_ve_satirlar_kaynaga_tiklanabilirdir(): void
+    {
+        $this->seedMovements();
+
+        $stay = Stay::query()->firstOrFail();
+        $payment = Payment::query()->firstOrFail();
+
+        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+        $rows = $xpath->query('//table//tbody/tr[@data-statement-row-url]');
+
+        $this->assertNotFalse($rows);
+        $this->assertSame(2, $rows->length);
+
+        $newest = $rows->item(0);
+        $oldest = $rows->item(1);
+        $this->assertInstanceOf(DOMElement::class, $newest);
+        $this->assertInstanceOf(DOMElement::class, $oldest);
+        $this->assertSame(route('payments.show', $payment), $newest->getAttribute('data-statement-row-url'));
+        $this->assertSame(route('stays.show', $stay), $oldest->getAttribute('data-statement-row-url'));
+        $this->assertSame('0', $newest->getAttribute('tabindex'));
+        $this->assertSame('link', $newest->getAttribute('role'));
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-statement-row-url]//a')->length);
+
+        $ascending = $this->get(route('statements.show', [$this->company, 'direction' => 'asc']))->assertOk();
+        $ascDom = new DOMDocument;
+        @$ascDom->loadHTML($ascending->getContent());
+        $ascXpath = new DOMXPath($ascDom);
+        $ascRows = $ascXpath->query('//table//tbody/tr[@data-statement-row-url]');
+
+        $this->assertNotFalse($ascRows);
+        $this->assertSame(2, $ascRows->length);
+        $firstAsc = $ascRows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $firstAsc);
+        $this->assertSame(route('stays.show', $stay), $firstAsc->getAttribute('data-statement-row-url'));
+    }
+
+    #[Test]
+    public function firma_adi_ve_cari_hesap_karti_gercek_baglanti_butonu_olarak_gosterilir(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+        $companyUrl = route('companies.show', $this->company);
+
+        $this->assertSame(1, $xpath->query('//h1/a[@href="'.$companyUrl.'" and normalize-space(.)="Monarch"]')->length);
+        $this->assertSame(
+            1,
+            $xpath->query('//a[@href="'.$companyUrl.'" and normalize-space(.)="Cari hesap kartı" and contains(concat(" ", normalize-space(@class), " "), " border ") and contains(concat(" ", normalize-space(@class), " "), " bg-card ")]')->length,
+        );
+    }
+
+    #[Test]
+    public function kaynak_kolonu_yerine_olusturan_ve_duzenleyen_tarih_saat_bilgisi_gosterilir(): void
+    {
+        $this->admin->forceFill(['name' => 'Sercan Çakmak'])->save();
+        $editor = $this->userWithRole(RoleName::Admin);
+        $editor->forceFill(['name' => 'Editör Kullanıcı'])->save();
+
+        $this->seedMovements();
+
+        $stay = Stay::query()->firstOrFail();
+        $payment = Payment::query()->firstOrFail();
+
+        DB::table('stays')->where('id', $stay->id)->update([
+            'created_by' => $this->admin->id,
+            'updated_by' => $this->admin->id,
+            'created_at' => '2026-09-22 10:00:00',
+            'updated_at' => '2026-09-22 10:00:00',
+        ]);
+        DB::table('payments')->where('id', $payment->id)->update([
+            'created_by' => $this->admin->id,
+            'updated_by' => $editor->id,
+            'created_at' => '2026-09-22 10:05:00',
+            'updated_at' => '2026-09-22 11:30:00',
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
+
+        $response
+            ->assertSee('Oluşturan: Sercan Çakmak')
+            ->assertSee('22.09.2026 10:00')
+            ->assertSee('Düzenleyen: Editör Kullanıcı')
+            ->assertSee('22.09.2026 11:30');
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $this->assertSame(1, $xpath->query('//table//thead//th[normalize-space(.)="Kayıt bilgisi"]')->length);
+        $this->assertSame(0, $xpath->query('//table//thead//th[normalize-space(.)="Kaynak"]')->length);
+    }
+
+    #[Test]
     public function sidebar_release_surumu_merkezi_config_kaynagindan_render_edilir(): void
     {
         $this->actingAs($this->admin)
@@ -281,34 +380,44 @@ class StatementScreenTest extends TestCase
 
     // -------------------------------------------------------- kaynak kayıt
 
-    /** Ters kayıt da ORİJİNAL kaynağa bağlanır: "Tahsilat kaydı", "İptal kaydı" değil. */
+    /** Ters kayıt da ORİJİNAL tahsilat kaynağına tıklanır. */
     #[Test]
     public function ters_kayit_orijinal_kaynaga_baglanir(): void
     {
         $this->seedMovements();
-        app(PaymentService::class)->cancel(Payment::query()->firstOrFail(), 'Mükerrer', $this->admin);
+        $payment = Payment::query()->firstOrFail();
+        app(PaymentService::class)->cancel($payment, 'Mükerrer', $this->admin);
 
-        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company));
+        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
 
-        $response->assertOk()
-            ->assertDontSee('İptal / Ters Kayıt kaydı')
-            ->assertSee('Tahsilat kaydı')
-            ->assertSee(route('payments.show', Payment::query()->firstOrFail()), false);
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+        $reversalRows = $xpath->query('//table//tbody/tr[contains(normalize-space(.), "İptal / Ters Kayıt")]');
+
+        $this->assertNotFalse($reversalRows);
+        $this->assertSame(1, $reversalRows->length);
+        $row = $reversalRows->item(0);
+        $this->assertInstanceOf(DOMElement::class, $row);
+        $this->assertSame(route('payments.show', $payment), $row->getAttribute('data-statement-row-url'));
     }
 
     #[Test]
-    public function kaynak_kayitlara_baglanti_verilir(): void
+    public function kaynak_kayitlara_satir_baglantisi_verilir(): void
     {
         $this->seedMovements();
 
         $stay = Stay::query()->firstOrFail();
         $payment = Payment::query()->firstOrFail();
+        $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
 
-        $this->actingAs($this->admin)
-            ->get(route('statements.show', $this->company))
-            ->assertOk()
-            ->assertSee(route('stays.show', $stay), false)
-            ->assertSee(route('payments.show', $payment), false);
+        $dom = new DOMDocument;
+        @$dom->loadHTML($response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $this->assertSame(1, $xpath->query('//table//tbody/tr[@data-statement-row-url="'.route('stays.show', $stay).'"]')->length);
+        $this->assertSame(1, $xpath->query('//table//tbody/tr[@data-statement-row-url="'.route('payments.show', $payment).'"]')->length);
+        $this->assertSame(0, $xpath->query('//table//tbody/tr//a[@href="'.route('stays.show', $stay).'" or @href="'.route('payments.show', $payment).'"]')->length);
     }
 
     /** Ledger'ın doğruluğu kaynak kayda bağlı değildir: ekran çökmez. */
