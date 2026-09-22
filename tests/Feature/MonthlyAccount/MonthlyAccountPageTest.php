@@ -189,6 +189,48 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function gun_ayrintisi_banka_toplamlarini_acik_yazdir_baglantisiyla_ve_500_uretmeden_render_eder(): void
+    {
+        $day = $this->createDay($this->admin, ['items' => [
+            $this->item(['method' => 'credit_card', 'bank_name' => 'Ziraat Bankası', 'amount' => '3000']),
+            $this->item(['method' => 'credit_card', 'bank_name' => 'Ziraat Bankası', 'currency' => 'EUR', 'amount' => '200', 'conversion_mode' => 'total', 'try_equivalent' => '9000', 'note' => null]),
+        ]]);
+
+        $response = $this->get(route('monthly-account.show', $day))
+            ->assertOk()
+            ->assertSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertSee('Ziraat Bankası')
+            ->assertSee(route('monthly-account.print-day', $day))
+            ->assertSee('target="_blank"', false);
+
+        $dom = new DOMDocument;
+        @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
+        $xpath = new DOMXPath($dom);
+
+        $this->assertSame(1, $xpath->query('//section[@aria-labelledby="monthly-bank-totals-heading"]')->length);
+        $this->assertSame(0, $xpath->query('//details[.//text()[contains(., "Banka ve ödeme kuruluşu toplamları")]]')->length);
+    }
+
+    #[Test]
+    public function gun_ayrintisi_banka_ve_not_olmadan_ve_silinmis_kayitta_500_uretmeden_render_eder(): void
+    {
+        $empty = $this->createDay($this->admin, ['account_date' => '2026-09-13', 'note' => null, 'items' => [
+            $this->item(['method' => 'cash', 'bank_name' => null, 'note' => null]),
+        ]]);
+        $deleted = $this->createDay($this->admin, ['account_date' => '2026-09-14']);
+
+        $this->delete(route('monthly-account.destroy', $deleted), ['version' => 1])->assertRedirect();
+
+        $this->get(route('monthly-account.show', $empty))
+            ->assertOk()
+            ->assertDontSee('Banka ve ödeme kuruluşu toplamları')
+            ->assertDontSee('Günlük not');
+        $this->get(route('monthly-account.show', $deleted->fresh()))
+            ->assertOk()
+            ->assertSee('Bu gün silinmiş olarak saklanıyor');
+    }
+
+    #[Test]
     public function patron_ekleme_silme_gormez_personel_kendi_alaninda_ekleme_gorur(): void
     {
         $personel = $this->userWithRole(RoleName::Personel);
