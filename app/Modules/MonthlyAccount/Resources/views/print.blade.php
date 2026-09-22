@@ -223,12 +223,12 @@
             text-transform: uppercase;
         }
 
-        .group-head-credit-card {
+        .print-table th.group-head-credit-card {
             background: rgb(183 228 199);
             color: #18212b;
         }
 
-        .group-head-link {
+        .print-table th.group-head-link {
             background: rgb(247 200 145);
             color: #18212b;
         }
