@@ -11,6 +11,7 @@ use App\Modules\MonthlyAccount\Http\Requests\DeleteMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Http\Requests\MonthlyAccountFilterRequest;
 use App\Modules\MonthlyAccount\Http\Requests\SaveMonthlyAccountRequest;
 use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
+use App\Modules\MonthlyAccount\Models\MonthlyAccountRevision;
 use App\Modules\MonthlyAccount\Services\MonthlyAccountService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
@@ -108,12 +109,12 @@ class MonthlyAccountController extends Controller
         ]);
     }
 
-    /** @return array{day: MonthlyAccountDay, revision: \App\Modules\MonthlyAccount\Models\MonthlyAccountRevision} */
+    /** @return array{day: MonthlyAccountDay, revision: MonthlyAccountRevision} */
     private function dayData(MonthlyAccountDay $day): array
     {
         $day->load(['owner', 'creator', 'updater', 'currentRevision.items', 'currentRevision.creator', 'revisions.creator']);
 
-        /** @var \App\Modules\MonthlyAccount\Models\MonthlyAccountRevision $revision */
+        /** @var MonthlyAccountRevision $revision */
         $revision = $day->currentRevision;
 
         return ['day' => $day, 'revision' => $revision];
