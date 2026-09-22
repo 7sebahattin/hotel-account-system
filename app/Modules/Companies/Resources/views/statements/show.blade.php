@@ -2,7 +2,7 @@
 @section('title', $company->name.' — cari ekstre')
 
 @section('content')
-    <x-ui.page-header :title="$company->name" subtitle="Cari ekstre">
+    <x-ui.page-header :title="$company->name" :title-href="route('companies.show', $company)" subtitle="Cari ekstre">
         <x-slot:meta>
             @if ($criteria->dateFrom || $criteria->dateTo)
                 <p class="mt-1 text-sm tabular-nums text-mut">
@@ -17,7 +17,7 @@
                          :href="route('statements.print', [$company, ...$criteria->toQuery()])">
                 Yazdır
             </x-ui.button>
-            <x-ui.button variant="ghost" :href="route('companies.show', $company)">Cari hesap kartı</x-ui.button>
+            <x-ui.button variant="secondary" :href="route('companies.show', $company)">Cari hesap kartı</x-ui.button>
         </x-slot:actions>
     </x-ui.page-header>
 
@@ -65,8 +65,8 @@
             <x-ui.input label="Açıklamada ara" name="q" type="search" :value="request('q')" />
 
             <x-ui.select label="Sıralama" name="direction">
-                <option value="asc" @selected(request('direction') !== 'desc')>Eskiden yeniye</option>
-                <option value="desc" @selected(request('direction') === 'desc')>Yeniden eskiye</option>
+                <option value="desc" @selected(request('direction', 'desc') !== 'asc')>Yeniden eskiye</option>
+                <option value="asc" @selected(request('direction', 'desc') === 'asc')>Eskiden yeniye</option>
             </x-ui.select>
         </div>
     </x-ui.filter-panel>
@@ -108,13 +108,34 @@
                 <x-ui.th align="right">Alacak</x-ui.th>
                 <x-ui.th>Para birimi</x-ui.th>
                 <x-ui.th align="right" class="bg-well">Bakiye</x-ui.th>
-                <x-ui.th>Kaynak</x-ui.th>
+                <x-ui.th>Kayıt bilgisi</x-ui.th>
             </tr>
         </thead>
         <tbody>
             @forelse ($statement->rows as $row)
-                @php $rowFx = $fx['byEntry'][$row->entry->id] ?? null; @endphp
-                <tr class="border-b border-line last:border-0 hover:bg-well">
+                @php
+                    $rowFx = $fx['byEntry'][$row->entry->id] ?? null;
+                    $sourceType = (string) $row->entry->source_type;
+                    $sourceId = $row->entry->source_id;
+                    $sourceMeta = $sourceId === null ? null : ($statementSources[$sourceType][$sourceId] ?? null);
+                    $sourceRoute = match ($sourceType) {
+                        'stay' => 'stays.show',
+                        'payment' => 'payments.show',
+                        default => null,
+                    };
+                    $sourceUrl = $sourceMeta !== null && $sourceRoute !== null && $sourceId !== null
+                        ? route($sourceRoute, $sourceId)
+                        : null;
+                @endphp
+                <tr
+                    class="statement-row border-b border-line last:border-0 hover:bg-well"
+                    @if ($sourceUrl)
+                        data-statement-row-url="{{ $sourceUrl }}"
+                        tabindex="0"
+                        role="link"
+                        aria-label="Kaynak kaydı aç"
+                    @endif
+                >
                     <td class="px-4 py-3 whitespace-nowrap tabular-nums text-tx">
                         {{ $row->entry->entry_date->format('d.m.Y') }}
                     </td>
@@ -159,7 +180,12 @@
                         @endif
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-xs">
-                        @include('companies::statements._source-link')
+                        @if ($sourceMeta)
+                            <span class="block font-medium text-tx">{{ $sourceMeta['edited'] ? 'Düzenleyen' : 'Oluşturan' }}: {{ $sourceMeta['user'] }}</span>
+                            <span class="mt-0.5 block tabular-nums text-mut">{{ IlluminateSupportCarbon::parse($sourceMeta['at'])->format('d.m.Y H:i') }}</span>
+                        @else
+                            <span class="text-mut">Kaynak kayıt bulunamadı</span>
+                        @endif
                     </td>
                 </tr>
             @empty
@@ -173,7 +199,29 @@
     {{-- Mobil: yatay kaydırma yok; her tutarın yanında para birimi açıkça yazar. --}}
     <div class="mt-4 space-y-3 lg:hidden">
         @forelse ($statement->rows as $row)
-            @php $rowFx = $fx['byEntry'][$row->entry->id] ?? null; @endphp
+            @php
+                $rowFx = $fx['byEntry'][$row->entry->id] ?? null;
+                $sourceType = (string) $row->entry->source_type;
+                $sourceId = $row->entry->source_id;
+                $sourceMeta = $sourceId === null ? null : ($statementSources[$sourceType][$sourceId] ?? null);
+                $sourceRoute = match ($sourceType) {
+                    'stay' => 'stays.show',
+                    'payment' => 'payments.show',
+                    default => null,
+                };
+                $sourceUrl = $sourceMeta !== null && $sourceRoute !== null && $sourceId !== null
+                    ? route($sourceRoute, $sourceId)
+                    : null;
+            @endphp
+            <div
+                class="statement-row"
+                @if ($sourceUrl)
+                    data-statement-row-url="{{ $sourceUrl }}"
+                    tabindex="0"
+                    role="link"
+                    aria-label="Kaynak kaydı aç"
+                @endif
+            >
             <x-ui.card>
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
@@ -202,7 +250,14 @@
                 <p class="mt-2 text-sm text-mut">{{ $row->entry->description }}</p>
 
                 <div class="mt-3 flex items-end justify-between gap-3 border-t border-line pt-3">
-                    <span class="text-xs">@include('companies::statements._source-link')</span>
+                    <span class="text-xs">
+                        @if ($sourceMeta)
+                            <span class="block font-medium text-tx">{{ $sourceMeta['edited'] ? 'Düzenleyen' : 'Oluşturan' }}: {{ $sourceMeta['user'] }}</span>
+                            <span class="mt-0.5 block tabular-nums text-mut">{{ IlluminateSupportCarbon::parse($sourceMeta['at'])->format('d.m.Y H:i') }}</span>
+                        @else
+                            <span class="text-mut">Kaynak kayıt bulunamadı</span>
+                        @endif
+                    </span>
                     <span class="text-right text-sm text-mut">
                         Bakiye
                         <span class="block font-semibold tabular-nums text-tx">{{ $row->runningBalance->format($row->currency()) }}</span>
@@ -215,6 +270,7 @@
                     </span>
                 </div>
             </x-ui.card>
+            </div>
         @empty
             <x-ui.empty>Bu aralıkta cari hareket bulunmuyor.</x-ui.empty>
         @endforelse
