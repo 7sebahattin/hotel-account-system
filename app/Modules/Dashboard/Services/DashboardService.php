@@ -11,6 +11,7 @@ use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Core\Support\TurkishDate;
 use App\Modules\Dashboard\Support\ActivityItem;
 use App\Modules\Dashboard\Support\ChartMonth;
 use App\Modules\Dashboard\Support\CompanyBalanceRow;
@@ -38,8 +39,6 @@ use Illuminate\Support\Collection;
  */
 class DashboardService
 {
-    private const array MONTH_LABELS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-
     public function __construct(
         private readonly LedgerStatementService $statements,
         private readonly CompanyService $companies,
@@ -312,7 +311,7 @@ class DashboardService
 
             $series[] = new ChartMonth(
                 key: $key,
-                label: self::MONTH_LABELS[$month->month - 1].' '.$month->year,
+                label: TurkishDate::shortMonth($month).' '.$month->year,
                 stays: $stays[$key] ?? Money::zero(),
                 payments: $payments[$key] ?? Money::zero(),
                 net: $running,

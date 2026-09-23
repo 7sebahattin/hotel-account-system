@@ -36,6 +36,17 @@ final class NavIcons
         'card' => 'M2 5h16v10H2V5zm0 3h16M5 12h3',
         'pencil' => 'M13.5 3.5l3 3L7 16H4v-3l9.5-9.5z',
         'chevron-right' => 'M8 5l5 5-5 5',
+        // Liste ekranı (Konaklamalar) başlık, filtre ve satır ikonları.
+        'chevron-down' => 'M6 8l4 4 4-4',
+        'arrow-right' => 'M4 10h12m0 0l-4-4m4 4l-4 4',
+        'printer' => 'M5 8V3h10v5M5 14H3V9a1 1 0 011-1h12a1 1 0 011 1v5h-2M6 12h8v5H6v-5z',
+        'calendar' => 'M4 5h12a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm-1 4h14M7 3v4m6-4v4',
+        'search' => 'M9 15a6 6 0 100-12 6 6 0 000 12zm8 2l-3.5-3.5',
+        'filter' => 'M3 4h14l-5.5 6.5V16l-3 1.5v-7L3 4z',
+        'moon' => 'M16 12.5A7 7 0 017.5 4a7 7 0 108.5 8.5z',
+        'sort' => 'M6 4v12m0 0l-3-3m3 3l3-3M14 16V4m0 0l-3 3m3-3l3 3',
+        'refresh' => 'M16 10a6 6 0 11-1.8-4.3M16 3v4h-4',
+        'dots-vertical' => 'M10 5h.01M10 10h.01M10 15h.01',
     ];
 
     public static function path(string $icon): string

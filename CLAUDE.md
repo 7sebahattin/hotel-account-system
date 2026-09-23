@@ -1,5 +1,27 @@
 # CLAUDE.md
 
+## Onaylı Konaklamalar listesi yeni tasarımı — 23 Eylül 2026
+
+Kullanıcının referans görseline göre `stays.index` yenilendi (pano ile aynı
+tint token'ları). Bu ekrana özgü, kullanıcı talimatlı istisnalar:
+- **Filtreler çökertilebilir `<x-ui.filter-panel>` DEĞİL, her zaman açık bir
+  karttadır** (§9 istisnası); seyrek alanlar (para birimi, sayfa boyutu)
+  kapalı başlayan "Daha fazla filtre" açılır panelindedir, seçili değer sayısı
+  etikette rozetle görünür.
+- **Hızlı filtreler** `?hizli=` ile (`StayFilter::QUICK_FILTERS`): bu ay / geçen
+  ay (giriş tarihi), aktif konaklamalar (bu gece otelde: giriş ≤ bugün < çıkış,
+  iptal hariç), ödenmeyenler (geçerli ödeme dağılımı toplamı tutardan az olan
+  aktif kayıtlar — `PaymentAllocationService::paidAmountSubquery()`), bugün
+  giriş, bugün çıkış. Diğer filtrelerle AND'lenir; tanınmayan değer yok sayılır.
+- **Tablo xl (1280 px) ve üstündedir** (§11.5'teki lg yerine): 9 kolon +
+  ödeme durumu 1024'te yatay kaydırma gerektirirdi; altında kart listesi.
+- Satırın tamamı ayrıntıya gider; ⋮ menüsü (native `<details>`) yalnız yetkiye
+  bağlı kısayolları taşır: Düzenle, Tahsilat al (iptal değilse), Cari ekstre.
+- "Ödenmedi" rozeti kırmızı DEĞİL gül tonudur (§11.2 "borç kırmızı değildir");
+  iptal kırmızı rozettir. Giriş/çıkış SAATİ gösterilmez — sistemde saklanmıyor.
+- Gün/ay adları `Core\Support\TurkishDate` ile üretilir (yerel ayardan bağımsız).
+Testler: `StayListDesignTest`.
+
 ## Onaylı Finans panosu yeni tasarımı — 23 Eylül 2026
 
 Kullanıcı, paylaştığı referans görsele göre ana sayfanın (Admin/Patron Finans

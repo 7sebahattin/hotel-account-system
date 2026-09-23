@@ -303,14 +303,14 @@ class StayService
      * geçirir ve o metot da aynı kovaryant imzayı taşır (PHPStan level 5).
      *
      * @param  Builder<covariant Model>  $query
-     * @return Collection<string, array{currency: Currency, count: int, total: Money, activeTotal: Money, cancelledTotal: Money, cancelledCount: int}>
+     * @return Collection<string, array{currency: Currency, count: int, nights: int, total: Money, activeTotal: Money, cancelledTotal: Money, cancelledCount: int}>
      */
     public function totalsFor(Builder $query): Collection
     {
         $rows = (clone $query)
             ->toBase()
             ->reorder()
-            ->selectRaw('currency, status, COUNT(*) as count, CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->selectRaw('currency, status, COUNT(*) as count, COALESCE(SUM(nights), 0) as nights, CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
             ->groupBy('currency', 'status')
             ->get();
 
@@ -322,6 +322,7 @@ class StayService
             $bucket = $totals->get($code, [
                 'currency' => Currency::from($code),
                 'count' => 0,
+                'nights' => 0,
                 'total' => Money::zero(),
                 'activeTotal' => Money::zero(),
                 'cancelledTotal' => Money::zero(),
@@ -330,6 +331,7 @@ class StayService
 
             $amount = Money::fromDecimal((string) $row->total);
             $bucket['count'] += (int) $row->count;
+            $bucket['nights'] += (int) $row->nights;
             $bucket['total'] = $bucket['total']->add($amount);
 
             if ($row->status === StayStatus::Cancelled->value) {

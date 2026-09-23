@@ -47,6 +47,7 @@ class StayController extends Controller
             'stays' => $stays,
             'totals' => $totals,
             'filter' => $filter,
+            'now' => now(),
             'companies' => $this->companyOptions(),
             'currencies' => Currency::cases(),
             'statuses' => StayStatus::cases(),

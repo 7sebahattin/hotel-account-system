@@ -38,6 +38,17 @@ class PaymentAllocationService
             ->mapWithKeys(fn ($row) => [(int) $row->stay_id => Money::fromDecimal($row->total)->minorUnits])->all();
     }
 
+    /**
+     * Bir konaklamaya geçerli (ters kaydedilmemiş) dağılımlarla ödenen tutarın
+     * korelasyonlu alt sorgusu — liste filtresi için ("Ödenmeyenler").
+     * `summaries()` ile AYNI "etkin dağılım" tanımını kullanır; tutar borç
+     * para birimindedir. Satır yoksa NULL döner, çağıran COALESCE uygular.
+     */
+    public function paidAmountSubquery(string $stayIdColumn): Builder
+    {
+        return $this->active()->selectRaw('SUM(a.amount)')->whereColumn('a.stay_id', $stayIdColumn);
+    }
+
     public function available(Payment $payment): Money
     {
         if ($payment->isCancelled()) {
