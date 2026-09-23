@@ -9,7 +9,7 @@
             'tabular-nums',
             'text-debit' => $balance->isPositive(),
             'text-credit' => $balance->isNegative(),
-            'text-mut' => $balance->isZero(),
+            'text-success' => $balance->isZero(),
         ])>{{ $balance->format($currency) }}</span>
         <span class="text-xs text-mut">
             @if ($balance->isPositive()) borçlu

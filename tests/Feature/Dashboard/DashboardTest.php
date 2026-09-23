@@ -173,14 +173,22 @@ class DashboardTest extends TestCase
         $this->debit($tryCompany, '900.00', Currency::TRY, '2026-09-01');
         $this->debit($eurCompany, '100.00', Currency::EUR, '2026-09-01');
 
+        // 23 Eylül 2026 tasarımı: liste yalnızca SEÇİLİ para birimini taşır
+        // (varsayılan TRY); diğer para birimi panoda seçilerek görülür.
         $top = $this->summary()->topCompanies;
 
+        $this->assertSame(['TRY'], array_keys($top));
         $this->assertSame('TRY Firma', $top['TRY'][0]->companyName);
         $this->assertSame(Currency::TRY, $top['TRY'][0]->currency);
-        $this->assertSame('EUR Firma', $top['EUR'][0]->companyName);
+        $this->assertCount(1, $top['TRY'], 'EUR bakiyesi TRY listesine sızmaz.');
+
+        $eurTop = app(DashboardService::class)->finance(Carbon::today(), currency: 'EUR')->topCompanies;
+
+        $this->assertSame(['EUR'], array_keys($eurTop));
+        $this->assertSame('EUR Firma', $eurTop['EUR'][0]->companyName);
 
         // Yüksek TRY tutarı EUR listesine sızmaz.
-        $this->assertCount(1, $top['EUR']);
+        $this->assertCount(1, $eurTop['EUR']);
     }
 
     #[Test]

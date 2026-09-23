@@ -27,14 +27,18 @@ class FilterPanelTest extends TestCase
         $this->seedRoles();
     }
 
-    /** @return array<string, array{0: string, 1: array<string, string>}> */
+    /**
+     * Konaklamalar ve Cari Ekstre listesi (23 Eylül 2026) bu listede YOKTUR:
+     * kullanıcının referans tasarımıyla filtreleri her zaman açık bir kartta
+     * durur; davranışlarını `StayListDesignTest` / `StatementListDesignTest` kapsar.
+     *
+     * @return array<string, array{0: string, 1: array<string, string>}>
+     */
     public static function listeEkranlari(): array
     {
         return [
             'firmalar' => ['companies.index', ['q' => 'ALFA']],
-            'konaklamalar' => ['stays.index', ['status' => 'active']],
             'tahsilatlar' => ['payments.index', ['currency' => 'TRY']],
-            'cari ekstre' => ['statements.index', ['currency' => 'EUR']],
             'denetim kaydı' => ['audit.index', ['event' => 'login']],
         ];
     }

@@ -6,7 +6,7 @@ function initStayRowNavigation(row) {
         const url = row.dataset.stayRowUrl;
         if (url) window.location.assign(url);
     };
-    const interactiveSelector = 'a, button, input, select, textarea, label, summary, [role="button"], [role="link"]';
+    const interactiveSelector = 'a, button, input, select, textarea, label, summary, details, [role="button"], [role="link"]';
     const isInteractive = (target) => {
         if (!(target instanceof Element)) return false;
         const interactive = target.closest(interactiveSelector);

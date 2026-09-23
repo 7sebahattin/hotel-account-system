@@ -130,6 +130,26 @@ class CompanyService
     }
 
     /**
+     * Aktif ve pasif cari hesap sayısı — TEK sorguda (pano "Cari Özeti").
+     * Silinmiş hesaplar sayılmaz.
+     *
+     * @return array{active: int, passive: int}
+     */
+    public function activityCounts(): array
+    {
+        $row = Company::query()
+            ->selectRaw('COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) as active_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN is_active = 1 THEN 0 ELSE 1 END), 0) as passive_count')
+            ->toBase()
+            ->first();
+
+        return [
+            'active' => (int) ($row->active_count ?? 0),
+            'passive' => (int) ($row->passive_count ?? 0),
+        ];
+    }
+
+    /**
      * Verilen kimlikler için firma adları — TEK sorguda.
      *
      * Başka modüller firma adını göstermek için Company modeline uzanmaz

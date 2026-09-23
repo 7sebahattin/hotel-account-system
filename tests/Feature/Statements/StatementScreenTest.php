@@ -156,8 +156,11 @@ class StatementScreenTest extends TestCase
         $this->assertSame(route('statements.show', $this->company), $row->getAttribute('data-statement-row-url'));
         $this->assertSame('0', $row->getAttribute('tabindex'));
         $this->assertSame('link', $row->getAttribute('role'));
-        $this->assertSame(3, $xpath->query('//table//thead/tr/*')->length);
-        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-statement-row-url]//a')->length);
+        // 23 Eylül 2026 tasarımı: Firma / Bakiye / Son hareket / Durum / İşlem.
+        // Satırın tamamı ekstreye gider; satırdaki bağlantıların hepsi ⋮ menüsündedir.
+        $this->assertSame(5, $xpath->query('//table//thead/tr/*')->length);
+        $rowLinks = $xpath->query('//table//tbody/tr[@data-statement-row-url]//a')->length;
+        $this->assertSame($rowLinks, $xpath->query('//table//tbody/tr[@data-statement-row-url]//details[@data-statement-row-menu]//a')->length);
         $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-statement-row-url]//button')->length);
         $this->assertSame(1, $xpath->query('//div[contains(@class, "lg:hidden")]//a[@href="'.route('statements.show', $this->company).'"]')->length);
     }

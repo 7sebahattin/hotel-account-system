@@ -73,6 +73,48 @@
     --color-danger-bg: #fef2f2; /* metinle 5.91 */
     --color-info-bg: #eff6ff;
 
+    /*
+        Pano KPI kartı tonları (23 Eylül 2026, kullanıcı onaylı §11.1 istisnası).
+
+        YALNIZCA Finans panosunun özet kartlarında kullanılır; uygulamanın
+        geri kalanı nötr zemin + altın vurgu kuralına bağlı kalır. Her ton:
+        `-bg` kart zemini, `-line` kart sınırı, `-icon` ikon kutusu zemini,
+        `-tx` tutar ve ikon rengi. Ölçülen kontrastlar (`-tx` / `-bg`):
+        amber 4.73 · green 4.79 · blue 6.16 · purple 6.48 · rose 5.72.
+        Bu zeminlerde `text-mut` YAZILMAZ (blue/purple/rose'da 4.5 altı);
+        ipucu metni `text-tx` kullanır.
+    */
+    --color-tint-amber-bg: #fff7ed;
+    --color-tint-amber-line: #fed7aa;
+    --color-tint-amber-icon: #ffedd5;
+    --color-tint-amber-tx: #b45309;
+    --color-tint-green-bg: #f0fdf4;
+    --color-tint-green-line: #bbf7d0;
+    --color-tint-green-icon: #dcfce7;
+    --color-tint-green-tx: #15803d;
+    --color-tint-blue-bg: #eff6ff;
+    --color-tint-blue-line: #bfdbfe;
+    --color-tint-blue-icon: #dbeafe;
+    --color-tint-blue-tx: #1d4ed8;
+    --color-tint-purple-bg: #f5f3ff;
+    --color-tint-purple-line: #ddd6fe;
+    --color-tint-purple-icon: #ede9fe;
+    --color-tint-purple-tx: #6d28d9;
+    --color-tint-rose-bg: #fff1f2;
+    --color-tint-rose-line: #fecdd3;
+    --color-tint-rose-icon: #ffe4e6;
+    --color-tint-rose-tx: #be123c;
+
+    /*
+        Pano aylık grafiği serileri. Palet doğrulayıcısıyla ölçüldü: renk
+        körlüğü ayrımı (protan/deutan/tritan) geçer. Net bakiye turuncusu
+        beyaz üzerinde 3:1 altındadır → gösterge (legend), çizgi/işaretçi
+        farkı ve tablo görünümü birlikte sunulur.
+    */
+    --color-chart-stay: #3b82f6;
+    --color-chart-payment: #15803d;
+    --color-chart-net: #f59e0b;
+
     /* Aylık Hesap ödeme yöntemi grup başlıkları — kullanıcı onaylı ayırt edici zeminler. */
     --color-payment-card-bg: #b7e4c7;
     --color-payment-link-bg: #f7c891;

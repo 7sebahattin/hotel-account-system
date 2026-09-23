@@ -187,13 +187,22 @@ final readonly class Money implements Stringable
     /** Türkçe gösterim: 1.234,56 ₺ — kayan nokta kullanılmaz. */
     public function format(Currency $currency): string
     {
+        return $this->formatNumber().' '.$currency->symbol();
+    }
+
+    /**
+     * Para birimi simgesiz Türkçe gösterim: 1.234,56. Yalnızca para birimi
+     * başlıkta zaten yazılı olan tablo kolonları içindir.
+     */
+    public function formatNumber(): string
+    {
         $sign = $this->minorUnits < 0 ? '-' : '';
         $absolute = abs($this->minorUnits);
 
         $whole = (string) intdiv($absolute, 100);
         $grouped = strrev(implode('.', str_split(strrev($whole), 3)));
 
-        return sprintf('%s%s,%02d %s', $sign, $grouped, $absolute % 100, $currency->symbol());
+        return sprintf('%s%s,%02d', $sign, $grouped, $absolute % 100);
     }
 
     public function __toString(): string

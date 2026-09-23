@@ -222,8 +222,11 @@ class StayListingTest extends TestCase
         $this->assertSame('0', $row->getAttribute('tabindex'));
         $this->assertSame('link', $row->getAttribute('role'));
         $this->assertSame(9, $xpath->query('//table//thead/tr/*')->length);
-        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//a')->length);
+        // 23 Eylül 2026 tasarımı: satırın tamamı ayrıntıya gider; satırdaki
+        // TEK etkileşimli öğe ⋮ menüsüdür ve bağlantıların hepsi onun içindedir.
+        $rowLinks = $xpath->query('//table//tbody/tr[@data-stay-row-url]//a')->length;
+        $this->assertSame($rowLinks, $xpath->query('//table//tbody/tr[@data-stay-row-url]//details[@data-stay-row-menu]//a')->length);
         $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//button')->length);
-        $this->assertSame(1, $xpath->query('//div[contains(@class, "lg:hidden")]//a[@href="'.route('stays.show', $stay).'"]')->length);
+        $this->assertSame(1, $xpath->query('//div[contains(@class, "xl:hidden")]//a[@href="'.route('stays.show', $stay).'"]')->length);
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Dashboard\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Dashboard\Services\DashboardService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -37,8 +38,16 @@ class DashboardController extends Controller
             ]);
         }
 
+        // Görünüm tercihleri servise ham değer olarak geçer; beyaz liste
+        // doğrulaması servistedir (geçersiz değer varsayılana düşer).
         return view('dashboard::finance', [
-            'summary' => $dashboard->finance($today),
+            'summary' => $dashboard->finance(
+                today: $today,
+                currency: $request->string('currency')->toString() ?: null,
+                months: $request->integer('months', 6),
+                tab: $request->string('tab')->toString() ?: 'hareketler',
+                withActivity: $user->can(Permission::AuditView->value),
+            ),
             'today' => $today,
         ]);
     }

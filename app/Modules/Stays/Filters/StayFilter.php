@@ -6,11 +6,23 @@ namespace App\Modules\Stays\Filters;
 
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Filters\QueryFilter;
+use App\Modules\Payments\Services\PaymentAllocationService;
 use App\Modules\Stays\Enums\StayStatus;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 
 class StayFilter extends QueryFilter
 {
+    /** Hızlı filtreler: `?hizli=` anahtarı → düğme etiketi. */
+    public const array QUICK_FILTERS = [
+        'bu-ay' => 'Bu ay',
+        'gecen-ay' => 'Geçen ay',
+        'aktif' => 'Aktif konaklamalar',
+        'odenmeyen' => 'Ödenmeyenler',
+        'bugun-giris' => 'Bugün giriş',
+        'bugun-cikis' => 'Bugün çıkış',
+    ];
+
     /**
      * @return array<int, string>
      */
@@ -108,5 +120,53 @@ class StayFilter extends QueryFilter
         if (StayStatus::tryFrom($status) !== null) {
             $query->where('status', $status);
         }
+
+        $this->applyQuickFilter($query);
+    }
+
+    /** Geçerli hızlı filtre anahtarı; tanınmayan değer yok sayılır. */
+    public function quickFilter(): ?string
+    {
+        $key = (string) $this->request->query('hizli', '');
+
+        return array_key_exists($key, self::QUICK_FILTERS) ? $key : null;
+    }
+
+    /**
+     * Hızlı filtreler (23 Eylül 2026 liste tasarımı). Diğer filtrelerle AND
+     * ile birleşir; yeni bir yetki/kapsam açmaz. "Bu ay"/"Geçen ay" giriş
+     * tarihine göredir (tarih aralığı filtresiyle aynı kolon).
+     */
+    private function applyQuickFilter(Builder $query): void
+    {
+        $today = Carbon::today();
+
+        match ($this->quickFilter()) {
+            'bu-ay' => $query->whereBetween('check_in_date', [
+                $today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString(),
+            ]),
+            'gecen-ay' => $query->whereBetween('check_in_date', [
+                $today->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(),
+                $today->copy()->subMonthNoOverflow()->endOfMonth()->toDateString(),
+            ]),
+            // Bu gece otelde: giriş yapılmış, çıkış günü henüz gelmemiş.
+            'aktif' => $query->where('status', StayStatus::Active->value)
+                ->whereDate('check_in_date', '<=', $today)
+                ->whereDate('check_out_date', '>', $today),
+            // Kalan tutarı olan aktif konaklamalar: geçerli ödeme dağılımı
+            // toplamı konaklama tutarından az (hiç ödenmemiş veya kısmen ödenmiş).
+            'odenmeyen' => $this->whereUnpaid($query),
+            'bugun-giris' => $query->whereDate('check_in_date', $today),
+            'bugun-cikis' => $query->whereDate('check_out_date', $today),
+            default => null,
+        };
+    }
+
+    private function whereUnpaid(Builder $query): void
+    {
+        $paid = app(PaymentAllocationService::class)->paidAmountSubquery('stays.id');
+
+        $query->where('status', StayStatus::Active->value)
+            ->whereRaw('stays.amount > COALESCE(('.$paid->toSql().'), 0)', $paid->getBindings());
     }
 }

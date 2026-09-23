@@ -27,6 +27,10 @@ final readonly class CurrencyTotals
         // kaydın kuru eksikse `null` kalır (dürüstlük ilkesi, `fx-note`
         // bileşeniyle AYNI karar) — sessizce yanlış bir rakam üretilmez.
         public ?Money $netTl = null,
+        // Pano KPI alt satırları: "4 konaklama · 12 gece", "2 tahsilat".
+        public int $staysCountThisMonth = 0,
+        public int $nightsThisMonth = 0,
+        public int $paymentsCountThisMonth = 0,
     ) {}
 
     /** Bu para biriminde gösterilecek bir şey var mı? */
