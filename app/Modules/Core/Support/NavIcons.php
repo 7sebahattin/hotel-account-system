@@ -47,6 +47,8 @@ final class NavIcons
         'sort' => 'M6 4v12m0 0l-3-3m3 3l3-3M14 16V4m0 0l-3 3m3-3l3 3',
         'refresh' => 'M16 10a6 6 0 11-1.8-4.3M16 3v4h-4',
         'dots-vertical' => 'M10 5h.01M10 10h.01M10 15h.01',
+        'check-circle' => 'M10 18a8 8 0 100-16 8 8 0 000 16zm-3.5-8l2.5 2.5 4.5-5',
+        'clock' => 'M10 18a8 8 0 100-16 8 8 0 000 16zm0-12v4l3 2',
     ];
 
     public static function path(string $icon): string

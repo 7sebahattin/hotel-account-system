@@ -110,12 +110,13 @@ class LedgerStatementService
     }
 
     /**
-     * Firmaların son hareket tarihleri — TEK sorguda.
+     * Firmaların son hareket tarihleri — TEK sorguda. Para birimi verilirse
+     * yalnızca o para birimindeki hareketler dikkate alınır.
      *
      * @param  array<int, int>  $companyIds
      * @return array<int, string>
      */
-    public function lastEntryDates(array $companyIds): array
+    public function lastEntryDates(array $companyIds, ?Currency $currency = null): array
     {
         if ($companyIds === []) {
             return [];
@@ -124,6 +125,7 @@ class LedgerStatementService
         return DB::table('ledger_entries')
             ->selectRaw('company_id, MAX(entry_date) as last_date')
             ->whereIn('company_id', $companyIds)
+            ->when($currency !== null, fn ($query) => $query->where('currency', $currency?->value))
             ->groupBy('company_id')
             ->pluck('last_date', 'company_id')
             ->map(fn ($date) => (string) $date)

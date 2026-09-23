@@ -1,5 +1,26 @@
 # CLAUDE.md
 
+## Onaylı Cari Ekstre listesi yeni tasarımı — 23 Eylül 2026
+
+Kullanıcının referans görseline göre `statements.index` yenilendi (Konaklamalar
+ile aynı desen: özet kartları, her zaman açık filtre kartı + "Daha fazla filtre",
+hızlı filtreler, sıralama menüsü, ⋮ satır menüsü). Bağlayıcı noktalar:
+- **Hareketi olan hesaplar HER sıralamada üstte, hareketsizler altta**
+  (kullanıcı talimatı). Liste mantığı `Companies\Services\StatementListService`
+  içindedir; ekran ve yazdırma görünümü aynı sırayı/filtreyi kullanır. Durum,
+  son hareket ve bakiye `companies` kolonu olmadığı için (§6/L4) PHP'de, iki toplu
+  sorguyla süzülür; sorgu sayısı firma sayısıyla büyümez.
+- Durumlar: Borçlu (herhangi bir para biriminde bize borçlu) / Alacaklı /
+  Kapalı (hareket var, tüm bakiyeler sıfır) / Hareket yok. `?durum=`,
+  `?son_hareket=7|30|90` (son hareket tarihi), `?balance_sort=recent|highest|lowest`
+  (bakiye sıralaması yalnız para birimi seçiliyken). Eski `has_balance` korunur.
+- Para birimi seçilince bakiye, durum ve son hareket YALNIZ o para birimine göre
+  hesaplanır (§6/L5). Özet kartları durum/son hareket filtresinden bağımsızdır.
+- §9 istisnası: filtre çökertilebilir `<x-ui.filter-panel>` DEĞİL, açık karttır.
+- Ortak parçalar: `<x-ui.icon>`, `<x-ui.today>`, `<x-ui.row-menu>`,
+  `resources/js/popover.js`, `Core\Support\TurkishSuffix` ("%47'si", "%0'ı").
+Testler: `StatementListDesignTest`.
+
 ## Onaylı Konaklamalar listesi yeni tasarımı — 23 Eylül 2026
 
 Kullanıcının referans görseline göre `stays.index` yenilendi (pano ile aynı
@@ -1780,7 +1801,7 @@ ve sağa hizalı.
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
 `alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`,
-`filter-panel`, `kpi-card`, `tabs`.
+`filter-panel`, `kpi-card`, `tabs`, `icon`, `today`, `row-menu`.
 
 `kpi-card` (23 Eylül 2026) renkli pano özet kartıdır; tutarın punto boyu kartın
 genişliğine göre container query ile seçilir, rakam ortadan bölünmez. `tabs`

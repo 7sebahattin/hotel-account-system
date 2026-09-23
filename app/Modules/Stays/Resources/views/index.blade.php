@@ -2,7 +2,6 @@
 @section('title', 'Konaklamalar')
 
 @php
-    use App\Modules\Core\Support\NavIcons;
     use App\Modules\Core\Support\TurkishDate;
     use App\Modules\Stays\Filters\StayFilter;
 
@@ -11,8 +10,6 @@
         görseli). Filtreleme mantığı StayFilter'dadır; bu ekran yalnızca
         gösterir. Toplamlar para birimi bazındadır ve birleşmez (§6/L5).
     */
-    $icon = static fn (string $name, string $class = 'size-4'): string => '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" class="'.$class.' shrink-0" aria-hidden="true"><path d="'.NavIcons::path($name).'" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-
     $totalCount = $totals->sum('count');
     $totalNights = $totals->sum('nights');
     // Ortalama gece: tek ondalık, tamsayı aritmetiğiyle ("1,3").
@@ -47,20 +44,14 @@
     <x-ui.page-header title="Konaklamalar" icon="bed"
                       :subtitle="'Toplam '.number_format($stays->total(), 0, ',', '.').' konaklama kaydı'">
         <x-slot:actions>
-            <div class="hidden items-center gap-2 pr-2 text-xs text-tx sm:flex" data-stay-clock>
-                {!! $icon('calendar', 'size-5 text-mut') !!}
-                <span>
-                    <span class="block font-medium">{{ TurkishDate::long($now) }}</span>
-                    <span class="block text-mut">{{ TurkishDate::weekday($now) }}, {{ $now->format('H:i') }}</span>
-                </span>
-            </div>
+            <x-ui.today data-stay-clock />
 
             <x-ui.button variant="secondary" :href="route('stays.print', request()->query())">
-                {!! $icon('printer') !!} Yazdır
+                <x-ui.icon name="printer" /> Yazdır
             </x-ui.button>
 
             @can('create', \App\Modules\Stays\Models\Stay::class)
-                <x-ui.button :href="route('stays.create')">{!! $icon('plus') !!} Yeni konaklama</x-ui.button>
+                <x-ui.button :href="route('stays.create')"><x-ui.icon name="plus" /> Yeni konaklama</x-ui.button>
             @endcan
         </x-slot:actions>
     </x-ui.page-header>
@@ -104,7 +95,7 @@
                 <div class="min-w-0 flex-[2_1_14rem]">
                     <label for="q" class="sr-only">Ara</label>
                     <div class="relative">
-                        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-mut">{!! $icon('search') !!}</span>
+                        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-mut"><x-ui.icon name="search" /></span>
                         <input id="q" name="q" type="search" value="{{ request('q') }}"
                                placeholder="Misafir adı, cari hesap veya oda ile ara…"
                                class="{{ $fieldClass }} pl-9">
@@ -117,7 +108,7 @@
                         <label for="date_from" class="sr-only">Giriş tarihi başlangıç</label>
                         <input id="date_from" name="date_from" type="date" value="{{ request('date_from') }}"
                                title="Giriş tarihi (başlangıç)" class="{{ $fieldClass }} min-w-0 flex-1 sm:min-w-[9rem]">
-                        <span class="shrink-0 text-mut">{!! $icon('arrow-right') !!}</span>
+                        <span class="shrink-0 text-mut"><x-ui.icon name="arrow-right" /></span>
                         <label for="date_to" class="sr-only">Giriş tarihi bitiş</label>
                         <input id="date_to" name="date_to" type="date" value="{{ request('date_to') }}"
                                title="Giriş tarihi (bitiş)" class="{{ $fieldClass }} min-w-0 flex-1 sm:min-w-[9rem]">
@@ -142,7 +133,7 @@
                     </x-ui.select>
                 </div>
 
-                <x-ui.button type="submit" class="w-full sm:w-auto">{!! $icon('filter') !!} Filtrele</x-ui.button>
+                <x-ui.button type="submit" class="w-full sm:w-auto"><x-ui.icon name="filter" /> Filtrele</x-ui.button>
             </div>
 
             {{-- Hızlı filtreler: diğer filtrelerle birlikte uygulanan bağlantılar. --}}
@@ -167,7 +158,7 @@
                         @if ($moreFilterCount > 0)
                             <x-ui.badge tone="accent">{{ $moreFilterCount }}</x-ui.badge>
                         @endif
-                        {!! $icon('chevron-down') !!}
+                        <x-ui.icon name="chevron-down" />
                     </summary>
                     <div class="absolute right-0 z-20 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-card p-4">
                         <div class="grid gap-3">
@@ -192,7 +183,7 @@
                 @if ($filter->hasActiveFilters())
                     <a href="{{ route('stays.index') }}"
                        class="inline-flex min-h-11 items-center gap-1.5 text-sm text-acc-tx hover:text-tx lg:min-h-8">
-                        {!! $icon('refresh') !!} Filtreleri temizle
+                        <x-ui.icon name="refresh" /> Filtreleri temizle
                     </a>
                 @endif
             </div>
@@ -206,7 +197,7 @@
 
             <details class="relative" data-popover>
                 <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-lg border border-field px-3 text-sm text-tx hover:bg-well">
-                    {!! $icon('sort') !!} <span>{{ $currentSortLabel }}</span> {!! $icon('chevron-down') !!}
+                    <x-ui.icon name="sort" /> <span>{{ $currentSortLabel }}</span> <x-ui.icon name="chevron-down" />
                 </summary>
                 <ul class="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-line bg-card p-1" aria-label="Sıralama seçenekleri">
                     @foreach ($sortOptions as $key => $label)

@@ -28,9 +28,9 @@ class FilterPanelTest extends TestCase
     }
 
     /**
-     * Konaklamalar (23 Eylül 2026) bu listede YOKTUR: kullanıcının referans
-     * tasarımıyla filtreleri her zaman açık bir kartta durur; davranışı
-     * `StayListDesignTest` kapsar.
+     * Konaklamalar ve Cari Ekstre listesi (23 Eylül 2026) bu listede YOKTUR:
+     * kullanıcının referans tasarımıyla filtreleri her zaman açık bir kartta
+     * durur; davranışlarını `StayListDesignTest` / `StatementListDesignTest` kapsar.
      *
      * @return array<string, array{0: string, 1: array<string, string>}>
      */
@@ -39,7 +39,6 @@ class FilterPanelTest extends TestCase
         return [
             'firmalar' => ['companies.index', ['q' => 'ALFA']],
             'tahsilatlar' => ['payments.index', ['currency' => 'TRY']],
-            'cari ekstre' => ['statements.index', ['currency' => 'EUR']],
             'denetim kaydı' => ['audit.index', ['event' => 'login']],
         ];
     }
