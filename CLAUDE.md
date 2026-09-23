@@ -1,5 +1,16 @@
 # CLAUDE.md
 
+## Onaylı Finans panosu yeni tasarımı — 23 Eylül 2026
+
+Kullanıcı, paylaştığı referans görsele göre ana sayfanın (Admin/Patron Finans
+panosu) yeniden renklendirilmesini onayladı (`docs/anasayfa-yeni-tasarim-yol-haritasi-2026-09-23.md`).
+Kararlar: renkli KPI kartları token üzerinden (§11.1 istisnası, aşağıda), grafik
+paketsiz ve JS'siz (HTML + satır içi SVG), **Hızlı İşlemler kartı YOK**,
+Notlar/Belgeler sekmesi YOK, "Son Hareketler"de sistem geneli "Genel bakiye"
+kolonu VAR (beğenilmezse kaldırılır), sorgu bütçesi büyüyebilir ama kayıt
+sayısıyla büyümez. Pano SEÇİLİ para biriminde çalışır (`?currency=`, varsayılan
+TRY); para birimleri hiçbir yerde birleşmez (§6/L5). Personel panosu değişmedi.
+
 ## Onaylı Aylık Hesap arayüz sadeleştirmesi — 15 Eylül 2026
 
 Kullanıcının açık talimatıyla Aylık Hesap liste, ekleme, düzenleme ve ayrıntı
@@ -1336,6 +1347,20 @@ Uygulama kökü (`/`, route adı `home`) Dashboard modülündedir. Controller in
 yetki → `DashboardService` → view. Ekranda ve controller'da hiçbir finansal hesap
 yapılmaz.
 
+> **Güncel Finans panosu (23 Eylül 2026)** — aşağıdaki Gün 11 notlarının
+> Operasyon/kasa kısımları kasa kaldırmayla tarihseldir. Finans panosu:
+> seçili para biriminde 5 KPI kartı (açık alacak/borç, net, bu ay konaklama
+> adet+gece, bu ay tahsilat adedi) · "Son 6/12 Ay Cari Hareketler" grafiği
+> (`?months=6|12`; sütun = konaklama `check_out_date` / tahsilat `payment_date`
+> ay toplamı, çizgi = ay sonu sistem geneli net bakiye; `MonthlyChart` tamsayı
+> geometri) · "Para Birimi Bazında Durum" tablosu (her para birimi ayrı satır)
+> · sekmeli alt tablo (`?tab=hareketler|konaklamalar|tahsilatlar|borc-alacak`,
+> yalnız açık sekme sorgulanır; "Son Hareketler" `?sayfa=` ile sayfalanır ve
+> satırdan SONRAKİ tüm hesapların net bakiyesini "Genel bakiye" olarak gösterir)
+> · sağ sütunda Cari Özeti, en yüksek bakiyeli 5 hesap ve (yalnız `audit.view`)
+> denetim kaydından "Son Güncellemeler". Geçersiz `currency`/`months`/`tab`
+> sessizce varsayılana düşer. Testler: `FinanceDashboardDesignTest`.
+
 **Gün 11 — pano role göre TAMAMEN farklı bir yüzeydir**, klasik tek-şablonlu
 admin paneli değildir. `DashboardController` üç dala ayrılır ve dal seçimi
 **önce** güvenlik kontrolüdür, ikinci planda görünüm tercihidir:
@@ -1715,6 +1740,15 @@ borç hatalı bir durum değildir. Borç `--color-debit` (amber), alacak
 `--color-credit` (yeşil) kullanır ve her ikisi de **her zaman** metin etiketiyle
 birlikte gösterilir.
 
+**Pano renk istisnası (23 Eylül 2026, kullanıcı onaylı):** `--color-tint-{amber,
+green,blue,purple,rose}-{bg,line,icon,tx}` ve `--color-chart-{stay,payment,net}`
+token'ları YALNIZCA Finans panosunun KPI kartlarında, Cari Özeti/Son Güncellemeler
+ikonlarında ve aylık grafikte kullanılır. Uygulamanın geri kalanı nötr zemin +
+altın vurgu kuralına bağlıdır. Tint zeminlerde `text-mut` yazılmaz (blue/purple/
+rose'da 4.5 altı) — ipucu metni `text-tx`. Gölge yine yoktur. Grafik renkleri
+renk körlüğü doğrulayıcısından geçmiştir; turuncu net çizgi beyazda 3:1 altında
+kaldığı için gösterge ve "Tablo olarak göster" her zaman vardır.
+
 Tipografi: `system-ui` yığını, gövde 15px/1.5, form kontrolleri **16px** (mobil zoom'u
 engeller), sayfa başlığı 19px/500. Tüm tutar hücreleri `font-variant-numeric: tabular-nums`
 ve sağa hizalı.
@@ -1724,7 +1758,12 @@ ve sağa hizalı.
 Ortak bileşenler `resources/views/components/ui/` altındadır ve `<x-ui.*>` ile çağrılır:
 `card`, `page-header`, `button`, `input`, `select`, `textarea`, `checkbox`, `badge`,
 `alert`, `errors`, `empty`, `table`, `sort-header`, `th`, `stat`, `panel`, `fx-note`,
-`filter-panel`.
+`filter-panel`, `kpi-card`, `tabs`.
+
+`kpi-card` (23 Eylül 2026) renkli pano özet kartıdır; tutarın punto boyu kartın
+genişliğine göre container query ile seçilir, rakam ortadan bölünmez. `tabs`
+bağlantı tabanlı sekmedir (`underline` / `pill`), JS kullanmaz, etkin sekme
+`aria-current="page"` taşır.
 
 `filter-panel` (v2.1.1-E) liste ekranlarının çökertilebilir filtre kabuğudur — davranışı
 ve bağlayıcı kuralları §9'dadır.

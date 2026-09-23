@@ -13,6 +13,7 @@ use App\Modules\Ledger\Support\StatementCriteria;
 use App\Modules\Ledger\Support\StatementRow;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -217,6 +218,125 @@ class LedgerStatementService
             ->orderByDesc('id')
             ->limit($limit)
             ->get();
+    }
+
+    /**
+     * Tek para biriminde aylık net değişim ve aralık öncesi (devreden) net.
+     *
+     * Sistem genelidir (tüm hesaplar): bir ayın sonundaki net bakiye
+     * `opening + o aya kadarki aylık değişimlerin toplamı`dır. TEK sorgu;
+     * hareketsiz aylar `months` dizisinde YOKTUR.
+     *
+     * @return array{opening: Money, months: array<string, Money>}
+     */
+    public function monthlyNetChanges(Currency $currency, string $from, string $to): array
+    {
+        $rows = DB::table('ledger_entries')
+            ->selectRaw("CASE WHEN entry_date < ? THEN 'opening' ELSE DATE_FORMAT(entry_date, '%Y-%m') END as bucket", [$from])
+            ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
+            ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
+            ->where('currency', $currency->value)
+            ->whereDate('entry_date', '<=', $to)
+            ->groupBy('bucket')
+            ->get();
+
+        $opening = Money::zero();
+        $months = [];
+
+        foreach ($rows as $row) {
+            $net = Money::fromDecimal((string) $row->total_debit)
+                ->subtract(Money::fromDecimal((string) $row->total_credit));
+
+            if ($row->bucket === 'opening') {
+                $opening = $net;
+            } else {
+                $months[(string) $row->bucket] = $net;
+            }
+        }
+
+        return ['opening' => $opening, 'months' => $months];
+    }
+
+    /**
+     * Tek para biriminde en yeni cari hareketler (sayfalı) ve her satırdan
+     * SONRAKİ sistem geneli net bakiye.
+     *
+     * Sıra `entry_date DESC, id DESC`'tir. Bir satırın bakiyesi, o satır ve
+     * ondan eski tüm satırların netidir: sayfanın ilk satırı için
+     * `toplam net − (daha yeni satırların neti)`, sonrakiler için bir önceki
+     * satırın bakiyesinden o satırın neti düşülerek bulunur. Sorgular:
+     * toplam net (1) + sayfalama (2) + daha yeni satırlar (yalnızca 2. sayfadan
+     * itibaren, 1). Kayıt sayısıyla BÜYÜMEZ.
+     *
+     * @return array{entries: LengthAwarePaginator<int, LedgerEntry>, balances: array<int, Money>}
+     */
+    public function recentEntriesWithBalance(Currency $currency, int $perPage, string $pageName = 'page'): array
+    {
+        $ordered = fn () => LedgerEntry::query()
+            ->where('currency', $currency->value)
+            ->orderByDesc('entry_date')
+            ->orderByDesc('id');
+
+        $totals = DB::table('ledger_entries')
+            ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
+            ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
+            ->where('currency', $currency->value)
+            ->first();
+
+        $running = Money::fromDecimal((string) ($totals->total_debit ?? '0'))
+            ->subtract(Money::fromDecimal((string) ($totals->total_credit ?? '0')));
+
+        $entries = $ordered()->paginate($perPage, ['*'], $pageName);
+        $offset = ($entries->currentPage() - 1) * $entries->perPage();
+
+        if ($offset > 0) {
+            $newer = DB::query()
+                ->fromSub($ordered()->toBase()->select(['debit', 'credit'])->limit($offset), 'newer')
+                ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
+                ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
+                ->first();
+
+            $running = $running
+                ->subtract(Money::fromDecimal((string) ($newer->total_debit ?? '0')))
+                ->add(Money::fromDecimal((string) ($newer->total_credit ?? '0')));
+        }
+
+        $balances = [];
+
+        foreach ($entries->items() as $entry) {
+            $balances[(int) $entry->id] = $running;
+            $running = $running->subtract($entry->signedAmount());
+        }
+
+        return ['entries' => $entries, 'balances' => $balances];
+    }
+
+    /**
+     * Tek para biriminde sıfırdan farklı bakiyesi olan hesaplar — mutlak
+     * değere göre büyükten küçüğe. Pozitif = hesap bize borçlu, negatif =
+     * biz hesaba borçluyuz. TEK sorgu.
+     *
+     * @return array<int, array{company_id: int, balance: Money}>
+     */
+    public function nonZeroBalances(Currency $currency, int $limit = 10): array
+    {
+        $expression = '(COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0))';
+
+        return DB::table('ledger_entries')
+            ->selectRaw('company_id')
+            ->selectRaw("CAST({$expression} AS CHAR) as balance")
+            ->where('currency', $currency->value)
+            ->groupBy('company_id')
+            ->havingRaw("{$expression} <> 0")
+            ->orderByRaw("ABS({$expression}) DESC")
+            ->orderBy('company_id')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'company_id' => (int) $row->company_id,
+                'balance' => Money::fromDecimal((string) $row->balance),
+            ])
+            ->all();
     }
 
     // ------------------------------------------------------------------ iç

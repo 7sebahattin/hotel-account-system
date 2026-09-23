@@ -7,6 +7,7 @@ namespace App\Modules\AuditLog\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Models\AuditLog;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Request;
@@ -70,6 +71,27 @@ class AuditLogger
             'user_agent' => $this->truncate(Request::userAgent(), 255),
             'url' => $this->truncate(Request::fullUrl(), 255),
         ]);
+    }
+
+    /**
+     * Belirli kayıt türlerindeki son veri değişiklikleri (pano "Son
+     * Güncellemeler"). Giriş/çıkış/dışa aktarma gibi oturum olayları
+     * dahil edilmez. Kullanıcı adı anlık görüntüden (`user_name`) okunur;
+     * ilişki yüklenmez. TEK sorgu.
+     *
+     * @param  array<int, string>  $types  morph map anahtarları
+     * @param  array<int, AuditEvent>  $events
+     * @return Collection<int, AuditLog>
+     */
+    public function recentChanges(array $types, array $events, int $limit = 5): Collection
+    {
+        return AuditLog::query()
+            ->whereIn('auditable_type', $types)
+            ->whereIn('event', array_map(static fn (AuditEvent $event): string => $event->value, $events))
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
     }
 
     /**

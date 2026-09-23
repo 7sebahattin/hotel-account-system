@@ -897,6 +897,92 @@ class StayService
     }
 
     /**
+     * Bir tarih aralığında cariye yazılmış konaklamaların tutarı, ADEDİ ve
+     * GECE sayısı — para birimi bazında (Finans panosu KPI kartları).
+     *
+     * `totalsByCurrencyBetween()` ile AYNI evren (aktif, silinmemiş,
+     * `check_out_date` aralıkta); tek fark adet/gece de döndürmesidir.
+     * TEK sorgu.
+     *
+     * @return array<string, array{total: Money, count: int, nights: int}>
+     */
+    public function summaryByCurrencyBetween(string $from, string $to): array
+    {
+        return $this->summaryByCurrency(
+            DB::table('stays')->whereBetween('check_out_date', [$from, $to]),
+        );
+    }
+
+    /**
+     * Tüm zamanların aktif konaklama özeti — para birimi bazında.
+     * TEK sorgu.
+     *
+     * @return array<string, array{total: Money, count: int, nights: int}>
+     */
+    public function lifetimeSummaryByCurrency(): array
+    {
+        return $this->summaryByCurrency(DB::table('stays'));
+    }
+
+    /**
+     * Tek para biriminde aylık konaklama tutarları (`Y-m` anahtarlı).
+     *
+     * Ay, cari hareketin `entry_date`'i olan `check_out_date`'ten alınır.
+     * Konaklamasız aylar dizide YOKTUR; çağıran taraf sıfırla doldurur. TEK sorgu.
+     *
+     * @return array<string, Money>
+     */
+    public function monthlyTotals(Currency $currency, string $from, string $to): array
+    {
+        $rows = DB::table('stays')
+            ->selectRaw("DATE_FORMAT(check_out_date, '%Y-%m') as ym")
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->whereNull('deleted_at')
+            ->where('status', StayStatus::Active->value)
+            ->where('currency', $currency->value)
+            ->whereBetween('check_out_date', [$from, $to])
+            ->groupBy('ym')
+            ->get();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $totals[(string) $row->ym] = Money::fromDecimal((string) $row->total);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @return array<string, array{total: Money, count: int, nights: int}>
+     */
+    private function summaryByCurrency(QueryBuilder $query): array
+    {
+        $rows = $query
+            ->selectRaw('currency')
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->selectRaw('COUNT(*) as stay_count')
+            ->selectRaw('COALESCE(SUM(nights), 0) as night_count')
+            ->whereNull('deleted_at')
+            ->where('status', StayStatus::Active->value)
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->get();
+
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $summary[(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'count' => (int) $row->stay_count,
+                'nights' => (int) $row->night_count,
+            ];
+        }
+
+        return $summary;
+    }
+
+    /**
      * Bugün devam eden ve yaklaşan konaklamalar.
      *
      * "Devam eden" = giriş yapılmış, çıkış tarihi henüz gelmemiş.

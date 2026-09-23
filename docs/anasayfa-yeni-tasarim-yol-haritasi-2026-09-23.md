@@ -1,6 +1,21 @@
 # Ana sayfa (Finans panosu) yeni tasarım — yol haritası
 
-Tarih: 23 Eylül 2026 · Durum: **onaya sunulan taslak, kodlama başlamadı.**
+Tarih: 23 Eylül 2026 · Durum: **uygulandı (Aşama 1–4), yayın bekliyor.**
+
+## 0. Kullanıcı kararları (23 Eylül 2026)
+
+1. Renkler: öneri uygulandı — token tabanlı pastel kartlar, gölge yok.
+2. Grafik: paketsiz, sunucuda üretilen HTML + SVG.
+3. Hızlı İşlemler kartı **yapılmadı**.
+4. Notlar / Belgeler sekmeleri **eklenmedi**.
+5. "Genel bakiye" kolonu **eklendi**; beğenilmezse kaldırılacak.
+6. Sorgu bütçesi büyüyebilir (kayıt sayısıyla büyümeden) — ölçümde 17 sınırı
+   aşılmadı: açık sekme dışındaki veri sorgulanmıyor, en yüksek bakiye yalnız
+   seçili para birimi için alınıyor.
+
+Aşama 0'daki statik taslak turu kullanıcının "başla" talimatıyla atlandı;
+görsel kontrol gerçek Chromium ekran görüntüleriyle (360/390/430/768/1366/1920)
+yapıldı, hiçbirinde yatay sayfa kaydırması yok.
 
 Kaynak: kullanıcının paylaştığı referans ekran görüntüsü (renkli KPI kartları,
 "Son 6 Ay Cari Hareketler" grafiği, Cari Özeti, Hızlı İşlemler, en yüksek

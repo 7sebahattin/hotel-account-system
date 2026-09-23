@@ -5,18 +5,24 @@ declare(strict_types=1);
 namespace App\Modules\Dashboard\Services;
 
 use App\Models\User;
+use App\Modules\AuditLog\Enums\AuditEvent;
+use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Dashboard\Support\ActivityItem;
+use App\Modules\Dashboard\Support\ChartMonth;
 use App\Modules\Dashboard\Support\CompanyBalanceRow;
 use App\Modules\Dashboard\Support\CurrencyTotals;
 use App\Modules\Dashboard\Support\FinancialSummary;
+use App\Modules\Dashboard\Support\MonthlyChart;
 use App\Modules\Dashboard\Support\PersonnelSummary;
 use App\Modules\Ledger\Services\LedgerStatementService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Pano verisini hazırlar. Ekranda hiçbir finansal hesap yapılmaz.
@@ -32,86 +38,149 @@ use Illuminate\Support\Carbon;
  */
 class DashboardService
 {
+    private const array MONTH_LABELS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+
     public function __construct(
         private readonly LedgerStatementService $statements,
         private readonly CompanyService $companies,
         private readonly StayService $stays,
         private readonly PaymentService $payments,
+        private readonly AuditLogger $audit,
     ) {}
 
     /**
      * Finans görünümü — yalnızca `dashboard.financial` yetkisi olanlara.
      *
-     * Sorgu bütçesi sabittir: 1 açık bakiye özeti + 1 konaklama toplamı +
-     * 1 tahsilat toplamı + 1 firma sayısı + (para birimi adedi) en yüksek
-     * bakiye sorgusu + 1 son tahsilat + 1 tahsilat firma adı çözümü +
-     * 1 yaklaşan konaklama + 1 konaklama firma adı çözümü + 2 sistem çapında
-     * TL karşılığı toplamı (Stays debit + Payments credit, v2.1.1-D §3) +
-     * 2 en yüksek bakiyeli firmaların TL karşılığı (AYNI iki servis, yalnızca
-     * o firmalarla sınırlı). Kasa hiç sorgulanmaz. Üst sınır: 17
-     * (`DashboardTest::finans_gorunumu_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez`).
+     * 23 Eylül 2026 yeni tasarımı: KPI kartları, aylık grafik, en yüksek
+     * bakiyeli hesaplar ve alt tablo SEÇİLİ para birimindedir (varsayılan
+     * TRY). Alt tablonun yalnızca açık sekmesi sorgulanır.
+     *
+     * Sorgu bütçesi sabittir ve kayıt/firma sayısıyla BÜYÜMEZ: açık bakiye
+     * özeti, bu ay konaklama/tahsilat özeti, 2 sistem çapında TL karşılığı,
+     * aktif/pasif hesap sayısı, en yüksek bakiye (yalnız seçili para birimi),
+     * tüm zamanların konaklama/tahsilat özeti, grafik için 3 aylık toplam,
+     * açık sekmenin 1–4 sorgusu, 1 firma adı çözümü, 2 en yüksek bakiyelilerin
+     * TL karşılığı ve (yetki varsa) 1 son güncellemeler. Kasa hiç sorgulanmaz.
+     * Üst sınır `DashboardTest::finans_gorunumu_sorgu_sayisi_firma_sayisiyla_birlikte_buyumez`
+     * içindedir.
      */
-    public function finance(Carbon $today): FinancialSummary
-    {
+    public function finance(
+        Carbon $today,
+        ?string $currency = null,
+        int $months = 6,
+        string $tab = 'hareketler',
+        bool $withActivity = false,
+        int $perPage = 10,
+    ): FinancialSummary {
         $monthStart = $today->copy()->startOfMonth()->toDateString();
         $monthEnd = $today->copy()->endOfMonth()->toDateString();
 
         $balances = $this->statements->openBalanceTotalsByCurrency();
-        $stayTotals = $this->stays->totalsByCurrencyBetween($monthStart, $monthEnd);
-        $paymentTotals = $this->payments->totalsByCurrencyBetween($monthStart, $monthEnd);
+        $staySummary = $this->stays->summaryByCurrencyBetween($monthStart, $monthEnd);
+        $paymentSummary = $this->payments->summaryByCurrencyBetween($monthStart, $monthEnd);
 
-        // v2.1.1-D §3: "Açık alacak" kartının TL karşılığı — firma ayrımı
-        // olmadan, yalnızca para birimi bazında (kart zaten tüm firmaları tek
-        // toplamda gösterir).
+        // v2.1.1-D §3: "Net bakiye" kartının TL karşılığı — firma ayrımı
+        // olmadan, yalnızca para birimi bazında.
         $debitTl = $this->stays->systemWideExchangeRateDebitTotalsByCurrency();
         $creditTl = $this->payments->systemWideExchangeRateCreditTotalsByCurrency();
 
-        $recentPayments = $this->payments->recent(6);
-        $upcomingStays = $this->stays->currentAndUpcoming($today->toDateString(), 6);
+        $currencies = $this->currencyTotals($balances, $staySummary, $paymentSummary, $debitTl, $creditTl);
+        $counts = $this->companies->activityCounts();
 
-        $topByCurrency = [];
+        $selected = $this->resolveCurrency($currencies, $currency);
+        $months = in_array($months, FinancialSummary::CHART_MONTHS, true) ? $months : FinancialSummary::CHART_MONTHS[0];
+        $tab = array_key_exists($tab, FinancialSummary::TABS) ? $tab : array_key_first(FinancialSummary::TABS);
 
-        foreach (Currency::cases() as $currency) {
-            $rows = $this->statements->topDebtorCompanies($currency, 5);
-
-            if ($rows !== []) {
-                $topByCurrency[$currency->value] = $rows;
-            }
+        if ($selected === null) {
+            return new FinancialSummary(
+                currencies: $currencies,
+                activeCompanyCount: $counts['active'],
+                topCompanies: [],
+                recentPayments: new Collection,
+                upcomingStays: new Collection,
+                companyNames: [],
+                passiveCompanyCount: $counts['passive'],
+                chartMonths: $months,
+                tab: $tab,
+                activity: $withActivity ? $this->activity() : null,
+            );
         }
 
-        // Görünen tüm firma adları TEK sorguda çözülür — N+1 yoktur.
-        $companyIds = array_merge(
+        $topRows = $this->statements->topDebtorCompanies($selected, 5);
+        $topByCurrency = $topRows === [] ? [] : [$selected->value => $topRows];
+
+        $stayLifetime = $this->stays->lifetimeSummaryByCurrency();
+        $paymentLifetime = $this->payments->lifetimeSummaryByCurrency();
+        $selectedStays = $stayLifetime[$selected->value] ?? null;
+        $selectedPayments = $paymentLifetime[$selected->value] ?? null;
+
+        // ---- Alt tablo: yalnızca açık sekme sorgulanır.
+        $ledgerPage = null;
+        $ledgerBalances = [];
+        $recentPayments = new Collection;
+        $upcomingStays = new Collection;
+        $accountRows = [];
+
+        if ($tab === 'konaklamalar') {
+            $upcomingStays = $this->stays->currentAndUpcoming($today->toDateString(), $perPage);
+        } elseif ($tab === 'tahsilatlar') {
+            $recentPayments = $this->payments->recent($perPage);
+        } elseif ($tab === 'borc-alacak') {
+            $accountRows = $this->statements->nonZeroBalances($selected, $perPage);
+        } else {
+            $page = $this->statements->recentEntriesWithBalance($selected, $perPage, 'sayfa');
+            $ledgerPage = $page['entries'];
+            $ledgerBalances = $page['balances'];
+        }
+
+        // Görünen tüm hesap adları TEK sorguda çözülür — N+1 yoktur.
+        /** @var array<int, int> $companyIds */
+        $companyIds = array_values(array_unique(array_map('intval', array_merge(
+            array_column($topRows, 'company_id'),
+            array_column($accountRows, 'company_id'),
             $recentPayments->pluck('company_id')->all(),
             $upcomingStays->pluck('company_id')->all(),
-            ...array_map(
-                static fn (array $rows): array => array_column($rows, 'company_id'),
-                array_values($topByCurrency),
+            $ledgerPage === null ? [] : array_map(
+                static fn ($entry): int => (int) $entry->company_id,
+                $ledgerPage->items(),
             ),
-        );
-
-        /** @var array<int, int> $companyIds */
-        $companyIds = array_values(array_unique(array_map('intval', $companyIds)));
+        ))));
         $companyNames = $this->companies->namesByIds($companyIds);
 
-        // "En yüksek bakiyeli firmalar" listesindeki her satır zaten bir
-        // FİRMA TOPLAMI (birden çok konaklama/tahsilatın netİ) — Firma
-        // Bakiye Listesi'ndeki AYNI per-firma sorgu tekrar kullanılır.
-        $topCompanyIds = array_values(array_unique(array_merge(
-            ...array_map(
-                static fn (array $rows): array => array_column($rows, 'company_id'),
-                array_values($topByCurrency),
-            ),
-        )));
-        $topDebitTl = $this->stays->exchangeRateDebitTotalsForCompanies($topCompanyIds);
-        $topCreditTl = $this->payments->exchangeRateCreditTotalsForCompanies($topCompanyIds);
+        $topCompanyIds = array_column($topRows, 'company_id');
+        $topDebitTl = $selected === Currency::TRY ? [] : $this->stays->exchangeRateDebitTotalsForCompanies($topCompanyIds);
+        $topCreditTl = $selected === Currency::TRY ? [] : $this->payments->exchangeRateCreditTotalsForCompanies($topCompanyIds);
 
         return new FinancialSummary(
-            currencies: $this->currencyTotals($balances, $stayTotals, $paymentTotals, $debitTl, $creditTl),
-            activeCompanyCount: $this->companies->activeCount(),
+            currencies: $currencies,
+            activeCompanyCount: $counts['active'],
             topCompanies: $this->decorateTopCompanies($topByCurrency, $companyNames, $topDebitTl, $topCreditTl),
             recentPayments: $recentPayments,
             upcomingStays: $upcomingStays,
             companyNames: $companyNames,
+            selectedCurrency: $selected,
+            passiveCompanyCount: $counts['passive'],
+            totalStayCount: array_sum(array_column($stayLifetime, 'count')),
+            totalNightCount: array_sum(array_column($stayLifetime, 'nights')),
+            lifetimeStays: $selectedStays['total'] ?? Money::zero(),
+            lifetimePayments: $selectedPayments['total'] ?? Money::zero(),
+            lifetimePaymentCount: $selectedPayments['count'] ?? 0,
+            averageNightly: $selectedStays === null ? null : self::average($selectedStays['total'], $selectedStays['nights']),
+            chart: $this->monthlyChart($selected, $today, $months),
+            chartMonths: $months,
+            tab: $tab,
+            ledgerEntries: $ledgerPage,
+            ledgerBalances: $ledgerBalances,
+            accountBalances: array_map(
+                fn (array $row): CompanyBalanceRow => new CompanyBalanceRow(
+                    companyId: $row['company_id'],
+                    companyName: $companyNames[$row['company_id']] ?? 'Firma bulunamadı',
+                    balance: $row['balance'],
+                    currency: $selected,
+                ),
+                $accountRows,
+            ),
+            activity: $withActivity ? $this->activity() : null,
         );
     }
 
@@ -150,8 +219,8 @@ class DashboardService
      * kartları arasında boşluk oluşmaz.
      *
      * @param  array<string, array{receivable: Money, payable: Money, net: Money}>  $balances
-     * @param  array<string, Money>  $stayTotals
-     * @param  array<string, Money>  $paymentTotals
+     * @param  array<string, array{total: Money, count: int, nights: int}>  $stayTotals
+     * @param  array<string, array{total: Money, count: int}>  $paymentTotals
      * @param  array<string, array{total: Money, complete: bool}>  $debitTl
      * @param  array<string, array{total: Money, complete: bool}>  $creditTl
      * @return array<int, CurrencyTotals>
@@ -188,13 +257,129 @@ class DashboardService
                     receivable: $balances[$code]['receivable'] ?? Money::zero(),
                     payable: $balances[$code]['payable'] ?? Money::zero(),
                     net: $balances[$code]['net'] ?? Money::zero(),
-                    staysThisMonth: $stayTotals[$code] ?? Money::zero(),
-                    paymentsThisMonth: $paymentTotals[$code] ?? Money::zero(),
+                    staysThisMonth: $stayTotals[$code]['total'] ?? Money::zero(),
+                    paymentsThisMonth: $paymentTotals[$code]['total'] ?? Money::zero(),
                     netTl: $netTl,
+                    staysCountThisMonth: $stayTotals[$code]['count'] ?? 0,
+                    nightsThisMonth: $stayTotals[$code]['nights'] ?? 0,
+                    paymentsCountThisMonth: $paymentTotals[$code]['count'] ?? 0,
                 );
             },
             $ordered,
         );
+    }
+
+    /**
+     * Seçilen para birimi: istekte gelen ve panoda verisi olan para birimi;
+     * yoksa TRY, o da yoksa ilk para birimi. Veri yoksa `null`.
+     *
+     * @param  array<int, CurrencyTotals>  $currencies
+     */
+    private function resolveCurrency(array $currencies, ?string $requested): ?Currency
+    {
+        $available = array_map(static fn (CurrencyTotals $totals): Currency => $totals->currency, $currencies);
+
+        foreach ([Currency::tryFrom((string) $requested), Currency::TRY] as $candidate) {
+            if ($candidate !== null && in_array($candidate, $available, true)) {
+                return $candidate;
+            }
+        }
+
+        return $available[0] ?? null;
+    }
+
+    /**
+     * Son N ayın konaklama/tahsilat toplamları ve ay sonu net bakiyesi —
+     * tek para biriminde. Üç toplu sorgu; hareketsiz aylar sıfırla dolar.
+     */
+    private function monthlyChart(Currency $currency, Carbon $today, int $months): MonthlyChart
+    {
+        $first = $today->copy()->startOfMonth()->subMonths($months - 1);
+        $from = $first->toDateString();
+        $to = $today->copy()->endOfMonth()->toDateString();
+
+        $stays = $this->stays->monthlyTotals($currency, $from, $to);
+        $payments = $this->payments->monthlyTotals($currency, $from, $to);
+        $ledger = $this->statements->monthlyNetChanges($currency, $from, $to);
+
+        $running = $ledger['opening'];
+        $series = [];
+
+        for ($i = 0; $i < $months; $i++) {
+            $month = $first->copy()->addMonths($i);
+            $key = $month->format('Y-m');
+            $running = $running->add($ledger['months'][$key] ?? Money::zero());
+
+            $series[] = new ChartMonth(
+                key: $key,
+                label: self::MONTH_LABELS[$month->month - 1].' '.$month->year,
+                stays: $stays[$key] ?? Money::zero(),
+                payments: $payments[$key] ?? Money::zero(),
+                net: $running,
+            );
+        }
+
+        return new MonthlyChart($currency, $series);
+    }
+
+    /**
+     * Pano "Son Güncellemeler": konaklama, tahsilat ve cari hesap kayıtlarındaki
+     * son veri değişiklikleri (denetim kaydından, TEK sorgu).
+     *
+     * @return array<int, ActivityItem>
+     */
+    private function activity(): array
+    {
+        $subjects = [
+            'stay' => ['Konaklama kaydı', 'bed', 'purple'],
+            'payment' => ['Tahsilat kaydı', 'card', 'green'],
+            'company' => ['Cari hesap bilgileri', 'building', 'blue'],
+        ];
+
+        $verbs = [
+            AuditEvent::Created->value => 'oluşturuldu',
+            AuditEvent::Updated->value => 'güncellendi',
+            AuditEvent::Cancelled->value => 'iptal edildi',
+            AuditEvent::Deleted->value => 'silindi',
+            AuditEvent::Restored->value => 'geri alındı',
+            AuditEvent::ExchangeRateCorrected->value => 'için kur düzeltildi',
+        ];
+
+        $logs = $this->audit->recentChanges(
+            array_keys($subjects),
+            array_map(static fn (string $event): AuditEvent => AuditEvent::from($event), array_keys($verbs)),
+            5,
+        );
+
+        return $logs->map(function ($log) use ($subjects, $verbs): ActivityItem {
+            [$noun, $icon, $tone] = $subjects[(string) $log->auditable_type] ?? ['Kayıt', 'log', 'blue'];
+            $event = $log->event->value;
+
+            // İptal/silme kırmızı değil gül tonudur; anlam metindedir (§11.6).
+            if ($event === AuditEvent::Cancelled->value || $event === AuditEvent::Deleted->value) {
+                $tone = 'rose';
+            } elseif ($event === AuditEvent::Updated->value) {
+                $icon = 'pencil';
+            }
+
+            return new ActivityItem(
+                title: $noun.' '.($verbs[$event] ?? 'değişti'),
+                userName: $log->user_name,
+                at: $log->created_at,
+                icon: $icon,
+                tone: $tone,
+            );
+        })->all();
+    }
+
+    /** Gecelik ortalama — tamsayı kuruş, yarım yukarı yuvarlanır. */
+    private static function average(Money $total, int $nights): ?Money
+    {
+        if ($nights <= 0) {
+            return null;
+        }
+
+        return Money::fromMinorUnits(intdiv(2 * $total->minorUnits + $nights, 2 * $nights));
     }
 
     /**

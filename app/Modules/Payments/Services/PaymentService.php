@@ -656,6 +656,82 @@ class PaymentService
     }
 
     /**
+     * Bir tarih aralığında aktif tahsilatların tutarı ve ADEDİ — para birimi
+     * bazında (Finans panosu KPI kartları). `totalsByCurrencyBetween()` ile
+     * AYNI evren. TEK sorgu.
+     *
+     * @return array<string, array{total: Money, count: int}>
+     */
+    public function summaryByCurrencyBetween(string $from, string $to): array
+    {
+        return $this->summaryByCurrency(
+            DB::table('payments')->whereBetween('payment_date', [$from, $to]),
+        );
+    }
+
+    /**
+     * Tüm zamanların aktif tahsilat özeti — para birimi bazında. TEK sorgu.
+     *
+     * @return array<string, array{total: Money, count: int}>
+     */
+    public function lifetimeSummaryByCurrency(): array
+    {
+        return $this->summaryByCurrency(DB::table('payments'));
+    }
+
+    /**
+     * Tek para biriminde aylık tahsilat tutarları (`Y-m` anahtarlı).
+     * Tahsilatsız aylar dizide YOKTUR. TEK sorgu.
+     *
+     * @return array<string, Money>
+     */
+    public function monthlyTotals(Currency $currency, string $from, string $to): array
+    {
+        $rows = DB::table('payments')
+            ->selectRaw("DATE_FORMAT(payment_date, '%Y-%m') as ym")
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->where('status', PaymentStatus::Active->value)
+            ->where('currency', $currency->value)
+            ->whereBetween('payment_date', [$from, $to])
+            ->groupBy('ym')
+            ->get();
+
+        $totals = [];
+
+        foreach ($rows as $row) {
+            $totals[(string) $row->ym] = Money::fromDecimal((string) $row->total);
+        }
+
+        return $totals;
+    }
+
+    /**
+     * @return array<string, array{total: Money, count: int}>
+     */
+    private function summaryByCurrency(QueryBuilder $query): array
+    {
+        $rows = $query
+            ->selectRaw('currency')
+            ->selectRaw('CAST(COALESCE(SUM(amount), 0) AS CHAR) as total')
+            ->selectRaw('COUNT(*) as payment_count')
+            ->where('status', PaymentStatus::Active->value)
+            ->groupBy('currency')
+            ->orderBy('currency')
+            ->get();
+
+        $summary = [];
+
+        foreach ($rows as $row) {
+            $summary[(string) $row->currency] = [
+                'total' => Money::fromDecimal((string) $row->total),
+                'count' => (int) $row->payment_count,
+            ];
+        }
+
+        return $summary;
+    }
+
+    /**
      * Bir tarih aralığında TEK bir kanaldan (ör. kart) yazılan tahsilat
      * tutarları, para birimi bazında (v2.1.1-A §12 — dönem raporlanabilirliği).
      *

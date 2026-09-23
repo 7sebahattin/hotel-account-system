@@ -29,6 +29,13 @@ final class NavIcons
         'plus' => 'M10 4v12M4 10h12',
         'warning' => 'M8.57 3.2a1.65 1.65 0 012.86 0l6.28 10.9A1.65 1.65 0 0116.28 16.6H3.72a1.65 1.65 0 01-1.43-2.5L8.57 3.2zM10 8v3.2M10 13.8h.01',
         'swap' => 'M4 7h11l-3-3M16 13H5l3 3',
+        // Pano (Finans) özet kartları ve son güncellemeler.
+        'wallet' => 'M3 6a2 2 0 012-2h9v3M3 6v9a1 1 0 001 1h12a1 1 0 001-1V8a1 1 0 00-1-1H5a2 2 0 01-2-1zm11 5h.01',
+        'arrow-down' => 'M10 3v13m0 0l-5-5m5 5l5-5',
+        'calculator' => 'M5 2h10a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1zm2 3h6v3H7V5zm0 6h.01M10 11h.01M13 11h.01M7 14h.01M10 14h.01M13 14h.01',
+        'card' => 'M2 5h16v10H2V5zm0 3h16M5 12h3',
+        'pencil' => 'M13.5 3.5l3 3L7 16H4v-3l9.5-9.5z',
+        'chevron-right' => 'M8 5l5 5-5 5',
     ];
 
     public static function path(string $icon): string
