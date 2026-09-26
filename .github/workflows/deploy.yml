@@ -292,7 +292,7 @@ jobs:
       # Geliştirme dosyaları artifact'a taşınmaz.
       - name: Aktarılacak dosyaları hazırla
         run: |
-          rm -rf .git .github .claude tests docs node_modules
+          rm -rf .git .github .claude tests docs node_modules android
           rm -f phpunit.xml pint.json phpstan.neon package.json package-lock.json \
                 vite.config.js README.md CLAUDE.md AGENTS.md .editorconfig .gitattributes .gitignore
           # .env ASLA aktarılmaz. Zaten .gitignore'da; yine de kesin olarak siliyoruz.
