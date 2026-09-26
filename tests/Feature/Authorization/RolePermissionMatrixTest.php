@@ -72,12 +72,18 @@ class RolePermissionMatrixTest extends TestCase
             Permission::ReceiptBookCreate,
             Permission::MonthlyAccountView,
             Permission::MonthlyAccountUpdate,
+            Permission::PersonnelView,
+            Permission::PersonnelManage,
+            Permission::PersonnelAttendance,
+            Permission::PersonnelPayroll,
+            Permission::PersonnelScan,
+            Permission::PersonnelTerminals,
         ] as $expected) {
             $this->assertContains($expected->value, $granted);
         }
 
         // Kaldırılan dört kasa yetkisi artık rolün parçası değildir.
-        $this->assertCount(22, $granted);
+        $this->assertCount(28, $granted);
     }
 
     #[Test]
@@ -100,6 +106,11 @@ class RolePermissionMatrixTest extends TestCase
             Permission::MonthlyAccountDelete,
             Permission::MonthlyAccountViewAll,
             Permission::MonthlyAccountManageProviders,
+            Permission::PersonnelView,
+            Permission::PersonnelManage,
+            Permission::PersonnelAttendance,
+            Permission::PersonnelPayroll,
+            Permission::PersonnelTerminals,
         ] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted, "personel {$forbidden->value} yetkisine sahip olmamalı");
         }
@@ -125,6 +136,7 @@ class RolePermissionMatrixTest extends TestCase
             Permission::MonthlyAccountView->value,
             Permission::MonthlyAccountCreate->value,
             Permission::MonthlyAccountUpdate->value,
+            Permission::PersonnelScan->value,
         ], $granted);
     }
 

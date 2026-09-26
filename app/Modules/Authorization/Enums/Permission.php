@@ -68,6 +68,13 @@ enum Permission: string
     case MonthlyAccountViewAll = 'monthly_account.view_all';
     case MonthlyAccountManageProviders = 'monthly_account.manage_providers';
 
+    case PersonnelView = 'personnel.view';
+    case PersonnelManage = 'personnel.manage';
+    case PersonnelAttendance = 'personnel.attendance';
+    case PersonnelPayroll = 'personnel.payroll';
+    case PersonnelScan = 'personnel.scan';
+    case PersonnelTerminals = 'personnel.terminals';
+
     /** Yetki yönetimi ekranındaki gruplama başlığı. */
     public function group(): string
     {
@@ -89,6 +96,8 @@ enum Permission: string
             self::MonthlyAccountView, self::MonthlyAccountCreate, self::MonthlyAccountUpdate,
             self::MonthlyAccountDelete, self::MonthlyAccountViewAll,
             self::MonthlyAccountManageProviders => 'Aylık Hesap',
+            self::PersonnelView, self::PersonnelManage, self::PersonnelAttendance,
+            self::PersonnelPayroll, self::PersonnelScan, self::PersonnelTerminals => 'Personel Takibi',
         };
     }
 
@@ -126,6 +135,12 @@ enum Permission: string
             self::MonthlyAccountDelete => 'Günlük hesabı sil / geri getir',
             self::MonthlyAccountViewAll => 'Diğer kullanıcıların hesap alanlarına eriş',
             self::MonthlyAccountManageProviders => 'Banka / ödeme kuruluşu tanımlarını yönet',
+            self::PersonnelView => 'Personel ve puantajı görüntüle',
+            self::PersonnelManage => 'Personel, vardiya ve kartları yönet',
+            self::PersonnelAttendance => 'Puantaj düzelt',
+            self::PersonnelPayroll => 'Hakediş ve ödemeleri yönet',
+            self::PersonnelScan => 'Kart okut',
+            self::PersonnelTerminals => 'Terminal erişimini yönet',
         };
     }
 

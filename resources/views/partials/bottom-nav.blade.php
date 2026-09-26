@@ -24,7 +24,7 @@
         'payments.index' => ['payments.*'],
     ];
 
-    $moreActive = request()->routeIs('statements.*', 'users.*', 'roles.*', 'audit.*');
+    $moreActive = request()->routeIs('statements.*', 'users.*', 'roles.*', 'audit.*', 'personnel.*');
 
     $columnCount = count($visiblePrimary) + 1;
 @endphp

@@ -64,6 +64,12 @@ enum RoleName: string
                 Permission::ReceiptBookCreate,
                 Permission::MonthlyAccountView,
                 Permission::MonthlyAccountUpdate,
+                Permission::PersonnelView,
+                Permission::PersonnelManage,
+                Permission::PersonnelAttendance,
+                Permission::PersonnelPayroll,
+                Permission::PersonnelScan,
+                Permission::PersonnelTerminals,
             ],
 
             self::Personel => [
@@ -87,6 +93,7 @@ enum RoleName: string
                 Permission::MonthlyAccountView,
                 Permission::MonthlyAccountCreate,
                 Permission::MonthlyAccountUpdate,
+                Permission::PersonnelScan,
             ],
         };
     }

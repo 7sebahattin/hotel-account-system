@@ -35,6 +35,18 @@
             ],
         ],
         [
+            'label' => 'Personel',
+            'items' => [
+                ['route' => 'personnel.index', 'label' => 'Personel Takibi', 'can' => Permission::PersonnelView->value, 'icon' => 'users'],
+                ['route' => 'personnel.employees.index', 'label' => 'Personeller', 'can' => Permission::PersonnelView->value, 'icon' => 'users'],
+                ['route' => 'personnel.shifts.index', 'label' => 'Vardiyalar', 'can' => Permission::PersonnelView->value, 'icon' => 'clock'],
+                ['route' => 'personnel.attendance.index', 'label' => 'Puantaj', 'can' => Permission::PersonnelView->value, 'icon' => 'clock'],
+                ['route' => 'personnel.payroll.index', 'label' => 'Ücret ve Ödemeler', 'can' => Permission::PersonnelPayroll->value, 'icon' => 'cash'],
+                ['route' => 'personnel.kiosk', 'label' => 'Kart Okutma', 'can' => Permission::PersonnelScan->value, 'icon' => 'card'],
+                ['route' => 'personnel.terminals.index', 'label' => 'Terminaller', 'can' => Permission::PersonnelTerminals->value, 'icon' => 'card'],
+            ],
+        ],
+        [
             'label' => 'Yönetim',
             'items' => [
                 ['route' => 'users.index', 'label' => 'Kullanıcılar', 'can' => Permission::UsersView->value, 'icon' => 'users'],
@@ -82,6 +94,13 @@
         'roles.index' => ['roles.*'],
         'rooms.index' => ['rooms.*'],
         'monthly-account.providers.index' => ['monthly-account.providers.*'],
+        'personnel.index' => ['personnel.index'],
+        'personnel.employees.index' => ['personnel.employees.*'],
+        'personnel.shifts.index' => ['personnel.shifts.*'],
+        'personnel.attendance.index' => ['personnel.attendance.*', 'personnel.reports.*'],
+        'personnel.payroll.index' => ['personnel.payroll.*'],
+        'personnel.kiosk' => ['personnel.kiosk*'],
+        'personnel.terminals.index' => ['personnel.terminals.*'],
         'audit.index' => ['audit.*'],
     ];
 
