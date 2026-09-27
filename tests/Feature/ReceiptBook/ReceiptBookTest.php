@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\ReceiptBook;
 
+use App\Modules\AuditLog\Enums\AuditEvent;
+use App\Modules\AuditLog\Models\AuditLog;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Payments\Models\Payment;
@@ -184,5 +186,115 @@ class ReceiptBookTest extends TestCase
         $this->actingAs($personel)
             ->post(route('receipt-book.store'), $this->payload())
             ->assertSessionDoesntHaveErrors();
+    }
+
+    private function createEntry(): ReceiptBookEntry
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $this->actingAs($admin)->post(route('receipt-book.store'), $this->payload());
+
+        return ReceiptBookEntry::query()->firstOrFail();
+    }
+
+    #[Test]
+    public function admin_makbuzu_duzenleyebilir_ve_numara_degismez(): void
+    {
+        $entry = $this->createEntry();
+        $receiptNo = $entry->receipt_no;
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $this->actingAs($admin)->get(route('receipt-book.edit', $entry))
+            ->assertOk()
+            ->assertSee('value="Örnek Müşteri"', false)
+            ->assertSee('value="1500,00"', false);
+
+        $this->actingAs($admin)
+            ->put(route('receipt-book.update', $entry), $this->payload([
+                'customer_name' => 'Düzeltilmiş Müşteri',
+                'amount' => '2.750,50',
+                'currency' => 'EUR',
+                'exchange_rate_to_try' => '50,00',
+            ]))
+            ->assertRedirect(route('receipt-book.show', $entry))
+            ->assertSessionDoesntHaveErrors();
+
+        $entry->refresh();
+        $this->assertSame('Düzeltilmiş Müşteri', $entry->customer_name);
+        $this->assertSame('2750.50', $entry->amount);
+        $this->assertSame('137525.00', $entry->try_equivalent);
+        $this->assertSame($receiptNo, $entry->receipt_no);
+        $this->assertSame($admin->id, $entry->updated_by);
+
+        // TRY'ye dönünce kur alanları temizlenir (DB CHECK ile uyumlu).
+        $this->actingAs($admin)
+            ->put(route('receipt-book.update', $entry), $this->payload())
+            ->assertSessionDoesntHaveErrors();
+        $this->assertNull($entry->fresh()->exchange_rate_to_try);
+
+        $this->assertTrue(AuditLog::query()
+            ->where('event', AuditEvent::Updated->value)
+            ->where('auditable_type', 'receipt_book_entry')
+            ->where('auditable_id', $entry->id)
+            ->exists());
+    }
+
+    #[Test]
+    public function duzenleme_dogrulama_hatasi_duzenleme_sayfasina_doner(): void
+    {
+        $entry = $this->createEntry();
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $this->actingAs($admin)
+            ->put(route('receipt-book.update', $entry), $this->payload(['amount' => '0']))
+            ->assertRedirect(route('receipt-book.edit', $entry))
+            ->assertSessionHasErrors('amount');
+
+        $this->assertSame('1500.00', $entry->fresh()->amount);
+    }
+
+    #[Test]
+    public function admin_makbuzu_silebilir_ve_denetim_kaydi_eski_degerleri_tasir(): void
+    {
+        $entry = $this->createEntry();
+        $admin = $this->userWithRole(RoleName::Admin);
+
+        $this->actingAs($admin)
+            ->delete(route('receipt-book.destroy', $entry))
+            ->assertRedirect(route('receipt-book.index'));
+
+        $this->assertNull(ReceiptBookEntry::query()->find($entry->id));
+
+        $logs = AuditLog::query()
+            ->where('event', AuditEvent::Deleted->value)
+            ->where('auditable_type', 'receipt_book_entry')
+            ->where('auditable_id', $entry->id)
+            ->get();
+
+        $this->assertCount(1, $logs);
+        $this->assertSame($entry->receipt_no, $logs[0]->old_values['receipt_no']);
+        $this->assertSame('Örnek Müşteri', $logs[0]->old_values['customer_name']);
+    }
+
+    #[Test]
+    public function patron_ve_personel_makbuzu_duzenleyemez_ve_silemez(): void
+    {
+        $entry = $this->createEntry();
+
+        foreach ([RoleName::Patron, RoleName::Personel] as $role) {
+            $user = $this->userWithRole($role);
+
+            $this->actingAs($user)->get(route('receipt-book.edit', $entry))->assertForbidden();
+            $this->actingAs($user)
+                ->put(route('receipt-book.update', $entry), $this->payload(['customer_name' => 'X']))
+                ->assertForbidden();
+            $this->actingAs($user)->delete(route('receipt-book.destroy', $entry))->assertForbidden();
+
+            $this->actingAs($user)->get(route('receipt-book.show', $entry))
+                ->assertOk()
+                ->assertDontSee(route('receipt-book.edit', $entry))
+                ->assertDontSee('kalıcı olarak silinsin');
+        }
+
+        $this->assertSame('Örnek Müşteri', $entry->fresh()->customer_name);
     }
 }

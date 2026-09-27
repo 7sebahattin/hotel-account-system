@@ -895,9 +895,11 @@ Makbuzu Defteri.
 | created_by / updated_by | FK users | |
 | created_at / updated_at | | |
 
-**Silme/iptal ucu YOKTUR** — route, policy ve serviste tanımlı değildir;
-geçmiş makbuz asla silinmez/değiştirilmez. Bu yüzden `deleted_at`/`status`
-kolonu AÇILMADI (§3.2 ilkesi).
+**Düzenleme ve kalıcı silme yalnızca Admin'dedir** (27 Eylül 2026, kullanıcı
+talimatı — önceki "silme/iptal ucu yok" kuralının yerine geçer). Makbuz
+muhasebe kaydı olmadığı için düzeltme ters kayıt değil doğrudan düzenlemedir;
+`receipt_no` düzenlemede DEĞİŞMEZ. Silme hard delete'tir (`deleted_at`/`status`
+kolonu yok); silinen satırın tüm değerleri denetim kaydına açıkça yazılır.
 
 **Veritabanı düzeyinde değişmezler:** `CHECK (amount > 0)`,
 `CHECK (currency <> 'TRY' OR (exchange_rate_to_try IS NULL AND try_equivalent IS NULL))`,
@@ -1045,6 +1047,8 @@ audit.view
 fx.correct_historical  # Geçmiş Döviz Düzeltme (v2.1.1-C) — yalnızca Admin/Patron
 receipt_book.view      # Tahsilat Makbuzu Defteri'ni görüntüle/yazdır (v2.1.1-C, payments.view ile AYNI birleşik desen)
 receipt_book.create    # Tahsilat Makbuzu Defteri'ne yeni makbuz ekle (v2.1.1-C)
+receipt_book.update    # makbuzu düzenle — yalnızca Admin (27 Eylül 2026)
+receipt_book.delete    # makbuzu kalıcı sil — yalnızca Admin (27 Eylül 2026)
 ```
 
 Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse sabit/enum üzerinden referans verilir.
@@ -1091,6 +1095,7 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | fx.correct_historical | ✅ | ✅ | ❌ |
 | receipt_book.view | ✅ | ✅ | ✅ |
 | receipt_book.create | ✅ | ✅ | ✅ |
+| receipt_book.update / receipt_book.delete | ✅ | ❌ | ❌ |
 
 ⚠️ = policy içinde koşullu
 
@@ -1358,7 +1363,9 @@ isimlendirildi.
   `LedgerService`/`PaymentService`/`CashBookService`'i HİÇ import ETMEZ.
 - Kendi tablosu, kendi numaralandırması (`MKB-{Y}-{id:06d}` — gerçek `TM-…`
   ile KARIŞTIRILMAZ), kendi ödeme şekli enum'u (`ReceiptPaymentMethod`).
-- **Silme/iptal ucu YOKTUR** — geçmiş makbuz asla silinmez.
+- **Düzenleme/silme yalnızca Admin** (`receipt_book.update`/`receipt_book.delete`,
+  27 Eylül 2026). Makbuz no değişmez; silme kalıcıdır ve denetim kaydı
+  silinen değerleri taşır (`ReceiptBookService::delete()`).
 - Giriş UX'i: "Yeni Makbuz" Kasa Hareketi dialog'unun (K-098) AYNI desenini
   kullanan bir modal/sheet açar; standalone `receipt-book.create` sayfası
   JS kapalıyken/doğrulama hatasında FALLBACK'tir.
@@ -1992,7 +1999,10 @@ talimatı):** konaklama formundaki `company_id` seçimi artık yazarak aranabili
 üzerine yazan bağımsız bir vanilla JS combobox ile yapıldı. Native `<select>`
 DOM'dan kaldırılmaz (yalnızca `hidden` olur) ve form değeri HER ZAMAN ondan
 okunur/yazılır; JS çalışmazsa normal açılır liste olarak kalır (progresif
-geliştirme).
+geliştirme). Boş değerli seçenek ("Bireysel konaklama — firma yok") kutuda
+metin olarak GÖSTERİLMEZ — kutu boş başlar (27 Eylül 2026, kullanıcı
+talimatı); odaklanınca tüm seçenekler listelenir, kutu silinirse seçim de
+boşa döner.
 
 **Çift gönderim koruması:** her form gönderiminde submit butonları kilitlenir.
 Kilitleme `setTimeout(0)` ile yapılır — devre dışı bir butonun `name`/`value`

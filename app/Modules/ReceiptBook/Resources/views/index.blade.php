@@ -45,7 +45,12 @@
                     </td>
                     <td class="px-4 py-3 text-mut">{{ $entry->payment_method?->label() ?? '—' }}</td>
                     <td class="px-4 py-3 text-right">
-                        <x-ui.button variant="secondary" :href="route('receipt-book.print', $entry)" class="text-xs">Yazdır</x-ui.button>
+                        <div class="flex justify-end gap-2">
+                            @can('update', $entry)
+                                <x-ui.button variant="ghost" :href="route('receipt-book.edit', $entry)" class="text-xs">Düzenle</x-ui.button>
+                            @endcan
+                            <x-ui.button variant="secondary" :href="route('receipt-book.print', $entry)" class="text-xs">Yazdır</x-ui.button>
+                        </div>
                     </td>
                 </tr>
             @empty

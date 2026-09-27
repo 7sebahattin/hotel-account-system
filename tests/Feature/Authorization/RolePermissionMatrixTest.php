@@ -55,7 +55,9 @@ class RolePermissionMatrixTest extends TestCase
 
         foreach ([Permission::UsersView, Permission::UsersManage, Permission::RolesManage,
             Permission::MonthlyAccountCreate, Permission::MonthlyAccountDelete, Permission::MonthlyAccountViewAll,
-            Permission::MonthlyAccountManageProviders] as $forbidden) {
+            Permission::MonthlyAccountManageProviders,
+            // Makbuz düzenleme/silme yalnızca Admin'dedir (27 Eylül 2026).
+            Permission::ReceiptBookUpdate, Permission::ReceiptBookDelete] as $forbidden) {
             $this->assertNotContains($forbidden->value, $granted);
         }
 
@@ -106,6 +108,8 @@ class RolePermissionMatrixTest extends TestCase
             Permission::MonthlyAccountDelete,
             Permission::MonthlyAccountViewAll,
             Permission::MonthlyAccountManageProviders,
+            Permission::ReceiptBookUpdate,
+            Permission::ReceiptBookDelete,
             Permission::PersonnelView,
             Permission::PersonnelManage,
             Permission::PersonnelAttendance,

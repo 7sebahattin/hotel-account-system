@@ -10,9 +10,8 @@ use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 
 /**
  * Tahsilat Makbuzu Defteri — görüntüleme/yazdırma ve oluşturma iki AYRI
- * yetkidir (v2.1.1-C §9). Düzenleme/silme yeteneği hiç TANIMLANMAZ: route
- * yoktur, çünkü makbuz geçmişi asla değiştirilmez (§6 — "do not hard-delete
- * issued receipts").
+ * yetkidir (v2.1.1-C §9). Düzenleme ve silme (27 Eylül 2026, kullanıcı
+ * talimatı) ayrı yetkilerdir ve varsayılan olarak yalnızca Admin'dedir.
  */
 class ReceiptBookEntryPolicy
 {
@@ -29,5 +28,15 @@ class ReceiptBookEntryPolicy
     public function create(User $user): bool
     {
         return $user->can(Permission::ReceiptBookCreate->value);
+    }
+
+    public function update(User $user, ReceiptBookEntry $entry): bool
+    {
+        return $user->can(Permission::ReceiptBookUpdate->value);
+    }
+
+    public function delete(User $user, ReceiptBookEntry $entry): bool
+    {
+        return $user->can(Permission::ReceiptBookDelete->value);
     }
 }

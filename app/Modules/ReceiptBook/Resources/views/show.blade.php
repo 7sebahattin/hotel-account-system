@@ -5,6 +5,18 @@
     <x-ui.page-header :title="$entry->receipt_no" subtitle="Tahsilat Makbuzu Defteri kaydı">
         <x-slot:actions>
             <x-ui.button :href="route('receipt-book.print', $entry)">Yazdır</x-ui.button>
+
+            @can('update', $entry)
+                <x-ui.button variant="secondary" :href="route('receipt-book.edit', $entry)">Düzenle</x-ui.button>
+            @endcan
+
+            @can('delete', $entry)
+                <form method="POST" action="{{ route('receipt-book.destroy', $entry) }}"
+                      onsubmit="return confirm('Bu makbuz kalıcı olarak silinsin mi? Bu işlem geri alınamaz.')">
+                    @csrf @method('DELETE')
+                    <x-ui.button type="submit" variant="danger">Sil</x-ui.button>
+                </form>
+            @endcan
         </x-slot:actions>
     </x-ui.page-header>
 

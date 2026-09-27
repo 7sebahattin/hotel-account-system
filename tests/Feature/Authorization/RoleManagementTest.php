@@ -49,6 +49,33 @@ class RoleManagementTest extends TestCase
     }
 
     #[Test]
+    public function rol_formlari_rol_adi_alanini_render_eder(): void
+    {
+        // Bileşen etiketinde `@readonly(...)` direktifi Blade'in bileşen
+        // derleyicisini bozuyor, `<x-ui.input>` ham HTML olarak kalıyor ve
+        // `name` hiç gönderilmiyordu ("name alanı zorunludur").
+        $admin = $this->userWithRole(RoleName::Admin);
+        $system = Role::byName(RoleName::Personel->value);
+        $custom = $this->roles->create('muhasebe', []);
+
+        $this->actingAs($admin)->get(route('roles.create'))
+            ->assertOk()
+            ->assertSee('name="name"', false)
+            ->assertDontSee('<x-ui.input', false);
+
+        $this->actingAs($admin)->get(route('roles.edit', $system))
+            ->assertOk()
+            ->assertSee('value="'.$system->name.'"', false)
+            ->assertSee('readonly', false)
+            ->assertDontSee('<x-ui.input', false);
+
+        $this->actingAs($admin)->get(route('roles.edit', $custom))
+            ->assertOk()
+            ->assertSee('value="muhasebe"', false)
+            ->assertDontSee('readonly', false);
+    }
+
+    #[Test]
     public function sistem_rolu_silinemez(): void
     {
         $role = Role::byName(RoleName::Admin->value);
