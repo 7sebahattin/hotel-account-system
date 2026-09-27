@@ -340,6 +340,17 @@ kapalı (harici komut çalıştırılamaz → artisan AYNI SÜREÇTE `Kernel::ca
 ile koşar). Sunucuda terminal erişimi YOK; tanılama yalnızca
 `lemon-deploy.log` üzerinden yapılır ve artık workflow onu kendisi indirir.
 
+**OPCACHE BAYAT BAYT KOD ÇALIŞTIRABİLİR (27 Eylül 2026, v8 olayı).** Sunucu
+opcache'i zaman damgasını `revalidate_freq` aralığıyla kontrol eder; FTP ile
+yeni yüklenmiş ama o an opcache'te sıcak olan bir dosya finalize sırasında
+ESKİ haliyle çalışabilir. v8'de modül rota dosyaları her istekte yüklendiği
+için sıcaktı; `route:cache` eski rotalarla üretildi, `receipt-book.edit`
+eksik kaldı ve makbuz listesi 500 verdi. İki kalıcı önlem: finalize,
+bootstrap'tan önce `app/`, `bootstrap/`, `config/`, `database/`, `routes/`,
+`vendor/composer/` altındaki PHP dosyalarını `opcache_invalidate(..., true)`
+ile geçersiz kılar (sonucu günlüğe yazar); `ModuleServiceProvider` rota
+önbelleği varken modül rota dosyalarını hiç yüklemez.
+
 **DURUM: ÇALIŞIYOR — zincir uçtan uca doğrulandı (13 Eylül 2026, 21:20).**
 `main`'e merge → koşu #18 → 21:19:29 işaret bırakıldı → 21:20:01 cron finalize'ı
 koşturdu (optimize:clear → migrate "Nothing to migrate" → RolePermissionSeeder

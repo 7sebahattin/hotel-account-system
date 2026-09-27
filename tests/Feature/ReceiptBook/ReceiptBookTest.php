@@ -297,4 +297,30 @@ class ReceiptBookTest extends TestCase
 
         $this->assertSame('Örnek Müşteri', $entry->fresh()->customer_name);
     }
+
+    #[Test]
+    public function liste_ve_detay_kayitli_makbuzla_tum_rollerde_acilir(): void
+    {
+        $entry = $this->createEntry();
+        $admin = $this->userWithRole(RoleName::Admin);
+        $this->actingAs($admin)->post(route('receipt-book.store'), $this->payload([
+            'currency' => 'EUR', 'exchange_rate_to_try' => '50,00', 'payment_method' => null,
+        ]));
+
+        $this->actingAs($admin)->get(route('receipt-book.index'))
+            ->assertOk()
+            ->assertSee($entry->receipt_no)
+            ->assertSee(route('receipt-book.edit', $entry), false);
+
+        $this->actingAs($admin)->get(route('receipt-book.show', $entry))
+            ->assertOk()
+            ->assertSee('kalıcı olarak silinsin');
+
+        foreach ([RoleName::Patron, RoleName::Personel] as $role) {
+            $this->actingAs($this->userWithRole($role))->get(route('receipt-book.index'))
+                ->assertOk()
+                ->assertSee($entry->receipt_no)
+                ->assertDontSee(route('receipt-book.edit', $entry), false);
+        }
+    }
 }

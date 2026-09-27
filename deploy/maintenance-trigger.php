@@ -94,5 +94,12 @@
             : 'Sistem güncelleniyor. Lütfen kısa bir süre sonra yeniden deneyin.';
     });
 
+    // Bu dosya her yayında yeniden yüklenir; finalize.php ise opcache'te önceki
+    // yayından kalmış olabilir. Önce onu geçersiz kıl ki GÜNCEL finalize çalışsın
+    // (içindeki uygulama dosyası geçersiz kılma adımı dahil).
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($appRoot.'/deploy/finalize.php', true);
+    }
+
     require $appRoot.'/deploy/finalize.php';
 })();
