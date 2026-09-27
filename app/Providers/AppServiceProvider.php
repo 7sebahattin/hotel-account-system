@@ -13,6 +13,13 @@ use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
 use App\Modules\MonthlyAccount\Models\MonthlyPaymentProvider;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Personnel\Models\PersonnelAttendanceCorrection;
+use App\Modules\Personnel\Models\PersonnelCard;
+use App\Modules\Personnel\Models\PersonnelEmployee;
+use App\Modules\Personnel\Models\PersonnelPayrollEntry;
+use App\Modules\Personnel\Models\PersonnelScanEvent;
+use App\Modules\Personnel\Models\PersonnelShift;
+use App\Modules\Personnel\Models\PersonnelTerminal;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Models\Stay;
@@ -48,6 +55,13 @@ class AppServiceProvider extends ServiceProvider
             'ledger_entry' => LedgerEntry::class,
             'stay' => Stay::class,
             'payment' => Payment::class,
+            'personnel_employee' => PersonnelEmployee::class,
+            'personnel_shift' => PersonnelShift::class,
+            'personnel_card' => PersonnelCard::class,
+            'personnel_terminal' => PersonnelTerminal::class,
+            'personnel_scan_event' => PersonnelScanEvent::class,
+            'personnel_attendance_correction' => PersonnelAttendanceCorrection::class,
+            'personnel_payroll_entry' => PersonnelPayrollEntry::class,
             'room' => Room::class,
             'receipt_book_entry' => ReceiptBookEntry::class,
             'monthly_account_day' => MonthlyAccountDay::class,

@@ -64,6 +64,9 @@ jobs:
       - name: Aylık hesap para girişi testleri
         run: npm run test:monthly-account
 
+      - name: Personel kart okuyucu testleri
+        run: npm run test:personnel
+
       - name: Ortam hazırlığı
         run: |
           cp .env.example .env

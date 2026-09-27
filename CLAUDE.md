@@ -1,5 +1,31 @@
 # CLAUDE.md
 
+## Onaylı Personel Takip kapsamı — 25 Eylül 2026
+
+Kullanıcının açık talimatıyla `Personnel` modülü, personel kartları, USB HID
+okutma, Android NFC yardımcı uygulaması, vardiya, puantaj ve bağımsız personel
+hakediş/ödeme defteri kapsama alındı. §3.2 API/mobil uygulama yasağının bu
+göreve ait istisnası yalnız terminal kimlik doğrulamalı tarama ucudur; genel
+mobil API, çevrimdışı işlem kuyruğu ve resmi bordro/vergi entegrasyonu değildir.
+Şema, route sözleşmesi ve hesap kuralları `docs/personel-takip-teknik-plan.md`
+belgesindedir. `users` giriş hesabı olarak kalır; çalışan ayrı kayıttır.
+
+- Personel finansı `ledger_entries`, `payments`, `stays` ve müşteri cari
+  servislerine yazmaz. Para `Money`/tamsayı kuruş ile hesaplanır.
+- Ham okutma, vardiya/ücret versiyonları, puantaj düzeltmeleri ve personel
+  finansal defteri tarihsel kayıtlardır. Düzeltme yeni kayıt, ödeme iptali ters
+  kayıttır; kayıtlı geçmişe destructive migration/rollback uygulanmaz.
+- Kart UID'si kimlik etiketidir; kimlik doğrulama sırrı değildir. Android
+  terminal sırrı yalnız okutma yetkisi verir, sunucuda hash saklanır.
+- `personnel.view`, `personnel.manage`, `personnel.attendance`,
+  `personnel.payroll`, `personnel.scan`, `personnel.terminals` yetkileri mevcut
+  Spatie matrisine eklenir. Admin/Patron tamamına, Personel varsayılan olarak
+  yalnız `personnel.scan` yetkisine sahiptir. Ücret ve ödeme bilgileri ayrı
+  payroll yetkisiyle korunur; mevcut kullanıcı/rol yönetimi değişmez.
+- Bu görev için güncel doğrulanmış main'den `codex/personnel-tracking-nfc`
+  dalı, PR, yeşil CI sonrası main'e merge ve mevcut otomatik production
+  deployment kullanıcı tarafından önceden açıkça yetkilendirilmiştir.
+
 ## Onaylı Cari Ekstre listesi yeni tasarımı — 23 Eylül 2026
 
 Kullanıcının referans görseline göre `statements.index` yenilendi (Konaklamalar
