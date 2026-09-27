@@ -64,7 +64,11 @@ abstract class ModuleServiceProvider extends ServiceProvider
             Gate::policy($model, $policy);
         }
 
-        if (is_file($routes = $this->path('Routes/web.php'))) {
+        // Rota önbelleği varken dosya yüklenmez (Laravel'in loadRoutesFrom() ile
+        // aynı kural). Her istekte yüklenen rota dosyası opcache'te sürekli sıcak
+        // kalıyordu; yayın sonrası `route:cache` bu yüzden ESKİ bayt kodla
+        // üretildi ve yeni rotalar önbelleğe girmedi (27 Eylül 2026, v8).
+        if (! $this->app->routesAreCached() && is_file($routes = $this->path('Routes/web.php'))) {
             Route::middleware('web')->group($routes);
         }
     }

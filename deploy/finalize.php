@@ -206,6 +206,43 @@ if (function_exists('putenv')) {
 $_ENV['APP_RUNNING_IN_CONSOLE'] = 'true';
 $_SERVER['APP_RUNNING_IN_CONSOLE'] = 'true';
 
+/*
+ * OPCACHE'İ GEÇERSİZ KIL — bootstrap'tan ÖNCE.
+ *
+ * Sunucuda opcache zaman damgasını yalnızca `revalidate_freq` saniyede bir
+ * kontrol eder. FTP ile yeni yüklenen bir PHP dosyası bu pencere içinde
+ * include edilirse ESKİ bayt kod çalışır. 27 Eylül 2026 (v8) yayınında tam
+ * olarak bu oldu: `route:cache` eski rota dosyasından üretildi, yeni
+ * `receipt-book.edit` rotası önbelleğe girmedi ve makbuz listesi 500 verdi.
+ * `opcache_invalidate(..., true)` zaman damgasına bakmadan kaydı hemen
+ * geçersiz kılar; bu süreçteki sonraki include diskteki GÜNCEL dosyayı derler.
+ * İşlev kapalıysa (disable_functions / restrict_api) sessizce atlanır.
+ */
+$opcacheInvalidated = 0;
+if (function_exists('opcache_invalidate')) {
+    foreach (['app', 'bootstrap', 'config', 'database', 'routes', 'vendor/composer'] as $dir) {
+        if (! is_dir($appRoot.'/'.$dir)) {
+            continue;
+        }
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($appRoot.'/'.$dir, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($files as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php'
+                && @opcache_invalidate($file->getPathname(), true)) {
+                $opcacheInvalidated++;
+            }
+        }
+    }
+}
+out(sprintf(
+    "  opcache: %s, validate_timestamps=%s, revalidate_freq=%s — %d dosya geçersiz kılındı.\n",
+    ini_get('opcache.enable') ? 'açık' : 'kapalı',
+    var_export(ini_get('opcache.validate_timestamps'), true),
+    var_export(ini_get('opcache.revalidate_freq'), true),
+    $opcacheInvalidated,
+));
+
 // Web SAPI'sinin süre/bellek limitleri uzun bir migrate'i ortasında kesebilir.
 @set_time_limit(0);
 @ini_set('memory_limit', '512M');
