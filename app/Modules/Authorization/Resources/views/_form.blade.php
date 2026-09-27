@@ -5,7 +5,7 @@
 <x-ui.input
     label="Rol adı" name="name" required
     :value="$role->name ?? null"
-    @readonly(isset($role) && $role->isSystem())
+    :readonly="isset($role) && $role->isSystem()"
     :hint="isset($role) && $role->isSystem()
         ? 'Sistem rolünün adı değiştirilemez; yetkileri düzenlenebilir.'
         : 'Küçük harf, rakam, tire ve alt çizgi kullanılabilir.'"
