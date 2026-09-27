@@ -21,4 +21,12 @@ Route::middleware(['auth'])->prefix('receipt-book')->name('receipt-book.')->grou
         ->get('{entry}', [ReceiptBookController::class, 'show'])->name('show');
     Route::middleware('can:'.Permission::ReceiptBookView->value)
         ->get('{entry}/print', [ReceiptBookController::class, 'print'])->name('print');
+
+    // Düzenleme/silme — yalnızca Admin (27 Eylül 2026, kullanıcı talimatı).
+    Route::middleware('can:'.Permission::ReceiptBookUpdate->value)
+        ->get('{entry}/edit', [ReceiptBookController::class, 'edit'])->name('edit');
+    Route::middleware('can:'.Permission::ReceiptBookUpdate->value)
+        ->put('{entry}', [ReceiptBookController::class, 'update'])->name('update');
+    Route::middleware('can:'.Permission::ReceiptBookDelete->value)
+        ->delete('{entry}', [ReceiptBookController::class, 'destroy'])->name('destroy');
 });

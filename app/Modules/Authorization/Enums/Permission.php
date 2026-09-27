@@ -61,6 +61,15 @@ enum Permission: string
     case ReceiptBookView = 'receipt_book.view';
     case ReceiptBookCreate = 'receipt_book.create';
 
+    /**
+     * Makbuz düzenleme/silme — kullanıcı talimatıyla (27 Eylül 2026) yalnızca
+     * Admin'e atanır. Makbuz defteri muhasebe kaydı DEĞİLDİR (cari/kasa yan
+     * etkisi yok), bu yüzden düzeltme ters kayıt değil doğrudan düzenlemedir;
+     * her değişiklik ve silme `Auditable` ile eski değerleriyle loglanır.
+     */
+    case ReceiptBookUpdate = 'receipt_book.update';
+    case ReceiptBookDelete = 'receipt_book.delete';
+
     case MonthlyAccountView = 'monthly_account.view';
     case MonthlyAccountCreate = 'monthly_account.create';
     case MonthlyAccountUpdate = 'monthly_account.update';
@@ -92,7 +101,8 @@ enum Permission: string
             self::ExportExcel => 'Dışa Aktarma',
             self::AuditView => 'Denetim Kaydı',
             self::FxCorrectHistorical => 'Geçmiş Döviz Düzeltme',
-            self::ReceiptBookView, self::ReceiptBookCreate => 'Tahsilat Makbuzu Defteri',
+            self::ReceiptBookView, self::ReceiptBookCreate,
+            self::ReceiptBookUpdate, self::ReceiptBookDelete => 'Tahsilat Makbuzu Defteri',
             self::MonthlyAccountView, self::MonthlyAccountCreate, self::MonthlyAccountUpdate,
             self::MonthlyAccountDelete, self::MonthlyAccountViewAll,
             self::MonthlyAccountManageProviders => 'Aylık Hesap',
@@ -129,6 +139,8 @@ enum Permission: string
             self::FxCorrectHistorical => 'Geçmiş kaydın eksik döviz kurunu düzelt',
             self::ReceiptBookView => 'Tahsilat makbuzu defterini görüntüle / yazdır',
             self::ReceiptBookCreate => 'Tahsilat makbuzu defterine yeni makbuz ekle',
+            self::ReceiptBookUpdate => 'Tahsilat makbuzunu düzenle',
+            self::ReceiptBookDelete => 'Tahsilat makbuzunu sil',
             self::MonthlyAccountView => 'Aylık hesabı görüntüle',
             self::MonthlyAccountCreate => 'Günlük hesap ekle',
             self::MonthlyAccountUpdate => 'Günlük hesabı düzenle',

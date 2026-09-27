@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\ReceiptBook\Services;
 
 use App\Models\User;
+use App\Modules\AuditLog\Enums\AuditEvent;
+use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
@@ -25,6 +27,8 @@ use Illuminate\Support\Facades\DB;
  */
 class ReceiptBookService
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -46,6 +50,46 @@ class ReceiptBookService
             $entry->saveQuietly();
 
             return $entry;
+        });
+    }
+
+    /**
+     * Makbuzu düzenler (yalnızca Admin, 27 Eylül 2026). Makbuz numarası
+     * DEĞİŞMEZ — basılmış belgeyle bağı korunur. Eski/yeni değerler
+     * `Auditable` ile denetim kaydına yazılır.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function update(ReceiptBookEntry $entry, array $data, ?User $actor = null): ReceiptBookEntry
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($entry, $data, $user): ReceiptBookEntry {
+            $entry->fill($this->fillable($data));
+            $entry->updated_by = $user->getKey();
+            $this->applyExchangeRate($entry, $data);
+            $entry->save();
+
+            return $entry;
+        });
+    }
+
+    /**
+     * Makbuzu kalıcı olarak siler (yalnızca Admin, 27 Eylül 2026). Makbuz
+     * muhasebe kaydı olmadığı için cari/kasa etkisi yoktur. Genel `Auditable`
+     * silme kaydı eski değerleri taşımadığından olay burada AÇIKÇA, silinen
+     * satırın tüm değerleriyle yazılır; kayıt denetim izinde okunabilir kalır.
+     */
+    public function delete(ReceiptBookEntry $entry): void
+    {
+        DB::transaction(function () use ($entry): void {
+            $this->audit->log(
+                AuditEvent::Deleted,
+                $entry,
+                oldValues: $entry->auditableValues($entry->getAttributes()),
+            );
+
+            $entry->deleteQuietly();
         });
     }
 

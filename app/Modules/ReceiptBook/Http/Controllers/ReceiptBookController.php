@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\ReceiptBook\Enums\ReceiptPaymentMethod;
 use App\Modules\ReceiptBook\Http\Requests\StoreReceiptBookEntryRequest;
+use App\Modules\ReceiptBook\Http\Requests\UpdateReceiptBookEntryRequest;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use App\Modules\ReceiptBook\Services\ReceiptBookService;
 use Illuminate\Contracts\View\View;
@@ -72,5 +73,41 @@ class ReceiptBookController extends Controller
         $this->authorize('view', $entry);
 
         return view('receipt-book::print', ['entry' => $entry->load('creator')]);
+    }
+
+    public function edit(ReceiptBookEntry $entry): View
+    {
+        $this->authorize('update', $entry);
+
+        // Aktif listeden çıkarılmış bir para birimindeki makbuz da düzenlenebilsin.
+        $currencies = Currency::active();
+
+        if (! in_array($entry->currency, $currencies, true)) {
+            $currencies[] = $entry->currency;
+        }
+
+        return view('receipt-book::edit', [
+            'entry' => $entry,
+            'currencies' => $currencies,
+            'methods' => ReceiptPaymentMethod::cases(),
+        ]);
+    }
+
+    public function update(UpdateReceiptBookEntryRequest $request, ReceiptBookEntry $entry): RedirectResponse
+    {
+        $this->receiptBook->update($entry, $request->validated(), $request->user());
+
+        return redirect()->route('receipt-book.show', $entry)
+            ->with('success', 'Makbuz güncellendi.');
+    }
+
+    public function destroy(ReceiptBookEntry $entry): RedirectResponse
+    {
+        $this->authorize('delete', $entry);
+
+        $this->receiptBook->delete($entry);
+
+        return redirect()->route('receipt-book.index')
+            ->with('success', 'Makbuz silindi.');
     }
 }

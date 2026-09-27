@@ -754,7 +754,12 @@ function initSearchableSelects() {
         let activeIndex = -1;
         let matches = [];
 
-        const currentLabel = () => select.options[select.selectedIndex]?.text.trim() ?? '';
+        // Boş değerli seçenek ("firma yok") kutuda METİN olarak gösterilmez:
+        // kutu boş başlar, yer tutucu görünür. Aksi hâlde odaklanınca bu metin
+        // arama terimi sayılır ve firma listesi süzülüp kaybolurdu.
+        const currentLabel = () => (select.value === ''
+            ? ''
+            : select.options[select.selectedIndex]?.text.trim() ?? '');
 
         const close = () => {
             listbox.hidden = true;
@@ -787,8 +792,8 @@ function initSearchableSelects() {
             }
         };
 
-        const render = () => {
-            const term = fold(input.value.trim());
+        const render = (showAll = false) => {
+            const term = showAll ? '' : fold(input.value.trim());
             matches = options().filter((option) => fold(option.text).includes(term));
             listbox.replaceChildren();
 
@@ -820,13 +825,18 @@ function initSearchableSelects() {
             highlight(-1);
         };
 
-        input.addEventListener('input', render);
-        input.addEventListener('focus', render);
+        input.addEventListener('input', () => render());
+        // Odaklanınca TÜM seçenekler listelenir (seçili firmanın adı süzgeç
+        // sayılmaz); metin seçili gelir, yazmaya başlamak onu değiştirir.
+        input.addEventListener('focus', () => {
+            render(true);
+            input.select();
+        });
 
         input.addEventListener('keydown', (event) => {
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                if (listbox.hidden) { render(); return; }
+                if (listbox.hidden) { render(true); return; }
                 highlight(Math.min(activeIndex + 1, matches.length - 1));
             } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
@@ -845,7 +855,15 @@ function initSearchableSelects() {
             // Yazılan metin bir seçime dönüşmediyse görünen metin GERÇEK
             // seçili değere (select.value) geri döner — kullanıcı yanlışlıkla
             // yazdığı bir metinle var olmayan bir kayda "bağlanmış" GÖRÜNEMEZ.
+            // Kutu tamamen silindiyse seçim de kaldırılır (boş değerli seçenek).
             window.setTimeout(() => {
+                if (input.value.trim() === '' && select.value !== '') {
+                    const empty = options().find((option) => option.value === '');
+                    if (empty) {
+                        select.value = '';
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
                 input.value = currentLabel();
                 close();
             }, 0);
