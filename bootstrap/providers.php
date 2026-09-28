@@ -3,6 +3,7 @@
 use App\Modules\AuditLog\Providers\AuditLogServiceProvider;
 use App\Modules\Auth\Providers\AuthServiceProvider;
 use App\Modules\Authorization\Providers\AuthorizationServiceProvider;
+use App\Modules\Branding\Providers\BrandingServiceProvider;
 use App\Modules\Companies\Providers\CompaniesServiceProvider;
 use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\FxCorrection\Providers\FxCorrectionServiceProvider;
@@ -22,6 +23,7 @@ return [
     // Modül sağlayıcıları (CLAUDE.md §4.1)
     AuditLogServiceProvider::class,
     AuthorizationServiceProvider::class,
+    BrandingServiceProvider::class,
     AuthServiceProvider::class,
     CompaniesServiceProvider::class,
     DashboardServiceProvider::class,
