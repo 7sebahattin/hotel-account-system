@@ -102,10 +102,12 @@ class OfferTest extends TestCase
         $this->get(route('offers.index', ['status' => 'draft', 'q' => 'Deniz']))->assertOk()->assertSee($offer->offer_no);
         $this->get(route('offers.index', ['status' => 'sent']))->assertOk()->assertDontSee($offer->offer_no);
         $this->get(route('offers.show', $offer))->assertOk()
+            ->assertSee('data-brand-variant="on-light"', false)
             ->assertSee('Deniz Turizm')->assertSee('LEMON HOTEL FİYATLAR')
             ->assertSee('Eylül 2026')->assertSee('DOUBLE')->assertSee('180,00 EUR')
             ->assertSee('Lemon Turizm');
         $this->get(route('offers.print', $offer))->assertOk()
+            ->assertSee('data-brand-variant="on-light"', false)
             ->assertSee('Deniz Turizm')->assertSee('LEMON HOTEL FİYATLAR')
             ->assertSee('Eylül 2026')->assertSee('SINGLE')->assertSee('100,00 EUR');
     }

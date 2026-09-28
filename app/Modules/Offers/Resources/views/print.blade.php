@@ -3,8 +3,6 @@
 @section('content')
     @php
         $priceMap = $offer->prices->keyBy(fn ($price) => $price->offer_room_type_id.'-'.$price->offer_period_id);
-        $logoPath = (string) config('hotel.brand.logo');
-        $hasLogo = $logoPath !== '' && is_file(public_path($logoPath));
         $brandName = $offer->hotel_name_snapshot ?: 'LEMON HOTEL';
         $wideTable = $offer->periods->count() > 6;
         $generalLines = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $offer->general_notes) ?: [])));
@@ -19,8 +17,7 @@
         .offer-sheet { width: 100%; max-width: 210mm; margin: auto; padding: 17mm 16mm; background: #fff; box-shadow: 0 10px 28px #1f29331a; }
         .offer-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12mm; align-items: start; padding-bottom: 9mm; border-bottom: 1.5px solid #a8884c; break-inside: avoid; }
         .offer-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .offer-logo { display: flex; width: 46px; height: 46px; flex: none; align-items: center; justify-content: center; border: 1px solid #d7c6a6; border-radius: 5px; color: #8a6a2f; background: #f8f5ef; font-size: 20px; font-weight: 700; }
-        .offer-logo-img { max-width: 54px; max-height: 52px; object-fit: contain; }
+        .offer-logo-img { display: block; max-width: 54px; max-height: 52px; width: auto; height: auto; flex: none; object-fit: contain; }
         .offer-brand-name { display: block; color: #1f2933; font-size: 15pt; font-weight: 700; line-height: 1.1; letter-spacing: .025em; overflow-wrap: anywhere; }
         .offer-brand-caption { display: block; margin-top: 4px; color: #54606b; font-size: 7.5pt; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
         .offer-number { text-align: right; white-space: nowrap; }
@@ -98,11 +95,7 @@
     <article class="offer-sheet">
         <header class="offer-header">
             <div class="offer-brand">
-                @if ($hasLogo)
-                    <img class="offer-logo-img" src="{{ asset($logoPath) }}" alt="" aria-hidden="true">
-                @else
-                    <span class="offer-logo" aria-hidden="true">{{ mb_strtoupper(mb_substr($brandName, 0, 1)) }}</span>
-                @endif
+                <x-brand-logo variant="on-light" :decorative="true" class="offer-logo-img" />
                 <div><strong class="offer-brand-name">{{ $brandName }}</strong><span class="offer-brand-caption">Konaklama fiyat teklifi</span></div>
             </div>
             <div class="offer-number"><span>Teklif no</span><strong>{{ $offer->offer_no }}</strong></div>

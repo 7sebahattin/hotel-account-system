@@ -2,8 +2,6 @@
 @section('title', $offer->offer_no)
 @section('content')
     @php
-        $logoPath = (string) config('hotel.brand.logo');
-        $hasLogo = $logoPath !== '' && is_file(public_path($logoPath));
         $brandName = $offer->hotel_name_snapshot ?: 'LEMON HOTEL';
     @endphp
     <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -19,11 +17,7 @@
     <header class="rounded-xl border border-line bg-card p-5 sm:p-7">
         <div class="flex flex-wrap items-start justify-between gap-5 border-b border-line pb-5">
             <div class="flex min-w-0 items-center gap-3">
-                @if ($hasLogo)
-                    <img src="{{ asset($logoPath) }}" alt="" aria-hidden="true" class="size-14 shrink-0 rounded-lg border border-line bg-card object-contain p-1">
-                @else
-                    <span aria-hidden="true" class="flex size-14 shrink-0 items-center justify-center rounded-lg border border-acc/40 bg-acc-bg text-xl font-bold text-acc-tx">{{ mb_strtoupper(mb_substr($brandName, 0, 1)) }}</span>
-                @endif
+                <x-brand-logo variant="on-light" :decorative="true" class="h-14 max-w-36 shrink-0 object-contain" />
                 <div class="min-w-0">
                     <p class="text-xs font-semibold uppercase tracking-[0.16em] text-acc-tx">Konaklama fiyat teklifi</p>
                     <p class="mt-1 truncate text-lg font-semibold text-tx">{{ $brandName }}</p>
