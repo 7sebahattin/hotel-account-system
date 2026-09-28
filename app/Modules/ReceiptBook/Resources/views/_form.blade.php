@@ -12,8 +12,38 @@
     <x-ui.input label="Tarih" name="receipt_date" type="date" required
                 :value="old('receipt_date', $e?->receipt_date?->toDateString() ?? now()->toDateString())" />
 
-    <x-ui.input label="Müşteri / Cari adı" name="customer_name" required maxlength="200"
-                :value="old('customer_name', $e?->customer_name)" />
+    @if ($e)
+        <x-ui.input label="Müşteri / Cari adı" name="customer_name" required maxlength="200"
+                    :value="old('customer_name', $e->customer_name)" />
+    @else
+        <div class="relative" data-receipt-customer-search
+             data-search-url="{{ route('receipt-book.customer-search') }}"
+             data-create-url="{{ route('receipt-book.customer-create') }}">
+            <x-ui.input label="Müşteri / Cari adı" name="customer_name" required maxlength="200"
+                        autocomplete="off" role="combobox" aria-autocomplete="list"
+                        aria-controls="receipt-customer-results" aria-expanded="false"
+                        data-receipt-customer-input :value="old('customer_name')" />
+            <input type="hidden" name="company_id" value="{{ old('company_id') }}" data-receipt-customer-id>
+            <div id="receipt-customer-results" role="listbox" hidden
+                 class="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-card"
+                 data-receipt-customer-results></div>
+            @can(\App\Modules\Authorization\Enums\Permission::CompaniesCreate->value)
+                <div hidden data-receipt-customer-create-panel class="mt-2 flex flex-wrap items-center gap-2">
+                    <select aria-label="Yeni cari türü" data-receipt-customer-type
+                            class="min-h-11 rounded-lg border border-field bg-card px-3 text-tx">
+                        <option value="individual">Bireysel hesap</option>
+                        <option value="company">Firma cari hesabı</option>
+                    </select>
+                    <button type="button" data-receipt-customer-create
+                            class="min-h-11 rounded-lg border border-field bg-card px-3 text-tx"></button>
+                </div>
+            @endcan
+            <p class="mt-1 text-xs text-mut" role="status" aria-live="polite" data-receipt-customer-status></p>
+            @error('company_id')
+                <p class="mt-1 text-xs text-danger">{{ $message }}</p>
+            @enderror
+        </div>
+    @endif
 
     <x-ui.input label="Tutar" name="amount" required inputmode="decimal" data-amount
                 placeholder="Örn: 5.000,00" class="tabular-nums"

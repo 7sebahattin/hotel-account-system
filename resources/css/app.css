@@ -491,6 +491,15 @@
         opacity: 0.6;
     }
 
+    @media (min-width: 768px) {
+        #makbuz-dialog {
+            width: min(48rem, calc(100vw - 2rem));
+            max-height: calc(100vh - 3rem);
+            max-height: calc(100dvh - 3rem);
+            overflow-y: auto;
+        }
+    }
+
     @media (max-width: 767px) {
         .app-dialog {
             position: fixed;

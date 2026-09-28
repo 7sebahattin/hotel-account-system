@@ -28,6 +28,7 @@ class StoreReceiptBookEntryRequest extends FormRequest
         return [
             'receipt_date' => ['required', 'date'],
             'customer_name' => ['required', 'string', 'max:200'],
+            'company_id' => ['nullable', 'integer', Rule::exists('companies', 'id')->whereNull('deleted_at')->where('is_active', true)],
             'amount' => ['required', 'numeric', 'gt:0', 'decimal:0,2', 'max:9999999999999.99'],
             'currency' => ['required', Rule::enum(Currency::class)],
             'exchange_rate_to_try' => [
@@ -50,6 +51,7 @@ class StoreReceiptBookEntryRequest extends FormRequest
         return [
             'receipt_date' => 'tarih',
             'customer_name' => 'müşteri / cari adı',
+            'company_id' => 'seçilen cari',
             'amount' => 'tutar',
             'currency' => 'para birimi',
             'exchange_rate_to_try' => 'kur (TL karşılığı)',

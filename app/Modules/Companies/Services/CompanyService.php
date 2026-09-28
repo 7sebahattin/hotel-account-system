@@ -170,4 +170,27 @@ class CompanyService
             ->map(fn ($name): string => (string) $name)
             ->all();
     }
+
+    /** @return array<int, array{id: int, name: string, type: string}> */
+    public function searchActive(string $term, int $limit = 10): array
+    {
+        $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], trim($term));
+
+        return Company::query()->where('is_active', true)
+            ->whereRaw("LOWER(name) LIKE LOWER(?) ESCAPE '!'", ['%'.$escaped.'%'])
+            ->orderBy('name')->orderBy('id')->limit($limit)
+            ->get(['id', 'name', 'account_type'])
+            ->map(fn (Company $account): array => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'type' => $account->account_type->value,
+            ])->all();
+    }
+
+    public function activeName(int $id): ?string
+    {
+        $name = Company::query()->whereKey($id)->where('is_active', true)->value('name');
+
+        return $name === null ? null : (string) $name;
+    }
 }
