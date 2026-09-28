@@ -30,6 +30,8 @@ class PaymentAllocationTest extends TestCase
 
     private User $actor;
 
+    private int $staySequence = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -41,8 +43,10 @@ class PaymentAllocationTest extends TestCase
 
     private function stay(array $data = []): Stay
     {
+        $guestName = 'Misafir '.(++$this->staySequence);
+
         return app(StayService::class)->create(array_replace([
-            'company_id' => $this->company->id, 'guest_name' => 'Misafir',
+            'company_id' => $this->company->id, 'guest_name' => $guestName,
             'check_in_date' => '2026-09-01', 'check_out_date' => '2026-09-02',
             'pricing_mode' => 'total', 'amount' => '1000.00', 'currency' => 'TRY',
         ], $data), $this->actor);

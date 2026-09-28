@@ -68,10 +68,14 @@ class StayService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($data, $user): Stay {
+            $individualAccountId = ! empty($data['individual_account_id'])
+                ? (int) $data['individual_account_id']
+                : null;
             $data = $this->resolveAccount($data, $user);
             app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
             $stay = new Stay;
             $this->applyInput($stay, $data);
+            $this->ensureNoActiveDuplicateCheckIn($stay, individualAccountId: $individualAccountId);
             $stay->status = StayStatus::Active;
             $stay->created_by = $user->getKey();
             $stay->updated_by = $user->getKey();
@@ -117,6 +121,9 @@ class StayService
             if ($stay->isCancelled()) {
                 throw CannotUpdateCancelledStay::make($stay->id);
             }
+            $individualAccountId = ! empty($data['individual_account_id'])
+                ? (int) $data['individual_account_id']
+                : null;
             $data = $this->resolveAccount($data, $user, $stay);
             $before = $this->snapshot($stay);
             $financialBefore = $this->financialSnapshot($stay);
@@ -126,6 +133,11 @@ class StayService
             // karşılaştırılır. Aksi hâlde formdan gelen ham tutar karşılaştırılırdı.
             $candidate = clone $stay;
             $this->applyInput($candidate, $data);
+            $this->ensureNoActiveDuplicateCheckIn(
+                $candidate,
+                exceptStayId: $stay->id,
+                individualAccountId: $individualAccountId,
+            );
             $financialChanged = $this->financialSnapshot($candidate) !== $financialBefore;
 
             $reversal = null;
@@ -706,6 +718,53 @@ class StayService
             sourceId: $stay->getKey(),
             actor: $user,
         );
+    }
+
+    /**
+     * Aynı giriş tarihindeki aktif kayıtları duplicate denetiminden önce
+     * kilitler. Mevcut (check_in_date, check_out_date) indeksi zorlanır;
+     * MySQL/InnoDB'nin next-key lock'u aynı tarih için kayıt henüz yokken de
+     * aralıktaki ikinci insert'i ilk transaction tamamlanana kadar bekletir.
+     *
+     * Mevcut bireysel hesap seçilmişse kişi kimliği stabil company_id'dir.
+     * Yeni bireysel hesap veya firma akışında başka kimlik olmadığından
+     * guest_name trim/case normalizasyonuyla karşılaştırılır.
+     */
+    private function ensureNoActiveDuplicateCheckIn(
+        Stay $candidate,
+        ?int $exceptStayId = null,
+        ?int $individualAccountId = null,
+    ): void {
+        $activeStays = Stay::query()
+            ->select(['id', 'company_id', 'guest_name'])
+            ->forceIndex('stays_check_in_date_check_out_date_index')
+            ->where('check_in_date', $candidate->check_in_date->toDateString())
+            ->where('status', StayStatus::Active)
+            ->lockForUpdate()
+            ->get();
+
+        $candidateName = $this->normalizedGuestName($candidate->guest_name);
+
+        foreach ($activeStays as $existing) {
+            if ($existing->id === $exceptStayId) {
+                continue;
+            }
+
+            $isDuplicate = $individualAccountId !== null
+                ? $existing->company_id === $individualAccountId
+                : $this->normalizedGuestName($existing->guest_name) === $candidateName;
+
+            if ($isDuplicate) {
+                throw ValidationException::withMessages([
+                    'guest_name' => 'Bu kişi için seçilen giriş tarihinde zaten bir konaklama kaydı bulunuyor.',
+                ]);
+            }
+        }
+    }
+
+    private function normalizedGuestName(string $name): string
+    {
+        return mb_strtolower(trim($name), 'UTF-8');
     }
 
     /**
