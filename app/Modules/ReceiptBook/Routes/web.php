@@ -15,6 +15,10 @@ Route::middleware(['auth'])->prefix('receipt-book')->name('receipt-book.')->grou
     Route::middleware('can:'.Permission::ReceiptBookCreate->value)
         ->get('create', [ReceiptBookController::class, 'create'])->name('create');
     Route::middleware('can:'.Permission::ReceiptBookCreate->value)
+        ->get('customer-search', [ReceiptBookController::class, 'customerSearch'])->name('customer-search');
+    Route::middleware(['can:'.Permission::ReceiptBookCreate->value, 'can:'.Permission::CompaniesCreate->value])
+        ->post('customer', [ReceiptBookController::class, 'customerCreate'])->name('customer-create');
+    Route::middleware('can:'.Permission::ReceiptBookCreate->value)
         ->post('/', [ReceiptBookController::class, 'store'])->name('store');
 
     Route::middleware('can:'.Permission::ReceiptBookView->value)
