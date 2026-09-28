@@ -32,6 +32,8 @@ class StatementScreenTest extends TestCase
 
     private User $admin;
 
+    private int $seedMovementSequence = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -43,9 +45,11 @@ class StatementScreenTest extends TestCase
 
     private function seedMovements(): void
     {
+        $guestName = 'John Smith '.(++$this->seedMovementSequence);
+
         app(StayService::class)->create([
             'company_id' => $this->company->id,
-            'guest_name' => 'John Smith',
+            'guest_name' => $guestName,
             'check_in_date' => '2026-08-29',
             'check_out_date' => '2026-09-01',
             'pricing_mode' => 'total',

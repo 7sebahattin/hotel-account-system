@@ -231,6 +231,7 @@ class CashBookRemovalTest extends TestCase
         ];
         app(StayService::class)->create($data, $actor);
         $stay = app(StayService::class)->create(array_replace($data, [
+            'guest_name' => 'Firma Misafiri EUR',
             'amount' => '100.00', 'currency' => 'EUR', 'exchange_rate_to_try' => '40.0000',
         ]), $actor);
         $payment = app(PaymentService::class)->create(array_replace($this->payload($company), [
