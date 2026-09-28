@@ -70,6 +70,10 @@ enum Permission: string
     case ReceiptBookUpdate = 'receipt_book.update';
     case ReceiptBookDelete = 'receipt_book.delete';
 
+    case OffersView = 'offers.view';
+    case OffersCreate = 'offers.create';
+    case OffersUpdate = 'offers.update';
+
     case MonthlyAccountView = 'monthly_account.view';
     case MonthlyAccountCreate = 'monthly_account.create';
     case MonthlyAccountUpdate = 'monthly_account.update';
@@ -103,6 +107,7 @@ enum Permission: string
             self::FxCorrectHistorical => 'Geçmiş Döviz Düzeltme',
             self::ReceiptBookView, self::ReceiptBookCreate,
             self::ReceiptBookUpdate, self::ReceiptBookDelete => 'Tahsilat Makbuzu Defteri',
+            self::OffersView, self::OffersCreate, self::OffersUpdate => 'Teklifler',
             self::MonthlyAccountView, self::MonthlyAccountCreate, self::MonthlyAccountUpdate,
             self::MonthlyAccountDelete, self::MonthlyAccountViewAll,
             self::MonthlyAccountManageProviders => 'Aylık Hesap',
@@ -141,6 +146,9 @@ enum Permission: string
             self::ReceiptBookCreate => 'Tahsilat makbuzu defterine yeni makbuz ekle',
             self::ReceiptBookUpdate => 'Tahsilat makbuzunu düzenle',
             self::ReceiptBookDelete => 'Tahsilat makbuzunu sil',
+            self::OffersView => 'Teklifleri görüntüle ve yazdır',
+            self::OffersCreate => 'Teklif oluştur',
+            self::OffersUpdate => 'Teklif düzenle',
             self::MonthlyAccountView => 'Aylık hesabı görüntüle',
             self::MonthlyAccountCreate => 'Günlük hesap ekle',
             self::MonthlyAccountUpdate => 'Günlük hesabı düzenle',

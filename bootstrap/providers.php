@@ -9,6 +9,7 @@ use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\FxCorrection\Providers\FxCorrectionServiceProvider;
 use App\Modules\Ledger\Providers\LedgerServiceProvider;
 use App\Modules\MonthlyAccount\Providers\MonthlyAccountServiceProvider;
+use App\Modules\Offers\Providers\OffersServiceProvider;
 use App\Modules\Payments\Providers\PaymentsServiceProvider;
 use App\Modules\Personnel\Providers\PersonnelServiceProvider;
 use App\Modules\ReceiptBook\Providers\ReceiptBookServiceProvider;
@@ -30,6 +31,7 @@ return [
     FxCorrectionServiceProvider::class,
     LedgerServiceProvider::class,
     MonthlyAccountServiceProvider::class,
+    OffersServiceProvider::class,
     PaymentsServiceProvider::class,
     PersonnelServiceProvider::class,
     ReceiptBookServiceProvider::class,

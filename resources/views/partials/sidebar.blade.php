@@ -19,6 +19,7 @@
             'items' => [
                 ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
                 ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
+                ['route' => 'offers.index', 'label' => 'Teklifler', 'can' => Permission::OffersView->value, 'icon' => 'log'],
                 ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
                 // "TAHSİLAT MAKBUZLARI" — mevcut Tahsilatlar'dan AYRI bir
                 // yazdırma defteri (v2.1.1-C §4/§8). İsim bilerek FARKLI
@@ -86,6 +87,7 @@
         'home' => ['home'],
         'companies.index' => ['companies.*'],
         'stays.index' => ['stays.*'],
+        'offers.index' => ['offers.*'],
         'payments.index' => ['payments.*'],
         'receipt-book.index' => ['receipt-book.*'],
         'statements.index' => ['statements.index', 'statements.print-index', 'statements.show', 'statements.print'],

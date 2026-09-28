@@ -136,6 +136,18 @@
         Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
 }
 
+/* Teklif formu: mevcut alanlar ve JS ile eklenen matris hücreleri aynı odak dilini kullanır. */
+.offer-form label { color: var(--color-tx); }
+.offer-form :is(input, select, textarea) {
+    border-color: var(--color-field);
+    background-color: var(--color-card);
+    color: var(--color-tx);
+}
+.offer-form :is(input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-acc-tx);
+    outline-offset: 1px;
+}
+
 /* Aylık Hesap: hücreler tutarı kesmeden dar ekranda satıra böler. */
 @layer components {
     .monthly-account {
