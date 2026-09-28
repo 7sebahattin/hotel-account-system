@@ -4,6 +4,7 @@
 @section('content')
     <x-ui.page-header title="Tahsilat Makbuzu Defteri"
                       :subtitle="number_format($entries->total(), 0, ',', '.').' makbuz — bu ekran muhasebe kaydı ÜRETMEZ'">
+        <x-slot:meta><x-brand-logo variant="on-light" :decorative="true" class="mt-2 h-9 w-auto" /></x-slot:meta>
         <x-slot:actions>
             @can('create', \App\Modules\ReceiptBook\Models\ReceiptBookEntry::class)
                 <a href="{{ route('receipt-book.create') }}" data-receipt-dialog-trigger

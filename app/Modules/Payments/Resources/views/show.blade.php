@@ -4,6 +4,7 @@
 @section('content')
     <x-ui.page-header :title="$payment->amountMoney()->format($payment->currency)">
         <x-slot:meta>
+            <x-brand-logo variant="on-light" :decorative="true" class="mt-2 h-9 w-auto" />
             <p class="mt-1 text-sm text-mut">
                 {{ $payment->company?->name ?? '—' }}
                 · <span class="tabular-nums">{{ $payment->payment_date->format('d.m.Y') }}</span>
