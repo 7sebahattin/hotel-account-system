@@ -737,7 +737,7 @@ class StayService
     ): void {
         $activeStays = Stay::query()
             ->select(['id', 'company_id', 'guest_name'])
-            ->useIndex('stays_check_in_date_check_out_date_index')
+            ->forceIndex('stays_check_in_date_check_out_date_index')
             ->where('check_in_date', $candidate->check_in_date->toDateString())
             ->where('status', StayStatus::Active)
             ->lockForUpdate()
