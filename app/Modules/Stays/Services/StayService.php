@@ -722,8 +722,9 @@ class StayService
 
     /**
      * Aynı giriş tarihindeki aktif kayıtları duplicate denetiminden önce
-     * kilitler. Mevcut check_in_date indeksi, aynı tarihli iki eşzamanlı
-     * gönderimin sıraya girmesini sağlar.
+     * kilitler. Mevcut (check_in_date, check_out_date) indeksi zorlanır;
+     * MySQL/InnoDB'nin next-key lock'u aynı tarih için kayıt henüz yokken de
+     * aralıktaki ikinci insert'i ilk transaction tamamlanana kadar bekletir.
      *
      * Mevcut bireysel hesap seçilmişse kişi kimliği stabil company_id'dir.
      * Yeni bireysel hesap veya firma akışında başka kimlik olmadığından
@@ -736,6 +737,7 @@ class StayService
     ): void {
         $activeStays = Stay::query()
             ->select(['id', 'company_id', 'guest_name'])
+            ->useIndex('stays_check_in_date_check_out_date_index')
             ->where('check_in_date', $candidate->check_in_date->toDateString())
             ->where('status', StayStatus::Active)
             ->lockForUpdate()
