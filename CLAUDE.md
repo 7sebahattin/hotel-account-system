@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+## Onaylı Teklifler modülü — 28 Eylül 2026
+
+Kullanıcının açık talimatıyla konaklama fiyat teklifi hazırlama, listeleme,
+düzenleme, detay ve yazdırma için bağımsız `Offers` modülü kapsama alındı.
+`offers`, `offer_periods`, `offer_room_types`, `offer_prices` yalnızca belge
+verisidir; teklif oluşturma/güncelleme `ledger_entries`, `payments` ve kasa
+tablolarına yazmaz. Cari bağlantısı isteğe bağlıdır; müşteri adı, otel/yasal
+bilgiler ve banka alanları teklif üzerinde snapshot olarak saklanır. Banka
+hesap yönetimi, rezervasyon, fatura veya CRM bu istisnaya dahil değildir.
+Admin ve Patron görüntüler, oluşturur ve düzenler; Personel erişmez.
+Bu görev yalnızca yerel branch/worktree'de hazırlanır; release artışı,
+push, PR, merge ve deploy bu paketin parçası değildir.
+
 ## Onaylı Personel Takip kapsamı — 25 Eylül 2026
 
 Kullanıcının açık talimatıyla `Personnel` modülü, personel kartları, USB HID
@@ -452,6 +465,7 @@ Geliştirme ortamı 8.4 çalıştırabilir; bu üç kapı sayesinde fark sessizc
 11. **Basic Audit Log** — kim, ne zaman, neyi değiştirdi
 12. **Cash Book (Kasa Defteri)** — vardiya, kasa hareketi, personel devri, sayım (Gün 10)
 13. **Rooms (Odalar)** — oda tanım master data (K-100, kullanıcı onayıyla §3.2 istisnası)
+14. **Offers (Teklifler)** — konaklama fiyat teklifi belgesi (28 Eylül 2026 kullanıcı onayıyla dar istisna)
 
 ### 3.2 ŞİMDİ YAPILMAYACAKLAR (kesin)
 
@@ -539,6 +553,7 @@ app/
     ├── CashBook/
     ├── FxCorrection/               # Geçmiş Döviz Düzeltme (v2.1.1-C) — kendi model/migration'ı yok
     ├── ReceiptBook/                # Tahsilat Makbuzu Defteri (v2.1.1-C) — muhasebeden AYRI, yazdırma amaçlı
+    ├── Offers/                     # Teklif belgeleri (28 Eylül 2026 onayı) — finansal kayıt üretmez
     └── AuditLog/
 config/
 ├── hotel.php                       # uygulamaya özel ayarlar
@@ -615,7 +630,9 @@ Genel kurallar:
 - Para: **`DECIMAL(15,2)`**. `FLOAT`/`DOUBLE` **yasak**.
 - `currency`: `CHAR(3)`, varsayılan `TRY`.
 - Foreign key'ler `RESTRICT` — finansal kayıt cascade silinmez.
-- Aşağıdaki tabloların dışında V1'de tablo yoktur.
+- Aşağıdaki tabloların dışında V1'de tablo yoktur. 28 Eylül 2026 onayıyla
+  `offers`, `offer_periods`, `offer_room_types`, `offer_prices` yalnızca
+  teklif belgesi için bu sınıra dar istisnadır.
 
 ### 5.1 Framework & yetki tabloları
 `users`, `password_reset_tokens`, `sessions`, `cache`, `cache_locks`, `jobs`, `failed_jobs` (Laravel varsayılan) + Spatie: `roles`, `permissions`, `role_has_permissions`, `model_has_roles`, `model_has_permissions`.
@@ -1060,6 +1077,7 @@ receipt_book.view      # Tahsilat Makbuzu Defteri'ni görüntüle/yazdır (v2.1.
 receipt_book.create    # Tahsilat Makbuzu Defteri'ne yeni makbuz ekle (v2.1.1-C)
 receipt_book.update    # makbuzu düzenle — yalnızca Admin (27 Eylül 2026)
 receipt_book.delete    # makbuzu kalıcı sil — yalnızca Admin (27 Eylül 2026)
+offers.view, offers.create, offers.update  # teklif belgesi; finansal kayıt üretmez
 ```
 
 Yetkiler seeder ile oluşturulur; kod içinde string olarak değil, mümkünse sabit/enum üzerinden referans verilir.
@@ -1107,6 +1125,7 @@ birebir karşılanır ve yetki sayısı gereksiz büyümez.
 | receipt_book.view | ✅ | ✅ | ✅ |
 | receipt_book.create | ✅ | ✅ | ✅ |
 | receipt_book.update / receipt_book.delete | ✅ | ❌ | ❌ |
+| offers.view / offers.create / offers.update | ✅ | ✅ | ❌ |
 
 ⚠️ = policy içinde koşullu
 

@@ -4,6 +4,7 @@ import './stays.js';
 import './popover.js';
 import './payments.js';
 import './personnel.js';
+import './offers.js';
 
 /*
  * Mobil kenar çubuğu çekmecesi.
