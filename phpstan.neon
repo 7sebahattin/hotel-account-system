@@ -15,3 +15,6 @@ parameters:
         - database
         - routes
         - tests
+
+    scanFiles:
+        - deploy/staged-release.php

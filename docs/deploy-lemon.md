@@ -712,3 +712,8 @@ bir deploy'da **önce `mysqldump`** alınmalıdır. Bu yüzden CLAUDE.md §15
 - Rollback mekanizması kurulmadı; yalnızca analiz edildi (§13)
 - **Ledger trigger koruması bypass edilmedi, gevşetilmedi, "yetki yoksa atla" hâline getirilmedi** (§8)
 - Hiçbir secret değeri okunmadı, yazdırılmadı veya depoya yazıldı
+# Local staged fallback
+
+The local staged release design and recovery procedure are in
+[`deploy-local-staged.md`](deploy-local-staged.md). The existing Actions
+workflow, cron, maintenance trigger, and legacy marker remain supported.

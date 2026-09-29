@@ -22,6 +22,7 @@ class DeployFinalizeTest extends TestCase
             mkdir($this->fixture.'/'.$dir, 0777, true);
         }
         copy($project.'/deploy/finalize.php', $this->fixture.'/deploy/finalize.php');
+        copy($project.'/deploy/staged-release.php', $this->fixture.'/deploy/staged-release.php');
         file_put_contents($this->fixture.'/vendor/autoload.php', '<?php require '.var_export($project.'/vendor/autoload.php', true).';');
         file_put_contents($this->fixture.'/bootstrap/app.php', <<<'PHP'
 <?php
@@ -152,5 +153,72 @@ PHP);
         $process->run();
         $this->assertSame(1, $process->getExitCode());
         $this->assertFileDoesNotExist($this->fixture.'/booted');
+    }
+
+    #[Test]
+    public function staged_marker_promotes_then_runs_legacy_artisan_chain_and_writes_receipt(): void
+    {
+        mkdir($this->fixture.'/storage/app/deploy-inbox/local-test', 0777, true);
+        mkdir($this->fixture.'/app', 0777, true);
+        file_put_contents($this->fixture.'/storage/framework/maintenance.php', '<?php');
+        $content = '<?php return 10;';
+        $files = [
+            'app/new.php' => $content,
+            'artisan' => '<?php',
+            'bootstrap/app.php' => file_get_contents($this->fixture.'/bootstrap/app.php'),
+            'bootstrap/providers.php' => '<?php return [];',
+            'config/release.php' => "<?php return ['version' => '10'];",
+            'public/index.php' => '<?php',
+            'public/build/manifest.json' => '{}',
+            'vendor/autoload.php' => file_get_contents($this->fixture.'/vendor/autoload.php'),
+            'deploy/finalize.php' => file_get_contents($this->fixture.'/deploy/finalize.php'),
+            'deploy/staged-release.php' => file_get_contents($this->fixture.'/deploy/staged-release.php'),
+            'deploy/maintenance-trigger.php' => '<?php',
+        ];
+        $manifest = [
+            'schema_version' => 1,
+            'commit' => str_repeat('a', 40),
+            'release_version' => 10,
+            'created_at' => gmdate('c'),
+            'files' => array_map(
+                fn (string $path, string $bytes): array => ['path' => $path, 'sha256' => hash('sha256', $bytes), 'size' => strlen($bytes)],
+                array_keys($files), array_values($files),
+            ),
+        ];
+        $archive = $this->fixture.'/storage/app/deploy-inbox/local-test/release.zip';
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($archive, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+        foreach ($files as $path => $bytes) {
+            $zip->addFromString($path, $bytes);
+        }
+        $zip->addFromString('release-manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
+        $zip->close();
+        file_put_contents($this->fixture.'/storage/app/deploy-pending',
+            "mode=staged\ncommit=".str_repeat('a', 40)."\nrun_id=123\nrun_attempt=2\n".
+            "managed_maintenance=1\nrelease_id=local-test\narchive_sha256=".hash_file('sha256', $archive)."\n");
+
+        $process = $this->runFinalize();
+        $this->assertSame(0, $process->getExitCode(), $process->getOutput().$process->getErrorOutput());
+        $this->assertSame($content, file_get_contents($this->fixture.'/app/new.php'));
+        $this->assertFileExists($this->fixture.'/storage/app/deploy-completed.json');
+        $this->assertFileDoesNotExist($this->fixture.'/storage/app/deploy-pending');
+        $this->assertSame('completed', json_decode(file_get_contents($this->fixture.'/storage/app/deploy-status.json'), true)['phase']);
+        $this->assertSame('app/new.php', json_decode(file_get_contents($this->fixture.'/storage/app/deploy-manifest.json'), true)['files'][0]['path']);
+        $steps = array_map(fn ($line) => json_decode($line, true)[0], file($this->fixture.'/steps.jsonl', FILE_IGNORE_NEW_LINES));
+        $this->assertSame(['optimize:clear', 'migrate', 'db:seed', 'config:cache', 'route:cache', 'view:cache', 'event:cache', 'up'], $steps);
+    }
+
+    #[Test]
+    public function staged_failure_preserves_marker_and_maintenance_without_booting_laravel(): void
+    {
+        file_put_contents($this->fixture.'/storage/framework/maintenance.php', '<?php');
+        file_put_contents($this->fixture.'/storage/app/deploy-pending',
+            "mode=staged\ncommit=".str_repeat('a', 40)."\nrun_id=123\nrun_attempt=2\n".
+            "managed_maintenance=1\nrelease_id=local-test\narchive_sha256=".str_repeat('b', 64)."\n");
+        $this->assertSame(1, $this->runFinalize()->getExitCode());
+        $this->assertFileExists($this->fixture.'/storage/app/deploy-pending');
+        $this->assertFileExists($this->fixture.'/storage/framework/down');
+        $this->assertFileDoesNotExist($this->fixture.'/booted');
+        $this->assertSame('failed', json_decode(file_get_contents($this->fixture.'/storage/app/deploy-status.json'), true)['phase']);
     }
 }
