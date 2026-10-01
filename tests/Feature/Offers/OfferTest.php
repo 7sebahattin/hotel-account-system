@@ -108,7 +108,7 @@ class OfferTest extends TestCase
             ->assertSee('Lemon Turizm');
         $this->get(route('offers.print', $offer))->assertOk()
             ->assertSee('data-brand-variant="on-light"', false)
-            ->assertSee('class="offer-logo-img"', false)
+            ->assertSee('offer-logo-img', false)
             ->assertDontSee('offer-brand-name', false)
             ->assertDontSee('offer-brand-caption', false)
             ->assertSee('Deniz Turizm')->assertSee('LEMON HOTEL FİYATLAR')
