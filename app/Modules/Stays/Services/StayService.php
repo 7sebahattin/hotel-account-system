@@ -621,7 +621,7 @@ class StayService
         }
 
         if ($stay->currency === Currency::TRY) {
-            throw new \InvalidArgumentException('TRY konaklamalar için kur düzeltmesi yapılamaz.');
+            throw new InvalidArgumentException('TRY konaklamalar için kur düzeltmesi yapılamaz.');
         }
 
         $user = $this->resolveActor($actor);
@@ -739,10 +739,10 @@ class StayService
      * Named lock transaction dışında alınır ve commit/rollback sonrasında bırakılır.
      *
      * @template T
-     * @param  \Closure(): T  $operation
+     * @param  Closure(): T  $operation
      * @return T
      */
-    private function withCheckInDateLock(string|Carbon $checkInDate, \Closure $operation): mixed
+    private function withCheckInDateLock(string|Carbon $checkInDate, Closure $operation): mixed
     {
         $date = Carbon::parse($checkInDate)->toDateString();
         $name = 'stay-checkin:'.substr(hash('sha256', $date), 0, 40);
@@ -884,7 +884,7 @@ class StayService
         $dailyRate = $stay->dailyRateMoney();
 
         if ($dailyRate === null) {
-            throw new \InvalidArgumentException('Günlük ücretlendirmede gecelik tutar zorunludur.');
+            throw new InvalidArgumentException('Günlük ücretlendirmede gecelik tutar zorunludur.');
         }
 
         $stay->amount = Stay::calculateDailyAmount($dailyRate, $stay->nights)->toDecimal();
@@ -953,7 +953,7 @@ class StayService
         $user = $actor ?? (Auth::check() ? Auth::user() : null);
 
         if ($user === null) {
-            throw new \RuntimeException('Konaklama işlemi için işlemi yapan kullanıcı belirtilmelidir.');
+            throw new RuntimeException('Konaklama işlemi için işlemi yapan kullanıcı belirtilmelidir.');
         }
 
         return $user;
