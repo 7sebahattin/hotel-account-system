@@ -22,6 +22,7 @@ use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
 use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
 use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Models\Stay;
+use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
