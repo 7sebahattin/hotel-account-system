@@ -104,7 +104,7 @@ class BrandLogoTest extends TestCase
             'logo' => UploadedFile::fake()->create('logo.svg', 1, 'image/svg+xml'),
         ])->assertSessionHasErrors('logo');
         $this->actingAs($admin)->put(route('branding.logos.update', 'on-light'), [
-            'logo' => UploadedFile::fake()->create('sahte.png', 1, 'image/png'),
+            'logo' => UploadedFile::fake()->create('sahte.png', 1, 'text/plain'),
         ])->assertSessionHasErrors('logo');
         $this->actingAs($admin)->put(route('branding.logos.update', 'on-light'), [
             'logo' => UploadedFile::fake()->image('buyuk.png')->size(2049),
