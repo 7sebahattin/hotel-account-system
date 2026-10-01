@@ -739,6 +739,7 @@ class StayService
      * Named lock transaction dışında alınır ve commit/rollback sonrasında bırakılır.
      *
      * @template T
+     *
      * @param  Closure(): T  $operation
      * @return T
      */
