@@ -58,21 +58,29 @@ class StayDuplicateConcurrencyTest extends TestCase
             DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [$barrier]);
         }
 
-        $results = [];
-        foreach ($workers as [$process, $pipes]) {
-            $results[] = trim((string) stream_get_contents($pipes[1]));
-            $error = trim((string) stream_get_contents($pipes[2]));
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $this->assertSame(0, proc_close($process), $error);
-        }
+        try {
+            $results = [];
+            foreach ($workers as [$process, $pipes]) {
+                $results[] = trim((string) stream_get_contents($pipes[1]));
+                $error = trim((string) stream_get_contents($pipes[2]));
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                $this->assertSame(0, proc_close($process), $error);
+            }
 
-        sort($results);
-        $this->assertSame(['created', 'duplicate'], $results);
-        $this->assertDatabaseCount('stays', 1);
-        $this->assertDatabaseCount('ledger_entries', 1);
-        $this->assertDatabaseCount('payments', 0);
-        $this->assertDatabaseCount('companies', 1);
-        $this->assertDatabaseCount('cash_movements', 0);
+            sort($results);
+            $this->assertSame(['created', 'duplicate'], $results);
+            $this->assertDatabaseCount('stays', 1);
+            $this->assertDatabaseCount('ledger_entries', 1);
+            $this->assertDatabaseCount('payments', 0);
+            $this->assertDatabaseCount('companies', 1);
+            $this->assertDatabaseCount('cash_movements', 0);
+        } finally {
+            // DatabaseMigrations bütün migration'ları geri sarar. Bu testin
+            // bilinçli olarak oluşturduğu bireysel cari, veri-koruma amaçlı
+            // account_type migration down() kapısını tetiklememeli ve sonraki
+            // testlerin şemasını yarım rollback durumunda bırakmamalıdır.
+            DB::table('companies')->where('account_type', 'individual')->update(['account_type' => 'company']);
+        }
     }
 }
