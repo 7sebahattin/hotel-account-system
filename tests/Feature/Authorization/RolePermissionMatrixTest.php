@@ -72,6 +72,9 @@ class RolePermissionMatrixTest extends TestCase
             Permission::FxCorrectHistorical,
             Permission::ReceiptBookView,
             Permission::ReceiptBookCreate,
+            Permission::OffersView,
+            Permission::OffersCreate,
+            Permission::OffersUpdate,
             Permission::MonthlyAccountView,
             Permission::MonthlyAccountUpdate,
             Permission::PersonnelView,
@@ -84,8 +87,8 @@ class RolePermissionMatrixTest extends TestCase
             $this->assertContains($expected->value, $granted);
         }
 
-        // Kaldırılan dört kasa yetkisi artık rolün parçası değildir.
-        $this->assertCount(28, $granted);
+        // Kaldırılan dört kasa yetkisi yoktur; Teklifler modülünün üç yetkisi Patron'a eklenmiştir.
+        $this->assertCount(31, $granted);
     }
 
     #[Test]
