@@ -104,7 +104,7 @@ class OfferController extends Controller
 
     private function formData(?Offer $offer = null): array
     {
-        $currencies = Currency::active();
+        $currencies = array_map(static fn (Currency $currency): string => $currency->value, Currency::active());
         if ($offer !== null && ! in_array($offer->currency, $currencies, true)) {
             $currencies[] = $offer->currency;
         }
