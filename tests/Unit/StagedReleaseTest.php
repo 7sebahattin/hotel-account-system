@@ -15,6 +15,7 @@ require_once dirname(__DIR__, 2).'/deploy/staged-release.php';
 class StagedReleaseTest extends TestCase
 {
     private string $root;
+
     private array $marker;
 
     protected function setUp(): void
