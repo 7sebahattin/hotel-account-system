@@ -45,8 +45,8 @@ class StagedReleaseTest extends TestCase
     {
         $resolved = realpath($path);
         $temp = realpath(sys_get_temp_dir());
-        if ($resolved === false || $temp === false || ! is_dir($resolved) || is_link($path)
-            || ! str_starts_with($resolved, $temp.DIRECTORY_SEPARATOR.'lemon-stage-test-')) {
+        if ($resolved === false || $temp === false || is_dir($resolved) === false || is_link($path)
+            || str_starts_with($resolved, $temp.DIRECTORY_SEPARATOR.'lemon-stage-test-') === false) {
             return;
         }
         $items = new \RecursiveIteratorIterator(
@@ -54,7 +54,7 @@ class StagedReleaseTest extends TestCase
             \RecursiveIteratorIterator::CHILD_FIRST
         );
         foreach ($items as $item) {
-            $item->isDir() && ! $item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+            $item->isDir() && $item->isLink() === false ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
         rmdir($resolved);
     }
