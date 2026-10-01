@@ -104,6 +104,7 @@ class StagedReleaseTest extends TestCase
         $zip->addFromString('release-manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
         $zip->close();
         $this->marker['archive_sha256'] = hash_file('sha256', $archive);
+
         return new LemonStagedRelease($this->root, $this->marker);
     }
 
