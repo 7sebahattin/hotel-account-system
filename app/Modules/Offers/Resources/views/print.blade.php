@@ -15,8 +15,8 @@
         .offer-actions :is(a, button):focus-visible { outline: 2px solid #8a6a2f; outline-offset: 2px; }
         .offer-sheet { width: 100%; max-width: 210mm; margin: auto; padding: 17mm 16mm; background: #fff; box-shadow: 0 10px 28px #1f29331a; }
         .offer-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12mm; align-items: start; padding-bottom: 9mm; border-bottom: 1.5px solid #a8884c; break-inside: avoid; }
-        .offer-brand { display: flex; align-items: center; min-width: 0; min-height: 64px; }
-        .offer-logo-img { display: block; max-width: 155px; max-height: 68px; width: auto; height: auto; flex: none; object-fit: contain; }
+        .offer-brand { display: flex; align-items: center; min-width: 0; min-height: 82px; }
+        .offer-logo-img { display: block; max-width: 190px; max-height: 88px; width: auto; height: auto; flex: none; object-fit: contain; }
         .offer-number { text-align: right; white-space: nowrap; }
         .offer-number span, .offer-meta dt, .offer-customer-label, .offer-section-kicker { color: #59646e; font-size: 7.5pt; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
         .offer-number strong { display: block; margin-top: 5px; color: #1f2933; font-size: 11pt; font-weight: 700; letter-spacing: .015em; }
@@ -32,16 +32,31 @@
         .offer-section-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin: 0 0 4mm; break-after: avoid; }
         .offer-section-heading h2 { margin: 0; color: #1f2933; font-size: 11pt; font-weight: 700; }
         .offer-section-heading span { color: #59646e; font-size: 8pt; font-weight: 600; }
-        .offer-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }
+        .offer-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 8.5pt; }
+        .offer-table, .offer-table th, .offer-table td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .offer-table col:first-child { width: 22%; }
         .offer-table thead { display: table-header-group; }
-        .offer-table th { padding: 8px 7px; border-top: 1.5px solid #66727a; border-bottom: 1.5px solid #66727a; color: #1f2933; background: #f6f4ef; font-weight: 700; overflow-wrap: anywhere; }
+        .offer-table th { padding: 8px 7px; border-top: 1px solid; border-bottom: 1px solid rgba(31, 41, 51, .13); color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
+        .offer-table th:first-child { border-top-left-radius: 5px; }
+        .offer-table th:last-child { border-top-right-radius: 5px; }
         .offer-table th:first-child { text-align: left; }
         .offer-table th:not(:first-child), .offer-table td:not(:first-child) { text-align: right; }
         .offer-table th small { display: block; margin-top: 3px; color: #4d5963; font-size: 7pt; font-weight: 400; }
         .offer-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
-        .offer-table td { padding: 9px 7px; border-bottom: 1px solid #d4dad8; vertical-align: top; overflow-wrap: anywhere; }
+        .offer-table td { padding: 9px 7px; border-bottom: 1px solid rgba(31, 41, 51, .11); vertical-align: top; overflow-wrap: anywhere; }
         .offer-table td:first-child { font-weight: 700; }
+        .offer-table .offer-room-type-column { border-left: 1px solid #a9d7a1; border-right: 1px solid #a9d7a1; }
+        .offer-table th.offer-room-type-column { background: #b9e3b0; border-top-color: #a9d7a1; }
+        .offer-table td.offer-room-type-column { background: #eef8eb; }
+        .offer-table .offer-period-tone-1 { border-right: 1px solid #a6cef4; }
+        .offer-table th.offer-period-tone-1 { background: #b8dafa; border-top-color: #a6cef4; }
+        .offer-table td.offer-period-tone-1 { background: #eef6fe; }
+        .offer-table .offer-period-tone-2 { border-right: 1px solid #f2cc68; }
+        .offer-table th.offer-period-tone-2 { background: #ffd978; border-top-color: #f2cc68; }
+        .offer-table td.offer-period-tone-2 { background: #fff7e3; }
+        .offer-table .offer-period-tone-3 { border-right: 1px solid #9dd4ad; }
+        .offer-table th.offer-period-tone-3 { background: #afe2bd; border-top-color: #9dd4ad; }
+        .offer-table td.offer-period-tone-3 { background: #edf9f0; }
         .offer-price { color: #1f2933; font-weight: 700; font-variant-numeric: tabular-nums; }
         .offer-table.is-wide { font-size: 7.3pt; }
         .offer-table.is-wide th, .offer-table.is-wide td { padding: 7px 4px; }
@@ -59,14 +74,19 @@
         .offer-corporate strong { color: #1f2933; }
         .offer-closing { margin-top: 9mm; padding: 4mm 5mm; border-left: 2px solid #a8884c; color: #34424b; font-size: 9pt; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; break-inside: avoid; }
         @media screen and (max-width: 650px) {
-            body { padding: 10px; }
-            .offer-sheet { padding: 20px 14px; }
-            .offer-header { gap: 10px; }
+            body { margin: 0; padding: 8px; overflow-x: hidden; }
+            .offer-actions { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 100%; margin: 0 0 10px; padding: 0; }
+            .offer-actions a, .offer-actions button { width: 100%; min-width: 0; min-height: 46px; justify-content: center; padding: 8px; text-align: center; touch-action: manipulation; }
+            .offer-sheet { width: 100%; max-width: 100%; min-width: 0; padding: 18px 12px; box-sizing: border-box; }
+            .offer-header { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+            .offer-number { text-align: left; }
+            .offer-brand { min-height: 0; }
+            .offer-logo-img { max-width: min(190px, 100%); }
             .offer-intro h1 { font-size: 18pt; }
             .offer-meta, .offer-notes, .offer-corporate { grid-template-columns: 1fr; }
             .offer-meta div + div { border-left: 0; border-top: 1px solid #dfe3e0; }
-            .offer-table-wrap { max-width: 100%; overflow-x: auto; }
-            .offer-table { min-width: 560px; }
+            .offer-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .offer-table { min-width: 620px; }
         }
         @media print {
             body { padding: 0; background: #fff; }
@@ -87,7 +107,7 @@
 
     <div class="offer-actions">
         <a href="{{ route('offers.show', $offer) }}">← Teklife dön</a>
-        <button type="button" onclick="window.print()">Yazdır / PDF kaydet</button>
+        <button type="button" data-offer-print>Yazdır / PDF kaydet</button>
     </div>
     <article class="offer-sheet">
         <header class="offer-header">
@@ -114,17 +134,17 @@
                 <table class="offer-table {{ $wideTable ? 'is-wide' : '' }}">
                     <colgroup><col>@foreach ($offer->periods as $period)<col>@endforeach</colgroup>
                     <thead><tr>
-                        <th scope="col">Oda tipi</th>
+                        <th scope="col" class="offer-room-type-column">Oda tipi</th>
                         @foreach ($offer->periods as $period)
-                            <th scope="col">{{ $period->label }}@if ($period->start_date && $period->end_date)<small>{{ $period->start_date->format('d.m.Y') }} – {{ $period->end_date->format('d.m.Y') }}</small>@endif</th>
+                            <th scope="col" class="offer-period-tone-{{ ($loop->index % 3) + 1 }}">{{ $period->label }}@if ($period->start_date && $period->end_date)<small>{{ $period->start_date->format('d.m.Y') }} – {{ $period->end_date->format('d.m.Y') }}</small>@endif</th>
                         @endforeach
                     </tr></thead>
                     <tbody>
                         @foreach ($offer->roomTypes as $room)
-                            <tr><td>{{ $room->name }}</td>
+                            <tr><td class="offer-room-type-column">{{ $room->name }}</td>
                                 @foreach ($offer->periods as $period)
                                     @php $price = $priceMap->get($room->id.'-'.$period->id); @endphp
-                                    <td><span class="offer-price">{{ $price ? \App\Modules\Core\Support\Money::fromDecimal($price->price)->formatNumber().' '.$offer->currency : '—' }}</span></td>
+                                    <td class="offer-period-tone-{{ ($loop->index % 3) + 1 }}"><span class="offer-price">{{ $price ? \App\Modules\Core\Support\Money::fromDecimal($price->price)->formatNumber().' '.$offer->currency : '—' }}</span></td>
                                 @endforeach
                             </tr>
                         @endforeach
@@ -163,4 +183,9 @@
         @endif
         @if ($offer->footer_notes)<div class="offer-closing">{{ $offer->footer_notes }}</div>@endif
     </article>
+    <script>
+        document.querySelector('[data-offer-print]')?.addEventListener('click', () => {
+            if (typeof window.print === 'function') window.print();
+        });
+    </script>
 @endsection

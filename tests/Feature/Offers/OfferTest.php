@@ -111,8 +111,43 @@ class OfferTest extends TestCase
             ->assertSee('offer-logo-img', false)
             ->assertDontSee('offer-brand-name', false)
             ->assertDontSee('offer-brand-caption', false)
+            ->assertSee('offer-room-type-column', false)
+            ->assertSee('offer-period-tone-1', false)
+            ->assertSee('offer-period-tone-2', false)
+            ->assertSee(route('offers.show', $offer), false)
+            ->assertSee('class="offer-actions"', false)
+            ->assertSee('type="button"', false)
+            ->assertSee('data-offer-print', false)
+            ->assertSee('window.print()', false)
+            ->assertSee('.offer-actions { display: none !important; }', false)
             ->assertSee('Deniz Turizm')->assertSee('LEMON HOTEL FİYATLAR')
-            ->assertSee('Eylül 2026')->assertSee('SINGLE')->assertSee('100,00 EUR');
+            ->assertSee('Eylül 2026')->assertSee('SINGLE')->assertSee('100,00 EUR')
+            ->assertSee('180,00 EUR');
+    }
+
+    #[Test]
+    public function yazdirma_donem_renkleri_uc_tonda_tekrarlar_ve_try_fiyatini_korur(): void
+    {
+        $admin = $this->userWithRole(RoleName::Admin);
+        $this->actingAs($admin)->post(route('offers.store'), $this->payload([
+            'currency' => 'TRY',
+            'periods' => [
+                ['label' => 'Birinci dönem'],
+                ['label' => 'İkinci dönem'],
+                ['label' => 'Üçüncü dönem'],
+                ['label' => 'Dördüncü dönem'],
+            ],
+            'prices' => [['100.00', '120.00', '140.00', '160.00'], ['150.00', '180.00', '200.00', '220.00']],
+        ]))->assertSessionDoesntHaveErrors();
+
+        $offer = Offer::query()->firstOrFail();
+        $html = $this->get(route('offers.print', $offer))->assertOk()->getContent();
+
+        $this->assertSame(6, substr_count($html, 'class="offer-period-tone-1"'));
+        $this->assertSame(3, substr_count($html, 'class="offer-period-tone-2"'));
+        $this->assertSame(3, substr_count($html, 'class="offer-period-tone-3"'));
+        $this->assertStringContainsString('160,00 TRY', $html);
+        $this->assertStringContainsString('220,00 TRY', $html);
     }
 
     #[Test]
