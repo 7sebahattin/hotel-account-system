@@ -72,9 +72,9 @@ class StayService
 
         return $this->withCheckInDateLock($data['check_in_date'], function () use ($data, $user): Stay {
             return DB::transaction(function () use ($data, $user): Stay {
-                $individualAccountId = ! empty($data['individual_account_id'])
-                    ? (int) $data['individual_account_id']
-                    : null;
+                $individualAccountId = empty($data['individual_account_id'])
+                    ? null
+                    : (int) $data['individual_account_id'];
                 $data = $this->resolveAccount($data, $user);
                 app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
                 $stay = new Stay;
@@ -129,9 +129,9 @@ class StayService
                 if ($stay->isCancelled()) {
                     throw CannotUpdateCancelledStay::make($stay->id);
                 }
-                $individualAccountId = ! empty($data['individual_account_id'])
-                    ? (int) $data['individual_account_id']
-                    : null;
+                $individualAccountId = empty($data['individual_account_id'])
+                    ? null
+                    : (int) $data['individual_account_id'];
                 $data = $this->resolveAccount($data, $user, $stay);
                 $before = $this->snapshot($stay);
                 $financialBefore = $this->financialSnapshot($stay);
