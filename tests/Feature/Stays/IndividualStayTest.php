@@ -53,8 +53,13 @@ class IndividualStayTest extends TestCase
     {
         $this->post(route('stays.store'), $this->payload())->assertSessionHasNoErrors();
         $stay = Stay::query()->firstOrFail();
-        $data = $this->payload(['individual_account_id' => $stay->company_id]);
+        $data = $this->payload([
+            'individual_account_id' => $stay->company_id,
+            'check_in_date' => '2026-09-12',
+            'check_out_date' => '2026-09-13',
+        ]);
         $this->post(route('stays.store'), $data)->assertSessionHasNoErrors();
+        $stay = Stay::query()->latest('id')->firstOrFail();
         $this->put(route('stays.update', $stay), $data + ['notes' => 'Düzeltme'])->assertSessionHasNoErrors();
         $this->assertDatabaseCount('companies', 1);
         $this->assertDatabaseCount('ledger_entries', 2);
@@ -65,7 +70,10 @@ class IndividualStayTest extends TestCase
     public function identical_names_are_not_merged(): void
     {
         $this->post(route('stays.store'), $this->payload())->assertSessionHasNoErrors();
-        $this->post(route('stays.store'), $this->payload())->assertSessionHasNoErrors();
+        $this->post(route('stays.store'), $this->payload([
+            'check_in_date' => '2026-09-12',
+            'check_out_date' => '2026-09-13',
+        ]))->assertSessionHasNoErrors();
         $this->assertDatabaseCount('companies', 2);
     }
 

@@ -19,6 +19,7 @@
             'items' => [
                 ['route' => 'companies.index', 'label' => 'Cari hesaplar', 'can' => Permission::CompaniesView->value, 'icon' => 'building'],
                 ['route' => 'stays.index', 'label' => 'Konaklamalar', 'can' => Permission::StaysView->value, 'icon' => 'bed'],
+                ['route' => 'offers.index', 'label' => 'Teklifler', 'can' => Permission::OffersView->value, 'icon' => 'log'],
                 ['route' => 'payments.index', 'label' => 'Tahsilatlar', 'can' => Permission::PaymentsView->value, 'icon' => 'cash'],
                 // "TAHSİLAT MAKBUZLARI" — mevcut Tahsilatlar'dan AYRI bir
                 // yazdırma defteri (v2.1.1-C §4/§8). İsim bilerek FARKLI
@@ -52,6 +53,7 @@
                 ['route' => 'users.index', 'label' => 'Kullanıcılar', 'can' => Permission::UsersView->value, 'icon' => 'users'],
                 ['route' => 'roles.index', 'label' => 'Roller / Yetkiler', 'can' => Permission::RolesManage->value, 'icon' => 'shield'],
                 ['route' => 'rooms.index', 'label' => 'Odalar', 'can' => Permission::RoomsManage->value, 'icon' => 'bed'],
+                ['route' => 'branding.logos.edit', 'label' => 'Marka Logoları', 'can' => 'brand.manage', 'icon' => 'building'],
                 ['route' => 'monthly-account.providers.index', 'label' => 'Banka / Ödeme Kuruluşları', 'can' => Permission::MonthlyAccountManageProviders->value, 'icon' => 'building'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
             ],
@@ -85,6 +87,7 @@
         'home' => ['home'],
         'companies.index' => ['companies.*'],
         'stays.index' => ['stays.*'],
+        'offers.index' => ['offers.*'],
         'payments.index' => ['payments.*'],
         'receipt-book.index' => ['receipt-book.*'],
         'statements.index' => ['statements.index', 'statements.print-index', 'statements.show', 'statements.print'],
@@ -93,6 +96,7 @@
         'users.index' => ['users.*'],
         'roles.index' => ['roles.*'],
         'rooms.index' => ['rooms.*'],
+        'branding.logos.edit' => ['branding.logos.*'],
         'monthly-account.providers.index' => ['monthly-account.providers.*'],
         'personnel.index' => ['personnel.index'],
         'personnel.employees.index' => ['personnel.employees.*'],

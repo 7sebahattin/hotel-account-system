@@ -4,6 +4,7 @@ import './stays.js';
 import './popover.js';
 import './payments.js';
 import './personnel.js';
+import './offers.js';
 
 /*
  * Mobil kenar çubuğu çekmecesi.
@@ -488,6 +489,130 @@ function initReceiptBookExchangeRate() {
 
 document.addEventListener('DOMContentLoaded', initReceiptBookExchangeRate);
 
+function initReceiptBookCustomerSearch() {
+    document.querySelectorAll('[data-receipt-customer-search]').forEach((root) => {
+        if (root.dataset.initialized) return;
+        root.dataset.initialized = '1';
+
+        const input = root.querySelector('[data-receipt-customer-input]');
+        const selectedId = root.querySelector('[data-receipt-customer-id]');
+        const list = root.querySelector('[data-receipt-customer-results]');
+        const panel = root.querySelector('[data-receipt-customer-create-panel]');
+        const createButton = root.querySelector('[data-receipt-customer-create]');
+        const status = root.querySelector('[data-receipt-customer-status]');
+        let timer;
+        let controller;
+        let active = -1;
+        let options = [];
+
+        const close = () => {
+            list.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+            input.removeAttribute('aria-activedescendant');
+            active = -1;
+        };
+        const select = (account) => {
+            clearTimeout(timer);
+            controller?.abort();
+            input.value = account.name;
+            selectedId.value = account.id;
+            status.textContent = account.type === 'individual' ? 'Bireysel hesap seçildi.' : 'Firma cari hesabı seçildi.';
+            panel && (panel.hidden = true);
+            close();
+        };
+        const move = (direction) => {
+            if (list.hidden || options.length === 0) return;
+            active = (active + direction + options.length) % options.length;
+            options.forEach((option, index) => option.setAttribute('aria-selected', index === active ? 'true' : 'false'));
+            input.setAttribute('aria-activedescendant', options[active].id);
+            options[active].scrollIntoView({ block: 'nearest' });
+        };
+        const search = async () => {
+            const term = input.value.trim();
+            if (term.length < 2) { close(); if (panel) panel.hidden = true; return; }
+            controller?.abort();
+            controller = new AbortController();
+            try {
+                const url = new URL(root.dataset.searchUrl, window.location.href);
+                url.searchParams.set('q', term);
+                const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error('search failed');
+                const { results } = await response.json();
+                list.replaceChildren();
+                options = results.map((account, index) => {
+                    const option = document.createElement('button');
+                    option.type = 'button';
+                    option.id = `receipt-customer-option-${index}`;
+                    option.setAttribute('role', 'option');
+                    option.setAttribute('aria-selected', 'false');
+                    option.className = 'block w-full px-3 py-2 text-left text-sm text-tx hover:bg-well';
+                    const name = document.createElement('span');
+                    name.className = 'block';
+                    name.textContent = account.name;
+                    const type = document.createElement('span');
+                    type.className = 'block text-xs text-mut';
+                    type.textContent = account.type === 'individual' ? 'Bireysel hesap' : 'Firma cari hesabı';
+                    option.append(name, type);
+                    option.addEventListener('click', () => select(account));
+                    list.append(option);
+                    return option;
+                });
+                list.hidden = options.length === 0;
+                input.setAttribute('aria-expanded', options.length ? 'true' : 'false');
+                active = -1;
+                if (panel) panel.hidden = options.length !== 0;
+                if (createButton) createButton.textContent = `+ Yeni kayıt oluştur: ${term}`;
+                status.textContent = options.length ? `${options.length} cari bulundu.` : 'Eşleşen cari bulunamadı.';
+            } catch (error) {
+                if (error.name !== 'AbortError') status.textContent = 'Cari araması yapılamadı.';
+            }
+        };
+
+        input.addEventListener('input', () => {
+            selectedId.value = '';
+            status.textContent = '';
+            clearTimeout(timer);
+            controller?.abort();
+            close();
+            if (panel) panel.hidden = true;
+            timer = setTimeout(search, 250);
+        });
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') { close(); if (panel) panel.hidden = true; }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                if (options.length) { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1); }
+            }
+            if (event.key === 'Enter' && active >= 0 && !list.hidden) {
+                event.preventDefault(); options[active].click();
+            }
+        });
+        input.addEventListener('blur', () => setTimeout(close, 150));
+
+        createButton?.addEventListener('click', async () => {
+            const name = input.value.trim();
+            if (!name) return;
+            createButton.disabled = true;
+            status.textContent = 'Cari oluşturuluyor…';
+            try {
+                const response = await fetch(root.dataset.createUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': root.closest('form').querySelector('input[name="_token"]').value },
+                    body: JSON.stringify({ name, account_type: root.querySelector('[data-receipt-customer-type]').value, is_active: true }),
+                });
+                if (!response.ok) throw new Error('create failed');
+                select(await response.json());
+                status.textContent = 'Yeni cari oluşturuldu ve seçildi.';
+            } catch {
+                status.textContent = 'Cari oluşturulamadı. Bilgileri kontrol edin.';
+            } finally {
+                createButton.disabled = false;
+            }
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initReceiptBookCustomerSearch);
+
 /**
  * "Yeni Makbuz" dialog/sheet'i (v2.1.1-C §5) — ortak pencere
  * (v2.1.1-B.1) SADELEŞTİRİLMİŞ AYNI deseni: bu modülde Hızlı İşlem paneli
@@ -529,6 +654,7 @@ function initReceiptBookDialog() {
 
         content.innerHTML = await response.text();
         initReceiptBookExchangeRate();
+        initReceiptBookCustomerSearch();
         content.querySelector('input, select, textarea')?.focus();
     };
 

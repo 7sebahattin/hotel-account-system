@@ -136,6 +136,18 @@
         Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
 }
 
+/* Teklif formu: mevcut alanlar ve JS ile eklenen matris hücreleri aynı odak dilini kullanır. */
+.offer-form label { color: var(--color-tx); }
+.offer-form :is(input, select, textarea) {
+    border-color: var(--color-field);
+    background-color: var(--color-card);
+    color: var(--color-tx);
+}
+.offer-form :is(input, select, textarea):focus-visible {
+    outline: 2px solid var(--color-acc-tx);
+    outline-offset: 1px;
+}
+
 /* Aylık Hesap: hücreler tutarı kesmeden dar ekranda satıra böler. */
 @layer components {
     .monthly-account {
@@ -489,6 +501,15 @@
     .app-dialog::backdrop {
         background: var(--color-nav);
         opacity: 0.6;
+    }
+
+    @media (min-width: 768px) {
+        #makbuz-dialog {
+            width: min(48rem, calc(100vw - 2rem));
+            max-height: calc(100vh - 3rem);
+            max-height: calc(100dvh - 3rem);
+            overflow-y: auto;
+        }
     }
 
     @media (max-width: 767px) {

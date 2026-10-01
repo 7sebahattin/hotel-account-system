@@ -37,6 +37,8 @@ class FinanceDashboardDesignTest extends TestCase
 
     private User $actor;
 
+    private int $staySequence = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -56,9 +58,11 @@ class FinanceDashboardDesignTest extends TestCase
     /** @param  array<string, mixed>  $overrides */
     private function stay(Company $company, string $in, string $out, string $amount, string $currency = 'TRY', array $overrides = []): void
     {
+        $guestName = 'Misafir '.(++$this->staySequence);
+
         app(StayService::class)->create(array_merge([
             'company_id' => $company->id,
-            'guest_name' => 'Misafir',
+            'guest_name' => $guestName,
             'check_in_date' => $in,
             'check_out_date' => $out,
             'pricing_mode' => 'total',

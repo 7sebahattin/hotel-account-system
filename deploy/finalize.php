@@ -153,6 +153,10 @@ if (! is_array($release) || ! preg_match('/^[a-f0-9]{40}$/', $release['commit'] 
     err("Geçersiz yayın işareti; işlem yapılmadı.\n");
     exit(1);
 }
+if (isset($release['mode']) && $release['mode'] !== 'staged') {
+    err("Bilinmeyen yayın biçimi; işaret korundu.\n");
+    exit(1);
+}
 
 /**
  * Kilidi bırakır ve verilen çıkış koduyla durur. İşaret dosyasına DOKUNMAZ:
@@ -184,11 +188,45 @@ if (! str_starts_with(PHP_VERSION, '8.3.')) {
     stopWith($lockHandle, 1);
 }
 
+$staged = null;
+if (($release['mode'] ?? '') === 'staged') {
+    try {
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($appRoot.'/deploy/staged-release.php', true);
+        }
+        require_once $appRoot.'/deploy/staged-release.php';
+        $staged = new LemonStagedRelease($appRoot, $release);
+        $staged->assertNotFailed();
+        $staged->verifyMaintenance();
+        $staged->prepare();
+        $staged->promote();
+        out("  Staged archive doğrulandı ve yerel dosyalar yedeklenerek yükseltildi.\n");
+    } catch (\Throwable $e) {
+        if ($staged !== null) {
+            try {
+                $staged->status('failed', $e->getMessage());
+            } catch (\Throwable $statusError) {
+                err("  Durum dosyası yazılamadı: ".$statusError->getMessage()."\n");
+            }
+        }
+        err(date('c')." — staged release durduruldu: ".$e->getMessage()." İşaret korundu.\n");
+        stopWith($lockHandle, 1);
+    }
+}
+
 $autoload = $appRoot.'/vendor/autoload.php';
 $bootstrap = $appRoot.'/bootstrap/app.php';
 
 foreach ([$autoload, $bootstrap] as $required) {
     if (! is_file($required)) {
+        if ($staged !== null) {
+            try {
+                $staged->restoreBeforeMigration();
+                $staged->status('failed', 'Required application file missing after promotion.');
+            } catch (\Throwable $restoreError) {
+                err("  Kod geri yüklemesi başarısız: ".$restoreError->getMessage()."\n");
+            }
+        }
         err(date('c')." — DURDURULDU: gerekli dosya yok: {$required}. İşaret dosyası KORUNDU.\n");
         stopWith($lockHandle, 1);
     }
@@ -220,7 +258,7 @@ $_SERVER['APP_RUNNING_IN_CONSOLE'] = 'true';
  */
 $opcacheInvalidated = 0;
 if (function_exists('opcache_invalidate')) {
-    foreach (['app', 'bootstrap', 'config', 'database', 'routes', 'vendor/composer'] as $dir) {
+    foreach (['app', 'bootstrap', 'config', 'database', 'deploy', 'routes', 'vendor/composer'] as $dir) {
         if (! is_dir($appRoot.'/'.$dir)) {
             continue;
         }
@@ -266,6 +304,14 @@ try {
     $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
     $kernel->bootstrap();
 } catch (\Throwable $e) {
+    if ($staged !== null) {
+        try {
+            $staged->restoreBeforeMigration();
+        } catch (\Throwable $restoreError) {
+            err("  Kod geri yüklemesi başarısız: ".$restoreError->getMessage()."\n");
+        }
+        $staged->status('failed', 'Application bootstrap failed: '.$e->getMessage());
+    }
     err(sprintf(
         "%s — DURDURULDU: uygulama başlatılamadı: %s: %s (%s:%d)\nİşaret dosyası KORUNDU.\n",
         date('c'),
@@ -286,7 +332,7 @@ out('  PHP '.PHP_VERSION.' (SAPI '.PHP_SAPI.'), artisan aynı süreçte çalış
  * @param  array<string, mixed>  $parameters
  * @param  resource  $lockHandle
  */
-function runStepOrFail(\Illuminate\Contracts\Console\Kernel $kernel, string $command, array $parameters, $lockHandle): void
+function runStepOrFail(\Illuminate\Contracts\Console\Kernel $kernel, string $command, array $parameters, $lockHandle, ?object $staged = null): void
 {
     $label = trim($command.' '.implode(' ', array_map(
         static fn (string $key, mixed $value): string => $value === true ? $key : "{$key}={$value}",
@@ -311,31 +357,66 @@ function runStepOrFail(\Illuminate\Contracts\Console\Kernel $kernel, string $com
     }
 
     if ($exitCode !== 0) {
-        err(date('c')." — BAŞARISIZ: 'php artisan {$label}' (exit {$exitCode}). İşaret dosyası KORUNDU, bir sonraki cron tekrar dener.\n");
+        if ($staged !== null) {
+            if ($command === 'optimize:clear') {
+                try {
+                    $staged->restoreBeforeMigration();
+                } catch (\Throwable $restoreError) {
+                    err("  Kod geri yüklemesi başarısız: ".$restoreError->getMessage()."\n");
+                }
+            }
+            $staged->status('failed', "artisan {$command} failed");
+        }
+        $retryMessage = $staged === null
+            ? 'bir sonraki cron tekrar dener.'
+            : 'staged yayın otomatik tekrar edilmeyecek; insan incelemesi gerekir.';
+        err(date('c')." — BAŞARISIZ: 'php artisan {$label}' (exit {$exitCode}). İşaret dosyası KORUNDU, {$retryMessage}\n");
         stopWith($lockHandle, 1);
     }
 }
 
 // 1) Bayat cache'i migrate'ten ÖNCE temizle (K-102). Tek çağrıda dört
 // :clear komutunu toplayan Laravel kısayolu (CLAUDE.md §15).
-runStepOrFail($kernel, 'optimize:clear', [], $lockHandle);
+if ($staged !== null) {
+    $staged->status('migrating');
+}
+runStepOrFail($kernel, 'optimize:clear', [], $lockHandle, $staged);
 
 // 2) Migration.
-runStepOrFail($kernel, 'migrate', ['--force' => true], $lockHandle);
+runStepOrFail($kernel, 'migrate', ['--force' => true], $lockHandle, $staged);
 
 // 3) Yetki seed'i — HER deploy'da, migrate'ten hemen sonra, atlanmaz (K-104).
+if ($staged !== null) {
+    $staged->status('seeding');
+}
 runStepOrFail($kernel, 'db:seed', [
     '--class' => 'App\\Modules\\Authorization\\Database\\Seeders\\RolePermissionSeeder',
     '--force' => true,
-], $lockHandle);
+], $lockHandle, $staged);
 
 // 4) Üretim cache'ini yeniden kur.
-runStepOrFail($kernel, 'config:cache', [], $lockHandle);
-runStepOrFail($kernel, 'route:cache', [], $lockHandle);
-runStepOrFail($kernel, 'view:cache', [], $lockHandle);
-runStepOrFail($kernel, 'event:cache', [], $lockHandle);
+if ($staged !== null) {
+    $staged->status('caching');
+}
+runStepOrFail($kernel, 'config:cache', [], $lockHandle, $staged);
+runStepOrFail($kernel, 'route:cache', [], $lockHandle, $staged);
+runStepOrFail($kernel, 'view:cache', [], $lockHandle, $staged);
+runStepOrFail($kernel, 'event:cache', [], $lockHandle, $staged);
+
+if ($staged !== null) {
+    try {
+        $staged->saveManagedManifest();
+    } catch (\Throwable $e) {
+        $staged->status('failed', $e->getMessage());
+        err("Managed manifest yazılamadı; marker korundu.\n");
+        stopWith($lockHandle, 1);
+    }
+}
 
 if (file_get_contents($markerFile) !== $markerContents) {
+    if ($staged !== null) {
+        $staged->status('failed', 'Deployment marker changed during finalize.');
+    }
     err("Yayın işareti çalışma sırasında değişti; yeni işaret silinmedi.\n");
     stopWith($lockHandle, 1);
 }
@@ -365,6 +446,9 @@ if (($release['managed_maintenance'] ?? '') === '1') {
             err("  UYARI: bakım kabuğu silinemedi: {$shell}\n");
         }
     } elseif (! is_array($down) || ($down['deploy_release_id'] ?? '') !== $releaseId) {
+        if ($staged !== null) {
+            $staged->status('failed', 'Maintenance owner changed during finalize.');
+        }
         /*
          * Bakım BAŞKA bir yayına (ya da bir insana) ait: sahipliğini almayız,
          * kapatmayız ve bu yayını BAŞARILI SAYMAYIZ — işaret korunur, durum
@@ -374,7 +458,7 @@ if (($release['managed_maintenance'] ?? '') === '1') {
         err("Bakım modu yayın kimliği eşleşmiyor; bakım kapatılmadı.\n");
         stopWith($lockHandle, 1);
     } else {
-        runStepOrFail($kernel, 'up', [], $lockHandle);
+        runStepOrFail($kernel, 'up', [], $lockHandle, $staged);
     }
 }
 
@@ -385,8 +469,20 @@ $receiptData = json_encode([
 ], JSON_THROW_ON_ERROR);
 if (file_put_contents($receipt.'.tmp', $receiptData, LOCK_EX) === false
     || ! rename($receipt.'.tmp', $receipt) || ! unlink($markerFile)) {
+    if ($staged !== null) {
+        $staged->status('failed', 'Completion receipt or marker cleanup failed.');
+    }
     err("Yayın sonucu kaydedilemedi; işaretin durumunu kontrol edin.\n");
     stopWith($lockHandle, 1);
+}
+
+if ($staged !== null) {
+    $staged->status('completed');
+    try {
+        $staged->cleanSuccessArtifacts();
+    } catch (\Throwable $e) {
+        err("  UYARI: başarılı yayının geçici dosyaları temizlenemedi: ".$e->getMessage()."\n");
+    }
 }
 
 out(date('c')." — finalize tamamlandı, işaret dosyası silindi.\n");

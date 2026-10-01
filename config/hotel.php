@@ -56,8 +56,8 @@ return [
     | Marka
     |--------------------------------------------------------------------------
     |
-    | Kenar çubuğundaki marka alanı. `logo` public/ altındaki bir yola işaret
-    | eder; dosya yoksa arayüz monogram çizer ve kırık görsel göstermez.
+    | `logo` eski kurulumlar için korunur. Yeni açık/koyu varyantlar public/
+    | altında varsayılan görsellere, yüklemeler public storage diskine bakar.
     |
     */
 
@@ -65,6 +65,10 @@ return [
         'name' => env('HOTEL_BRAND_NAME', 'Lemon'),
         'tagline' => env('HOTEL_BRAND_TAGLINE', 'Cari Takip'),
         'logo' => env('HOTEL_BRAND_LOGO', 'images/logo.svg'),
+        'logos' => [
+            'on_light_default' => 'images/branding/default-logo-on-light.svg',
+            'on_dark_default' => 'images/branding/default-logo-on-dark.svg',
+        ],
     ],
 
     /*

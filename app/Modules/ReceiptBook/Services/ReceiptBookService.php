@@ -7,12 +7,14 @@ namespace App\Modules\ReceiptBook\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Tahsilat Makbuzu Defteri'nin dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -27,7 +29,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ReceiptBookService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(
+        private readonly AuditLogger $audit,
+        private readonly CompanyService $companies,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -37,6 +42,14 @@ class ReceiptBookService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($data, $user): ReceiptBookEntry {
+            if (isset($data['company_id'])) {
+                $name = $this->companies->activeName((int) $data['company_id']);
+                if ($name === null) {
+                    throw ValidationException::withMessages(['company_id' => 'Geçerli, aktif bir cari seçin.']);
+                }
+                $data['customer_name'] = $name;
+            }
+
             $entry = new ReceiptBookEntry;
             $entry->fill($this->fillable($data));
             $entry->created_by = $user->getKey();

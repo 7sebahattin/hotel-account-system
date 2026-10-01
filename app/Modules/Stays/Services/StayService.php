@@ -22,6 +22,7 @@ use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
 use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
 use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Models\Stay;
+use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +33,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Konaklama modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -67,27 +70,33 @@ class StayService
     {
         $user = $this->resolveActor($actor);
 
-        return DB::transaction(function () use ($data, $user): Stay {
-            $data = $this->resolveAccount($data, $user);
-            app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
-            $stay = new Stay;
-            $this->applyInput($stay, $data);
-            $stay->status = StayStatus::Active;
-            $stay->created_by = $user->getKey();
-            $stay->updated_by = $user->getKey();
-            $stay->save();
+        return $this->withCheckInDateLock($data['check_in_date'], function () use ($data, $user): Stay {
+            return DB::transaction(function () use ($data, $user): Stay {
+                $individualAccountId = empty($data['individual_account_id'])
+                    ? null
+                    : (int) $data['individual_account_id'];
+                $data = $this->resolveAccount($data, $user);
+                app(CompanyService::class)->lockAccounts([(int) $data['company_id']]);
+                $stay = new Stay;
+                $this->applyInput($stay, $data);
+                $this->ensureNoActiveDuplicateCheckIn($stay, individualAccountId: $individualAccountId);
+                $stay->status = StayStatus::Active;
+                $stay->created_by = $user->getKey();
+                $stay->updated_by = $user->getKey();
+                $stay->save();
 
-            $entry = $this->postDebit($stay, $user);
-            app(PaymentAllocationService::class)->applyAdvancesToStay($stay->id, $user);
+                $entry = $this->postDebit($stay, $user);
+                app(PaymentAllocationService::class)->applyAdvancesToStay($stay->id, $user);
 
-            $this->auditLogger->log(
-                event: AuditEvent::Created,
-                subject: $stay,
-                newValues: $this->snapshot($stay) + ['ledger_entry_id' => $entry->id],
-                user: $user,
-            );
+                $this->auditLogger->log(
+                    event: AuditEvent::Created,
+                    subject: $stay,
+                    newValues: $this->snapshot($stay) + ['ledger_entry_id' => $entry->id],
+                    user: $user,
+                );
 
-            return $stay;
+                return $stay;
+            });
         });
     }
 
@@ -112,69 +121,84 @@ class StayService
 
         $user = $this->resolveActor($actor);
 
-        return DB::transaction(function () use ($stay, $data, $user): Stay {
-            $this->lockForFinancialChange($stay, $data);
-            if ($stay->isCancelled()) {
-                throw CannotUpdateCancelledStay::make($stay->id);
-            }
-            $data = $this->resolveAccount($data, $user, $stay);
-            $before = $this->snapshot($stay);
-            $financialBefore = $this->financialSnapshot($stay);
+        $lockDate = Carbon::parse($data['check_in_date'] ?? $stay->check_in_date)->toDateString();
 
-            // Aday kayıt, gerçek kayıtla AYNI hesaplamadan geçer: gece sayısı ve
-            // günlük ücretlendirmede toplam yeniden hesaplandıktan sonra
-            // karşılaştırılır. Aksi hâlde formdan gelen ham tutar karşılaştırılırdı.
-            $candidate = clone $stay;
-            $this->applyInput($candidate, $data);
-            $financialChanged = $this->financialSnapshot($candidate) !== $financialBefore;
-
-            $reversal = null;
-
-            if ($financialChanged) {
-                $active = $this->ledger->activeEntryForSource(Stay::LEDGER_SOURCE_TYPE, $stay->getKey());
-
-                if ($active !== null) {
-                    $reversal = $this->ledger->reverse($active, actor: $user);
+        return $this->withCheckInDateLock($lockDate, function () use ($stay, $data, $user, $lockDate): Stay {
+            return DB::transaction(function () use ($stay, $data, $user, $lockDate): Stay {
+                $this->lockForFinancialChange($stay, $data);
+                if ($stay->isCancelled()) {
+                    throw CannotUpdateCancelledStay::make($stay->id);
                 }
-            }
+                $individualAccountId = empty($data['individual_account_id'])
+                    ? null
+                    : (int) $data['individual_account_id'];
+                $data = $this->resolveAccount($data, $user, $stay);
+                $before = $this->snapshot($stay);
+                $financialBefore = $this->financialSnapshot($stay);
 
-            $this->applyInput($stay, $data);
-            $stay->updated_by = $user->getKey();
-            $stay->save();
+                // Aday kayıt, gerçek kayıtla AYNI hesaplamadan geçer: gece sayısı ve
+                // günlük ücretlendirmede toplam yeniden hesaplandıktan sonra
+                // karşılaştırılır. Aksi hâlde formdan gelen ham tutar karşılaştırılırdı.
+                $candidate = clone $stay;
+                $this->applyInput($candidate, $data);
+                if ($candidate->check_in_date->toDateString() !== $lockDate) {
+                    throw ValidationException::withMessages(['check_in_date' => 'Konaklamanın giriş tarihi değişmiş. Sayfayı yenileyin.']);
+                }
+                $this->ensureNoActiveDuplicateCheckIn(
+                    $candidate,
+                    exceptStayId: $stay->id,
+                    individualAccountId: $individualAccountId,
+                );
+                $financialChanged = $this->financialSnapshot($candidate) !== $financialBefore;
 
-            $newEntry = $financialChanged ? $this->postDebit($stay, $user) : null;
-            if ($financialChanged) {
-                app(PaymentAllocationService::class)->reconcileStay($stay->id, $user);
-            }
+                $reversal = null;
 
-            $after = $this->snapshot($stay);
-            $changed = $this->changedFields($before, $after);
+                if ($financialChanged) {
+                    $active = $this->ledger->activeEntryForSource(Stay::LEDGER_SOURCE_TYPE, $stay->getKey());
 
-            if ($changed === [] && ! $financialChanged) {
+                    if ($active !== null) {
+                        $reversal = $this->ledger->reverse($active, actor: $user);
+                    }
+                }
+
+                $this->applyInput($stay, $data);
+                $stay->updated_by = $user->getKey();
+                $stay->save();
+
+                $newEntry = $financialChanged ? $this->postDebit($stay, $user) : null;
+                if ($financialChanged) {
+                    app(PaymentAllocationService::class)->reconcileStay($stay->id, $user);
+                }
+
+                $after = $this->snapshot($stay);
+                $changed = $this->changedFields($before, $after);
+
+                if ($changed === [] && ! $financialChanged) {
+                    return $stay;
+                }
+
+                $context = [];
+
+                if ($financialChanged) {
+                    // Denetim kaydı, düzeltme zincirinin tamamını taşır.
+                    $context = [
+                        'financial_change' => true,
+                        'reversed_ledger_entry_id' => $reversal?->reverses_entry_id,
+                        'reversal_ledger_entry_id' => $reversal?->id,
+                        'new_ledger_entry_id' => $newEntry?->id,
+                    ];
+                }
+
+                $this->auditLogger->log(
+                    event: AuditEvent::Updated,
+                    subject: $stay,
+                    oldValues: array_intersect_key($before, $changed),
+                    newValues: $changed + $context,
+                    user: $user,
+                );
+
                 return $stay;
-            }
-
-            $context = [];
-
-            if ($financialChanged) {
-                // Denetim kaydı, düzeltme zincirinin tamamını taşır.
-                $context = [
-                    'financial_change' => true,
-                    'reversed_ledger_entry_id' => $reversal?->reverses_entry_id,
-                    'reversal_ledger_entry_id' => $reversal?->id,
-                    'new_ledger_entry_id' => $newEntry?->id,
-                ];
-            }
-
-            $this->auditLogger->log(
-                event: AuditEvent::Updated,
-                subject: $stay,
-                oldValues: array_intersect_key($before, $changed),
-                newValues: $changed + $context,
-                user: $user,
-            );
-
-            return $stay;
+            });
         });
     }
 
@@ -597,7 +621,7 @@ class StayService
         }
 
         if ($stay->currency === Currency::TRY) {
-            throw new \InvalidArgumentException('TRY konaklamalar için kur düzeltmesi yapılamaz.');
+            throw new InvalidArgumentException('TRY konaklamalar için kur düzeltmesi yapılamaz.');
         }
 
         $user = $this->resolveActor($actor);
@@ -709,6 +733,77 @@ class StayService
     }
 
     /**
+     * Aynı giriş tarihi için tüm yazmaları tek sıraya koyar. Tarih düzeyindeki
+     * kilit, seçili hesap kimliği ile serbest isim akışlarının birbirini
+     * atlamasını önler; duplicate kararı aşağıdaki mevcut kuralla verilir.
+     * Named lock transaction dışında alınır ve commit/rollback sonrasında bırakılır.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $operation
+     * @return T
+     */
+    private function withCheckInDateLock(string|Carbon $checkInDate, Closure $operation): mixed
+    {
+        $date = Carbon::parse($checkInDate)->toDateString();
+        $name = 'stay-checkin:'.substr(hash('sha256', $date), 0, 40);
+        $lock = DB::selectOne('SELECT GET_LOCK(?, 10) AS acquired', [$name]);
+        if ((int) ($lock->acquired ?? 0) !== 1) {
+            throw new RuntimeException('Konaklama giriş tarihi kilidi alınamadı. İşlemi tekrar deneyin.');
+        }
+
+        try {
+            return $operation();
+        } finally {
+            $released = DB::selectOne('SELECT RELEASE_LOCK(?) AS released', [$name]);
+            if ((int) ($released->released ?? 0) !== 1) {
+                throw new RuntimeException('Konaklama giriş tarihi kilidi bırakılamadı.');
+            }
+        }
+    }
+
+    /**
+     * Mevcut bireysel hesap seçilmişse kişi kimliği stabil company_id'dir.
+     * Yeni bireysel hesap veya firma akışında guest_name karşılaştırılır.
+     */
+    private function ensureNoActiveDuplicateCheckIn(
+        Stay $candidate,
+        ?int $exceptStayId = null,
+        ?int $individualAccountId = null,
+    ): void {
+        $activeStays = Stay::query()
+            ->select(['id', 'company_id', 'guest_name'])
+            ->forceIndex('stays_check_in_date_check_out_date_index')
+            ->where('check_in_date', $candidate->check_in_date->toDateString())
+            ->where('status', StayStatus::Active)
+            ->lockForUpdate()
+            ->get();
+
+        $candidateName = $this->normalizedGuestName($candidate->guest_name);
+
+        foreach ($activeStays as $existing) {
+            if ($existing->id === $exceptStayId) {
+                continue;
+            }
+
+            $isDuplicate = $individualAccountId !== null
+                ? $existing->company_id === $individualAccountId
+                : $this->normalizedGuestName($existing->guest_name) === $candidateName;
+
+            if ($isDuplicate) {
+                throw ValidationException::withMessages([
+                    'guest_name' => 'Bu kişi için seçilen giriş tarihinde zaten bir konaklama kaydı bulunuyor.',
+                ]);
+            }
+        }
+    }
+
+    private function normalizedGuestName(string $name): string
+    {
+        return mb_strtolower(trim($name), 'UTF-8');
+    }
+
+    /**
      * Yalnızca modelde doldurulabilir alanları geçirir; nights ve status
      * kullanıcı girdisinden ASLA alınmaz.
      *
@@ -790,7 +885,7 @@ class StayService
         $dailyRate = $stay->dailyRateMoney();
 
         if ($dailyRate === null) {
-            throw new \InvalidArgumentException('Günlük ücretlendirmede gecelik tutar zorunludur.');
+            throw new InvalidArgumentException('Günlük ücretlendirmede gecelik tutar zorunludur.');
         }
 
         $stay->amount = Stay::calculateDailyAmount($dailyRate, $stay->nights)->toDecimal();
@@ -859,7 +954,7 @@ class StayService
         $user = $actor ?? (Auth::check() ? Auth::user() : null);
 
         if ($user === null) {
-            throw new \RuntimeException('Konaklama işlemi için işlemi yapan kullanıcı belirtilmelidir.');
+            throw new RuntimeException('Konaklama işlemi için işlemi yapan kullanıcı belirtilmelidir.');
         }
 
         return $user;

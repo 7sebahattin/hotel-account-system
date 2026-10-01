@@ -29,3 +29,6 @@ Thumbs.db
 /.env.testing
 /deploy/finalize.lock
 /deploy/.finalize-probe.php
+/deploy/local-release.env
+/.deploy-logs/
+/.deploy-packages/

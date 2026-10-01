@@ -126,6 +126,7 @@ class PaymentReceiptTest extends TestCase
             ->assertSee($admin->name)
             ->assertSee('Diğer')
             ->assertSee('data-receipt-template="v4"', false)
+            ->assertSee('data-brand-variant="on-light"', false)
             ->assertSee('fatura/e-Arşiv fatura değildir');
     }
 

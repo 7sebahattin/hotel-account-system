@@ -3,6 +3,7 @@
 
 @section('content')
     <x-ui.page-header :title="$entry->receipt_no" subtitle="Tahsilat Makbuzu Defteri kaydı">
+        <x-slot:meta><x-brand-logo variant="on-light" :decorative="true" class="mt-2 h-9 w-auto" /></x-slot:meta>
         <x-slot:actions>
             <x-ui.button :href="route('receipt-book.print', $entry)">Yazdır</x-ui.button>
 

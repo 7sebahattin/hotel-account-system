@@ -72,6 +72,20 @@
         color: rgb(11 21 36);
     }
 
+    .receipt-brand-row {
+        display: flex;
+        align-items: center;
+        gap: 3mm;
+    }
+
+    .receipt-brand-logo {
+        display: block;
+        width: auto;
+        max-width: 13mm;
+        max-height: 13mm;
+        object-fit: contain;
+    }
+
     .receipt-legal-name {
         margin: 1.8mm 0 0;
         font-size: 7.8pt;
@@ -410,7 +424,10 @@
 
     <header class="receipt-head">
         <section>
-            <h1 class="receipt-brand-name">{{ config('hotel.company.receipt_brand_name') }}</h1>
+            <div class="receipt-brand-row">
+                <x-brand-logo variant="on-light" :decorative="true" class="receipt-brand-logo" />
+                <h1 class="receipt-brand-name">{{ config('hotel.company.receipt_brand_name') }}</h1>
+            </div>
             <p class="receipt-legal-name">{{ config('hotel.company.legal_name') }}</p>
 
             <div class="receipt-company-lines">

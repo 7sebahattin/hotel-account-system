@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\ReceiptBook\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Companies\Http\Requests\CompanyRequest;
+use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\ReceiptBook\Enums\ReceiptPaymentMethod;
 use App\Modules\ReceiptBook\Http\Requests\StoreReceiptBookEntryRequest;
@@ -12,6 +14,7 @@ use App\Modules\ReceiptBook\Http\Requests\UpdateReceiptBookEntryRequest;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use App\Modules\ReceiptBook\Services\ReceiptBookService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -22,7 +25,29 @@ use Illuminate\Http\Request;
  */
 class ReceiptBookController extends Controller
 {
-    public function __construct(private readonly ReceiptBookService $receiptBook) {}
+    public function __construct(
+        private readonly ReceiptBookService $receiptBook,
+        private readonly CompanyService $companies,
+    ) {}
+
+    public function customerSearch(Request $request): JsonResponse
+    {
+        $request->validate(['q' => ['nullable', 'string', 'max:200']]);
+        $term = trim((string) $request->query('q', ''));
+
+        return response()->json(['results' => mb_strlen($term) < 2 ? [] : $this->companies->searchActive($term)]);
+    }
+
+    public function customerCreate(CompanyRequest $request): JsonResponse
+    {
+        $account = $this->companies->create($request->validated());
+
+        return response()->json([
+            'id' => $account->id,
+            'name' => $account->name,
+            'type' => $account->account_type->value,
+        ], 201);
+    }
 
     public function index(): View
     {
