@@ -12,6 +12,7 @@ use App\Modules\Companies\Models\Company;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\MonthlyAccount\Models\MonthlyAccountDay;
 use App\Modules\MonthlyAccount\Models\MonthlyPaymentProvider;
+use App\Modules\Offers\Models\Offer;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Personnel\Models\PersonnelAttendanceCorrection;
 use App\Modules\Personnel\Models\PersonnelCard;
@@ -66,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
             'receipt_book_entry' => ReceiptBookEntry::class,
             'monthly_account_day' => MonthlyAccountDay::class,
             'monthly_payment_provider' => MonthlyPaymentProvider::class,
+            'offer' => Offer::class,
         ]);
 
         // CLAUDE.md §7.1: admin rolü yetki kontrollerini geçer.
