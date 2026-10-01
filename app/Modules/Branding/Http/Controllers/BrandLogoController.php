@@ -11,10 +11,24 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BrandLogoController extends Controller
 {
     public function __construct(private readonly BrandLogoService $logos) {}
+
+    public function file(string $variant): BinaryFileResponse
+    {
+        $file = $this->logos->uploadedFile($variant);
+        if ($file === null) {
+            abort(404);
+        }
+
+        return response()->file($file, [
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
 
     public function edit(): View
     {
