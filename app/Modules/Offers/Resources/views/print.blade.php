@@ -3,7 +3,6 @@
 @section('content')
     @php
         $priceMap = $offer->prices->keyBy(fn ($price) => $price->offer_room_type_id.'-'.$price->offer_period_id);
-        $brandName = $offer->hotel_name_snapshot ?: 'LEMON HOTEL';
         $wideTable = $offer->periods->count() > 6;
         $generalLines = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $offer->general_notes) ?: [])));
         $cancellationLines = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $offer->cancellation_terms) ?: [])));
@@ -16,10 +15,8 @@
         .offer-actions :is(a, button):focus-visible { outline: 2px solid #8a6a2f; outline-offset: 2px; }
         .offer-sheet { width: 100%; max-width: 210mm; margin: auto; padding: 17mm 16mm; background: #fff; box-shadow: 0 10px 28px #1f29331a; }
         .offer-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12mm; align-items: start; padding-bottom: 9mm; border-bottom: 1.5px solid #a8884c; break-inside: avoid; }
-        .offer-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .offer-logo-img { display: block; max-width: 54px; max-height: 52px; width: auto; height: auto; flex: none; object-fit: contain; }
-        .offer-brand-name { display: block; color: #1f2933; font-size: 15pt; font-weight: 700; line-height: 1.1; letter-spacing: .025em; overflow-wrap: anywhere; }
-        .offer-brand-caption { display: block; margin-top: 4px; color: #54606b; font-size: 7.5pt; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+        .offer-brand { display: flex; align-items: center; min-width: 0; min-height: 64px; }
+        .offer-logo-img { display: block; max-width: 155px; max-height: 68px; width: auto; height: auto; flex: none; object-fit: contain; }
         .offer-number { text-align: right; white-space: nowrap; }
         .offer-number span, .offer-meta dt, .offer-customer-label, .offer-section-kicker { color: #59646e; font-size: 7.5pt; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
         .offer-number strong { display: block; margin-top: 5px; color: #1f2933; font-size: 11pt; font-weight: 700; letter-spacing: .015em; }
@@ -96,7 +93,6 @@
         <header class="offer-header">
             <div class="offer-brand">
                 <x-brand-logo variant="on-light" :decorative="true" class="offer-logo-img" />
-                <div><strong class="offer-brand-name">{{ $brandName }}</strong><span class="offer-brand-caption">Konaklama fiyat teklifi</span></div>
             </div>
             <div class="offer-number"><span>Teklif no</span><strong>{{ $offer->offer_no }}</strong></div>
         </header>
