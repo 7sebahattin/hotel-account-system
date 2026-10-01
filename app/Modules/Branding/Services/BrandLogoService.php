@@ -17,22 +17,15 @@ class BrandLogoService
 
     public function url(string $variant): ?string
     {
-        $this->assertVariant($variant);
-        $disk = Storage::disk('public');
+        $file = $this->uploadedFile($variant);
+        if ($file !== null) {
+            // Sabit dosya adıyla yeniden yükleme, tarayıcıdaki eski görseli tutmamalı.
+            $version = sha1_file($file);
 
-        foreach (self::EXTENSIONS as $extension) {
-            $path = $this->path($variant, $extension);
-            if ($disk->exists($path)) {
-                $file = $disk->path($path);
-                if (! is_file($file) || @getimagesize($file) === false) {
-                    continue;
-                }
-
-                // Sabit dosya adıyla yeniden yükleme, tarayıcıdaki eski görseli tutmamalı.
-                $version = sha1_file($file);
-
-                return $disk->url($path).'?v='.($version === false ? $disk->lastModified($path) : substr($version, 0, 12));
-            }
+            return route('branding.logo.file', [
+                'variant' => $variant,
+                'v' => $version === false ? (string) filemtime($file) : substr($version, 0, 12),
+            ]);
         }
 
         // Önceden özelleştirilmiş tek logo koyu menüde çalışmaya devam eder.
@@ -48,6 +41,26 @@ class BrandLogoService
 
         // Eski brand.logo yapılandırması kaldırılmaz; eksik varsayılan asset için son çare.
         return $legacy !== '' && is_file(public_path($legacy)) ? asset($legacy) : null;
+    }
+
+    public function uploadedFile(string $variant): ?string
+    {
+        $this->assertVariant($variant);
+        $disk = Storage::disk('public');
+
+        foreach (self::EXTENSIONS as $extension) {
+            $path = $this->path($variant, $extension);
+            if (! $disk->exists($path)) {
+                continue;
+            }
+
+            $file = $disk->path($path);
+            if (is_file($file) && @getimagesize($file) !== false) {
+                return $file;
+            }
+        }
+
+        return null;
     }
 
     public function replace(string $variant, UploadedFile $file): void
