@@ -769,8 +769,7 @@ class StayService
         Stay $candidate,
         ?int $exceptStayId = null,
         ?int $individualAccountId = null,
-    ): void
-    {
+    ): void {
         $activeStays = Stay::query()
             ->select(['id', 'company_id', 'guest_name'])
             ->forceIndex('stays_check_in_date_check_out_date_index')
