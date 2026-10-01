@@ -52,7 +52,7 @@ class BrandLogoTest extends TestCase
 
         Storage::disk('public')->assertExists('branding/logo-on-light.png');
         $logos = app(BrandLogoService::class);
-        $this->assertStringContainsString('/storage/branding/logo-on-light.png', (string) $logos->url('on-light'));
+        $this->assertStringContainsString('/branding/logo/on-light', (string) $logos->url('on-light'));
         $this->assertStringContainsString('default-logo-on-dark.svg', (string) $logos->url('on-dark'));
 
         $this->actingAs($admin)->put(route('branding.logos.update', 'on-light'), [
@@ -61,10 +61,23 @@ class BrandLogoTest extends TestCase
 
         Storage::disk('public')->assertMissing('branding/logo-on-light.png');
         Storage::disk('public')->assertExists('branding/logo-on-light.jpg');
-        $this->assertStringContainsString('/storage/branding/logo-on-light.jpg', (string) $logos->url('on-light'));
+        $this->assertStringContainsString('/branding/logo/on-light', (string) $logos->url('on-light'));
         $this->assertSame(0, LedgerEntry::query()->count());
         $this->assertSame(0, Payment::query()->count());
         $this->assertSame(0, DB::table('cash_movements')->count());
+    }
+
+    #[Test]
+    public function yuklenen_logo_storage_symlink_olmadan_public_route_uzerinden_servis_edilir(): void
+    {
+        $logos = app(BrandLogoService::class);
+        $logos->replace('on-light', UploadedFile::fake()->image('logo.png'));
+
+        $this->get(route('branding.logo.file', 'on-light'))
+            ->assertOk()
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->get('/branding/logo/gecersiz')->assertNotFound();
     }
 
     #[Test]
@@ -93,7 +106,7 @@ class BrandLogoTest extends TestCase
         ])->assertForbidden();
         $this->actingAs($personel)->get(route('home'))->assertDontSee('Marka Logoları');
         $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home'))
-            ->assertOk()->assertSee('/storage/branding/logo-on-dark.png', false);
+            ->assertOk()->assertSee('/branding/logo/on-dark', false);
     }
 
     #[Test]
