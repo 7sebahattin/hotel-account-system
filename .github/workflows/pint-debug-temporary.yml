@@ -1,0 +1,26 @@
+name: Pint Debug Temporary
+
+on:
+  push:
+    branches:
+      - release/v10-integrated-features
+
+permissions:
+  contents: read
+
+jobs:
+  pint-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - name: Show exact Pint diff
+        run: |
+          ./vendor/bin/pint app/Modules/Stays/Services/StayService.php
+          git diff -- app/Modules/Stays/Services/StayService.php
+          test -n "$(git diff -- app/Modules/Stays/Services/StayService.php)"
