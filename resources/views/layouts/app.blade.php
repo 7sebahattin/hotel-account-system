@@ -62,5 +62,8 @@
     </div>
 
     @include('partials.bottom-nav')
+    @auth
+        @include('partials.quick-action')
+    @endauth
 </body>
 </html>

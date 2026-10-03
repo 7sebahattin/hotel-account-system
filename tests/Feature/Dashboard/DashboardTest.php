@@ -400,13 +400,12 @@ class DashboardTest extends TestCase
     }
 
     #[Test]
-    public function admin_operasyon_panosunda_hizli_islem_menusu_gosterilmez(): void
+    public function admin_operasyon_panosunda_masaustu_hizli_islem_menusu_gosterilir(): void
     {
         $this->actingAs($this->userWithRole(RoleName::Admin))->get(route('home', ['view' => 'operations']))
             ->assertOk()
-            ->assertDontSee('data-quick-action', false)
-            ->assertDontSee('id="hizli-islem-menu"', false)
-            ->assertDontSee('Hızlı işlem');
+            ->assertSee('data-quick-action', false)
+            ->assertSee('id="hizli-islem-menu"', false);
     }
 
     #[Test]
@@ -575,23 +574,21 @@ class DashboardTest extends TestCase
     // ------------------------------------------------------- Hızlı işlem
 
     #[Test]
-    public function personel_panosunda_hizli_islem_menusu_gosterilmez(): void
+    public function personel_panosunda_masaustu_hizli_islem_menusu_gosterilir(): void
     {
         $html = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('home'))->getContent();
 
-        $this->assertStringNotContainsString('data-quick-action', (string) $html);
-        $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
-        $this->assertStringNotContainsString('Hızlı işlem', (string) $html);
+        $this->assertStringContainsString('data-quick-action', (string) $html);
+        $this->assertStringContainsString('id="hizli-islem-menu"', (string) $html);
     }
 
     #[Test]
     public function hizli_islem_menusunde_yetkisiz_aksiyon_gorunmez(): void
     {
-        // Hızlı işlem menüsü layout'tan kaldırıldığı için rolü olmayan
-        // kullanıcıda da widget işaretleri çizilmez.
+        // Yetkisiz kullanıcı paneli ayarlayabilir, ancak izinli bir hedef görmez.
         $html = $this->actingAs(User::factory()->create())->get(route('home'))->getContent();
 
-        $this->assertStringNotContainsString('id="hizli-islem-menu"', (string) $html);
+        $this->assertStringContainsString('id="hizli-islem-menu"', (string) $html);
         $this->assertStringNotContainsString('Kasa Hareketi', (string) $html);
         $this->assertStringNotContainsString('Yeni Cari Hesap', (string) $html);
     }

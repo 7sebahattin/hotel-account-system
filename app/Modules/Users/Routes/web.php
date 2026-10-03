@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 use App\Modules\Authorization\Enums\Permission;
 use App\Modules\Users\Http\Controllers\UserController;
+use App\Modules\Users\Http\Controllers\QuickMenuController;
 use Illuminate\Support\Facades\Route;
+
+Route::middleware('auth')->prefix('quick-menu')->name('quick-menu.')->group(function (): void {
+    Route::get('edit', [QuickMenuController::class, 'edit'])->name('edit');
+    Route::put('/', [QuickMenuController::class, 'update'])->name('update');
+});
 
 Route::middleware('auth')->prefix('users')->name('users.')->group(function (): void {
     Route::get('/', [UserController::class, 'index'])
