@@ -505,10 +505,9 @@ class DashboardTest extends TestCase
             "Sorgu sayısı firma sayısıyla arttı ({$withThree} → {$withFifteen}): N+1 var."
         );
 
-        // v2.1.1-D §3: TL karşılığı hesapları (sistem çapında + en yüksek
-        // bakiyeli firmalar) dört yeni TOPLU sorgu ekledi (13 → 17); bunlar da
-        // kayıt sayısıyla BÜYÜMEZ (yukarıdaki assertSame zaten bunu kanıtlar).
-        $this->assertLessThanOrEqual(17, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 17.");
+        // TL karşılığı için dört toplu sorgu (13 → 17) ve kullanıcıya özel
+        // Hızlı Menü için bir sabit sorgu (17 → 18). Sayıyla büyümez.
+        $this->assertLessThanOrEqual(18, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 18.");
     }
 
     // ------------------------------------------------------- mobil dokunma
