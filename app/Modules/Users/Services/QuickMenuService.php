@@ -22,9 +22,9 @@ final class QuickMenuService
     public function visible(User $user): array
     {
         return array_values(array_filter($this->shortcuts($user),
-            fn (array $item): bool => ($item['active'] ?? false)
-                && isset(QuickShortcutRegistry::ICONS[$item['icon'] ?? ''])
-                && QuickShortcutRegistry::allowed($user, $item['route'] ?? '')
+            fn (array $item): bool => $item['active']
+                && isset(QuickShortcutRegistry::ICONS[$item['icon']])
+                && QuickShortcutRegistry::allowed($user, $item['route'])
         ));
     }
 

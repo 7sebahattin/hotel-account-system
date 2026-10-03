@@ -6,6 +6,7 @@ namespace App\Modules\Users\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/** @property list<array{label: string, icon: string, route: string, active: bool}> $shortcuts */
 class UserQuickMenu extends Model
 {
     protected $fillable = ['user_id', 'shortcuts'];
