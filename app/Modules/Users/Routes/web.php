@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Modules\Authorization\Enums\Permission;
-use App\Modules\Users\Http\Controllers\UserController;
 use App\Modules\Users\Http\Controllers\QuickMenuController;
+use App\Modules\Users\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->prefix('quick-menu')->name('quick-menu.')->group(function (): void {
