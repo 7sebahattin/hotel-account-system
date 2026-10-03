@@ -1,5 +1,16 @@
 # CLAUDE.md
 
+## Onaylı masaüstü Hızlı Menü istisnası — 3 Ekim 2026
+
+Kullanıcının açık isteğiyle yalnız masaüstünde görünen, kullanıcı tarafından
+yönetilen Hızlı Menü kapsama alındı. §5'teki şema listesine dar istisna olarak
+`user_quick_menus` (kullanıcı başına tek `shortcuts` JSON kaydı) eklenir;
+finansal tablolara ve cari değişmezlerine dokunulmaz. §11.1'deki gölgesiz
+tasarım kuralına yalnız bu sabit konumlu buton ve açılır panel için kontrollü
+gölge istisnası tanınır. Koyu panel mevcut `nav` token'larını kullanır; ayrı
+koyu tema yoktur. Hedefler yalnız mevcut ve yetki kontrollü dahili oluşturma
+rotalarının kapalı listesinden seçilir. Ayrıntı: `docs/desktop-quick-menu.md`.
+
 ## Onaylı Teklifler modülü — 28 Eylül 2026
 
 Kullanıcının açık talimatıyla konaklama fiyat teklifi hazırlama, listeleme,

@@ -189,12 +189,12 @@ class MonthlyAccountPageTest extends MonthlyAccountTestCase
 
         $response = $this->get(route('monthly-account.index', ['month' => '2026-09']))
             ->assertOk()
-            ->assertDontSee('>Aç<', false)
-            ->assertDontSee('İşlemler');
+            ->assertDontSee('>Aç<', false);
 
         $dom = new DOMDocument;
         @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
         $xpath = new DOMXPath($dom);
+        $this->assertSame(0, $xpath->query('//table[contains(@class, "monthly-table")]//thead//th[normalize-space(.)="İşlemler"]')->length);
         $rows = $xpath->query('//table[contains(@class, "monthly-table")]/tbody/tr[@data-monthly-row-url]');
 
         $this->assertNotFalse($rows);

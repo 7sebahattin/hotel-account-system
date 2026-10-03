@@ -1,49 +1,32 @@
 @php
-    use App\Modules\Authorization\Enums\Permission;
-    use App\Modules\Core\Support\NavIcons;
-
-    /* Yetkiye göre cari işlem kısayolları. */
-    $user = auth()->user();
-
-    $candidates = [
-        ['route' => 'payments.create', 'params' => [], 'label' => 'Cari Tahsilat', 'icon' => 'cash', 'permission' => Permission::PaymentsCreate->value],
-        ['route' => 'stays.create', 'params' => [], 'label' => 'Yeni Konaklama', 'icon' => 'bed', 'permission' => Permission::StaysCreate->value],
-        ['route' => 'companies.create', 'params' => [], 'label' => 'Yeni Cari Hesap', 'icon' => 'building', 'permission' => Permission::CompaniesCreate->value],
-    ];
-
-    $items = array_values(array_filter($candidates, fn (array $item): bool => $user->can($item['permission'])));
+    $quickItems = app(\App\Modules\Users\Services\QuickMenuService::class)->visible(auth()->user());
 @endphp
 
-@if ($items !== [])
-    <div data-quick-action class="relative shrink-0">
-        <button type="button" data-quick-action-toggle
-                class="flex size-11 items-center justify-center rounded-lg text-mut hover:bg-well hover:text-tx md:size-9 md:border md:border-field"
-                aria-label="Hızlı işlem" aria-haspopup="true" aria-expanded="false" aria-controls="hizli-islem-menu">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" class="size-5" aria-hidden="true">
-                <path d="{{ NavIcons::path('plus') }}" stroke-linecap="round"/>
-            </svg>
-        </button>
-
-        <div id="hizli-islem-menu" data-quick-action-panel hidden
-             class="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border border-line bg-card py-1.5 shadow-none ring-1 ring-line">
-            <p class="px-3 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">
-                Hızlı işlem
-            </p>
-
-            <ul>
-                @foreach ($items as $item)
+<div data-quick-action class="fixed bottom-6 right-6 z-30 hidden lg:block">
+    <div id="hizli-islem-menu" data-quick-action-panel hidden
+         class="absolute bottom-full right-0 mb-3 max-h-[calc(100dvh-7rem)] w-64 overflow-y-auto rounded-2xl border border-nav-line bg-nav p-2 text-nav-tx shadow-2xl">
+        <div class="flex items-center justify-between gap-2 px-2 py-2">
+            <p class="text-[11px] font-bold uppercase tracking-widest text-nav-mut">Hızlı İşlemler</p>
+            <a href="{{ route('quick-menu.edit') }}" class="inline-flex min-h-11 items-center rounded-md px-2 text-xs text-nav-mut hover:bg-nav-well hover:text-nav-tx focus-visible:outline-2 focus-visible:outline-acc" aria-label="Hızlı menü ayarları">Ayarla</a>
+        </div>
+        @if ($quickItems === [])
+            <p class="border-t border-nav-line px-2 py-3 text-sm text-nav-mut">Henüz etkin kısayol yok.</p>
+        @else
+            <ul class="border-t border-nav-line pt-1">
+                @foreach ($quickItems as $item)
                     <li>
-                        <a href="{{ route($item['route'], $item['params']) }}"
-                           class="flex min-h-11 items-center gap-2.5 px-3 text-sm text-tx hover:bg-well">
-                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"
-                                 class="size-4 shrink-0 text-mut" aria-hidden="true">
-                                <path d="{{ NavIcons::path($item['icon']) }}" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            {{ $item['label'] }}
+                        <a href="{{ route($item['route']) }}" class="flex min-h-11 items-center gap-3 rounded-lg px-2 text-sm text-nav-tx hover:bg-nav-well focus-visible:outline-2 focus-visible:outline-acc">
+                            <x-ui.icon :name="$item['icon']" class="size-4 text-nav-mut" />
+                            <span class="truncate">{{ $item['label'] }}</span>
                         </a>
                     </li>
                 @endforeach
             </ul>
-        </div>
+        @endif
     </div>
-@endif
+    <button type="button" data-quick-action-toggle
+            class="ml-auto flex size-14 items-center justify-center rounded-full border border-acc-strong bg-acc text-on-acc shadow-lg transition-transform duration-150 hover:-translate-y-0.5 hover:bg-acc-strong active:translate-y-0 active:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acc-tx motion-reduce:transition-none"
+            aria-label="Hızlı işlemleri aç" aria-expanded="false" aria-controls="hizli-islem-menu">
+        <x-ui.icon name="plus" class="size-6 transition-transform duration-150 motion-reduce:transition-none" />
+    </button>
+</div>

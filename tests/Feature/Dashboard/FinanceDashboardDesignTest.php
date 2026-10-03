@@ -349,8 +349,8 @@ class FinanceDashboardDesignTest extends TestCase
             ->assertSee('1 tahsilat')
             ->assertSee('Genel bakiye')
             ->assertSee('Görünür Otel Müşterisi')
-            // Hızlı işlemler kartı kullanıcı kararıyla YOKTUR; Notlar/Belgeler sekmesi de yok.
-            ->assertDontSee('Hızlı İşlemler')
+            // Hızlı işlemler artık pano kartı yerine global masaüstü menüsündedir.
+            ->assertSee('data-quick-action', false)
             ->assertDontSee('Belgeler');
     }
 

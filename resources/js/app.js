@@ -142,6 +142,8 @@ function initQuickActions() {
 
             entry.panel.hidden = true;
             entry.toggle.setAttribute('aria-expanded', 'false');
+            entry.toggle.setAttribute('aria-label', 'Hızlı işlemleri aç');
+            entry.toggle.querySelector('svg')?.classList.remove('rotate-45');
             if (restoreFocus) entry.toggle.focus();
         });
     };
@@ -154,6 +156,8 @@ function initQuickActions() {
             if (!isOpen) {
                 entry.panel.hidden = false;
                 entry.toggle.setAttribute('aria-expanded', 'true');
+                entry.toggle.setAttribute('aria-label', 'Hızlı işlemleri kapat');
+                entry.toggle.querySelector('svg')?.classList.add('rotate-45');
                 entry.panel.querySelector('a')?.focus();
             }
         });
@@ -171,6 +175,60 @@ function initQuickActions() {
 }
 
 document.addEventListener('DOMContentLoaded', initQuickActions);
+
+function initQuickMenuSettings() {
+    const form = document.querySelector('[data-shortcut-form]');
+    const template = document.querySelector('[data-shortcut-template]');
+    if (!form || !template) return;
+
+    const list = form.querySelector('[data-shortcut-list]');
+    const empty = form.querySelector('[data-shortcut-empty]');
+    const add = form.querySelector('[data-shortcut-add]');
+
+    const renumber = () => {
+        const rows = Array.from(list.querySelectorAll('[data-shortcut-row]'));
+        rows.forEach((row, index) => {
+            row.querySelector('[data-shortcut-position]').textContent = `Kısayol ${index + 1}`;
+            row.querySelectorAll('[data-shortcut-field]').forEach((field) => {
+                field.name = `shortcuts[${index}][${field.dataset.shortcutField}]`;
+            });
+            row.querySelector('[data-shortcut-up]').disabled = index === 0;
+            row.querySelector('[data-shortcut-down]').disabled = index === rows.length - 1;
+        });
+        empty.classList.toggle('hidden', rows.length > 0);
+        add.disabled = rows.length >= 12 || add.dataset.noTargets === 'true';
+    };
+
+    add.addEventListener('click', () => {
+        if (list.children.length >= 12) return;
+        list.insertAdjacentHTML('beforeend', template.innerHTML);
+        renumber();
+        list.lastElementChild?.querySelector('input[type="text"]')?.focus();
+    });
+
+    list.addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        const row = button?.closest('[data-shortcut-row]');
+        if (!row) return;
+        if (button.matches('[data-shortcut-remove]')) {
+            row.remove();
+            renumber();
+            add.focus();
+        } else if (button.matches('[data-shortcut-up]') && row.previousElementSibling) {
+            row.previousElementSibling.before(row);
+            renumber();
+            row.querySelector('[data-shortcut-up]').focus();
+        } else if (button.matches('[data-shortcut-down]') && row.nextElementSibling) {
+            row.nextElementSibling.after(row);
+            renumber();
+            row.querySelector('[data-shortcut-down]').focus();
+        }
+    });
+
+    renumber();
+}
+
+document.addEventListener('DOMContentLoaded', initQuickMenuSettings);
 
 
 

@@ -204,7 +204,6 @@ class StayListingTest extends TestCase
 
         $response = $this->index()
             ->assertOk()
-            ->assertDontSee('İşlemler')
             ->assertDontSee('Görüntüle')
             ->assertSee('Sercan Çakmak')
             ->assertSee('08.09.2026 · 15:42');
@@ -212,6 +211,7 @@ class StayListingTest extends TestCase
         $dom = new DOMDocument;
         @$dom->loadHTML('<?xml encoding="UTF-8">'.(string) $response->getContent());
         $xpath = new DOMXPath($dom);
+        $this->assertSame(0, $xpath->query('//table//thead//th[normalize-space(.)="İşlemler"]')->length);
         $rows = $xpath->query('//table//tbody/tr[@data-stay-row-url]');
 
         $this->assertNotFalse($rows);
