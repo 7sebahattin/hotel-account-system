@@ -26,7 +26,7 @@ trait HasCreator
         });
 
         static::updating(function (self $model): void {
-            $model->updated_by = Auth::id();
+            $model->updated_by = Auth::id() ?? $model->updated_by;
         });
     }
 

@@ -395,6 +395,8 @@ class StatementScreenTest extends TestCase
         $payment = Payment::query()->firstOrFail();
         app(PaymentService::class)->cancel($payment, 'Mükerrer', $this->admin);
 
+        $this->assertSame($this->admin->id, $payment->fresh()->updated_by);
+
         $response = $this->actingAs($this->admin)->get(route('statements.show', $this->company))->assertOk();
 
         $dom = new DOMDocument;
