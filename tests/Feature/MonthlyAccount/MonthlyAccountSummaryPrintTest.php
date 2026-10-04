@@ -53,6 +53,51 @@ class MonthlyAccountSummaryPrintTest extends MonthlyAccountTestCase
     }
 
     #[Test]
+    public function ozet_baski_basligi_ve_iki_sutunlu_a4_duzeni_kompakttir(): void
+    {
+        $owner = $this->userWithRole(RoleName::Personel);
+        $this->createDay($owner, [
+            'items' => [
+                $this->item(['method' => 'cash', 'amount' => '100,00']),
+                $this->item(['method' => 'credit_card', 'bank_name' => 'Garanti BBVA', 'amount' => '200,00']),
+                $this->item(['method' => 'link', 'bank_name' => 'Yapı Kredi', 'amount' => '300,00']),
+                $this->item(['method' => 'bank_transfer', 'bank_name' => 'Ziraat Bankası', 'amount' => '400,00']),
+                $this->item(['method' => 'extra', 'amount' => '500,00']),
+            ],
+        ]);
+
+        $response = $this->actingAs($this->admin)->get(route('monthly-account.print-summary', [
+            'owner_id' => $owner->id,
+            'month' => '2026-09',
+        ]))->assertOk();
+        $xpath = $this->xpath($response);
+
+        $header = $xpath->query('//main[@data-monthly-summary-print]/header[contains(@class, "report-head")]')->item(0);
+        $this->assertNotNull($header);
+        $headerText = preg_replace('/\s+/u', ' ', trim($header->textContent)) ?? '';
+        $this->assertStringContainsString('AYLIK HESAP ÖZETİ', $headerText);
+        $this->assertStringContainsString('Eylül 2026 · '.$owner->name, $headerText);
+        foreach (['Dönem', 'Hesap sahibi', 'Kayıtlı gün', 'Rapor tarihi', 'Hazırlayan'] as $oldLabel) {
+            $this->assertStringNotContainsString($oldLabel, $headerText);
+        }
+        $this->assertSame(0, $xpath->query('//main[@data-monthly-summary-print]//dl[contains(@class, "meta")]')->length);
+        $this->assertSame(0, $xpath->query('//*[@id="totals-title"]')->length);
+
+        $this->assertSame(1, $xpath->query('//*[@data-summary-column="left"]//*[@data-summary-daily-total]')->length);
+        foreach (['cash', 'credit_card'] as $method) {
+            $this->assertSame(1, $xpath->query('//*[@data-summary-column="left"]//section[@aria-labelledby="method-'.$method.'"]')->length);
+        }
+        foreach (['link', 'bank_transfer', 'extra'] as $method) {
+            $this->assertSame(1, $xpath->query('//*[@data-summary-column="right"]//section[@aria-labelledby="method-'.$method.'"]')->length);
+        }
+        $this->assertSame(1, $xpath->query('//*[@data-summary-column="right"]//*[@data-summary-receipt-breakdown="month"]')->length);
+
+        $html = (string) $response->getContent();
+        $this->assertMatchesRegularExpression('/@page\s*\{[^}]*size:\s*A4 portrait;[^}]*margin:\s*[789]mm;/s', $html);
+        $this->assertMatchesRegularExpression('/@media print\s*\{[\s\S]*?\.toolbar\s*\{\s*display:\s*none\s*;/', $html);
+    }
+
+    #[Test]
     public function ozet_yalniz_secili_owner_ve_ayin_toplamlarini_gosterir_gunluk_satir_icermez(): void
     {
         $owner = $this->userWithRole(RoleName::Personel);
