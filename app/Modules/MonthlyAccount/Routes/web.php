@@ -19,6 +19,7 @@ Route::middleware('auth')->prefix('monthly-account')->name('monthly-account.')->
 
     Route::get('/', [MonthlyAccountController::class, 'index'])->middleware('can:'.Permission::MonthlyAccountView->value)->name('index');
     Route::get('print', [MonthlyAccountController::class, 'print'])->middleware('can:'.Permission::MonthlyAccountView->value)->name('print');
+    Route::get('print-summary', [MonthlyAccountController::class, 'printSummary'])->middleware('can:'.Permission::MonthlyAccountView->value)->name('print-summary');
     Route::get('create', [MonthlyAccountController::class, 'create'])->middleware('can:'.Permission::MonthlyAccountCreate->value)->name('create');
     Route::post('/', [MonthlyAccountController::class, 'store'])->middleware('can:'.Permission::MonthlyAccountCreate->value)->name('store');
     Route::get('{day}/print', [MonthlyAccountController::class, 'printDay'])->whereNumber('day')->middleware('can:'.Permission::MonthlyAccountView->value)->name('print-day');
