@@ -36,6 +36,14 @@ class MonthlyAccountController extends Controller
         ]);
     }
 
+    public function printSummary(MonthlyAccountFilterRequest $request): View
+    {
+        return view('monthly-account::print-summary', $this->monthData($request) + [
+            'generatedAt' => now(),
+            'preparedBy' => $request->user(),
+        ]);
+    }
+
     public function create(MonthlyAccountFilterRequest $request): View
     {
         $data = $request->validated();

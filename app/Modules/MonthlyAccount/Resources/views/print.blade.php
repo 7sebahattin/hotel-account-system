@@ -459,7 +459,7 @@
         $storedDates = $days->keys()->sort()->values();
         $listedDayNumbers = $storedDates->isEmpty() ? [] : range((int) substr($storedDates->first(), 8, 2), (int) substr($storedDates->last(), 8, 2));
     @endphp
-    <nav class="toolbar" aria-label="Rapor işlemleri"><a href="{{ route('monthly-account.index', ['owner_id' => $owner->id, 'month' => $month->format('Y-m')]) }}">← Aylık Hesaba Dön</a><button type="button" onclick="window.print()">Yazdır</button></nav>
+    <nav class="toolbar" aria-label="Rapor işlemleri"><a href="{{ route('monthly-account.index', ['owner_id' => $owner->id, 'month' => $month->format('Y-m')]) }}">← Aylık Hesaba Dön</a><button type="button" onclick="window.print()">Yazdır</button><a href="{{ route('monthly-account.print-summary', ['owner_id' => $owner->id, 'month' => $month->format('Y-m')]) }}">Özet Yazdır</a></nav>
     <main class="report">
         <header class="report-head">
             <div class="report-title-row">
