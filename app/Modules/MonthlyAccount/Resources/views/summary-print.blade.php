@@ -96,7 +96,9 @@
                 </div>
             </section>
             @foreach (\App\Modules\MonthlyAccount\Enums\MonthlyPaymentMethod::cases() as $method)
-                @php($methodKey = $method->value)
+                @php
+                    $methodKey = $method->value;
+                @endphp
                 <section class="group" aria-labelledby="method-{{ $methodKey }}">
                     <h3 class="group-title" id="method-{{ $methodKey }}">{{ $methodLabels[$methodKey] }}</h3>
                     @if ($method->requiresBank())
@@ -126,11 +128,15 @@
                                     ->sortKeysUsing(fn (string $a, string $b): int => $currencyOrder->get($a, PHP_INT_MAX) <=> $currencyOrder->get($b, PHP_INT_MAX));
                             @endphp
                             @foreach ($sortedAmounts as $code => $amount)
-                                @php($currency = \App\Modules\Core\Enums\Currency::from($code))
+                                @php
+                                    $currency = \App\Modules\Core\Enums\Currency::from($code);
+                                @endphp
                                 <div class="amount-row" data-summary-method="{{ $methodKey }}" data-summary-bank="{{ $bank }}" data-summary-currency="{{ $code }}">
                                     <span class="amount-label">{{ $provider !== '' ? $provider.' - ' : '' }}{{ $code }}</span>
-                                    <span class="amount-value">{{ $amount['amount']->format($currency) }}@if ($code !== 'TRY') {{ $code }}@endif
-                                        @if ($code !== 'TRY')<span class="amount-fx">≈ {{ $amount['try_equivalent']->format($try) }}</span>@endif
+                                    <span class="amount-value">{{ $amount['amount']->format($currency) }}{{ $code !== 'TRY' ? ' '.$code : '' }}
+                                        @if ($code !== 'TRY')
+                                            <span class="amount-fx">≈ {{ $amount['try_equivalent']->format($try) }}</span>
+                                        @endif
                                     </span>
                                 </div>
                             @endforeach
@@ -144,11 +150,15 @@
                             <div class="amount-row"><span class="empty">—</span></div>
                         @endif
                         @foreach ($methodAmounts as $code => $amount)
-                            @php($currency = \App\Modules\Core\Enums\Currency::from($code))
+                            @php
+                                $currency = \App\Modules\Core\Enums\Currency::from($code);
+                            @endphp
                             <div class="amount-row" data-summary-method="{{ $methodKey }}" data-summary-currency="{{ $code }}">
                                 <span class="amount-label">{{ $code }}</span>
-                                <span class="amount-value">{{ $amount['amount']->format($currency) }}@if ($code !== 'TRY') {{ $code }}@endif
-                                    @if ($code !== 'TRY')<span class="amount-fx">≈ {{ $amount['try_equivalent']->format($try) }}</span>@endif
+                                <span class="amount-value">{{ $amount['amount']->format($currency) }}{{ $code !== 'TRY' ? ' '.$code : '' }}
+                                    @if ($code !== 'TRY')
+                                        <span class="amount-fx">≈ {{ $amount['try_equivalent']->format($try) }}</span>
+                                    @endif
                                 </span>
                             </div>
                         @endforeach
