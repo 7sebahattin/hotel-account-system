@@ -197,6 +197,13 @@ class MonthlyAccountSummaryPrintTest extends MonthlyAccountTestCase
             $full->assertSee($label);
             $summary->assertSee($label);
         }
+        $xpath = $this->xpath($summary);
+        foreach (['credit_card', 'link', 'bank_transfer', 'extra'] as $method) {
+            $this->assertSame(0, $xpath->query('//*[@data-summary-method="'.$method.'"]')->length);
+            $placeholder = $xpath->query('//section[@aria-labelledby="method-'.$method.'"]//span[contains(@class, "empty")]')->item(0);
+            $this->assertNotNull($placeholder);
+            $this->assertSame('—', trim($placeholder->textContent));
+        }
         $summary->assertSee('3.000,00 ₺');
     }
 

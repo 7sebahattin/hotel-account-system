@@ -100,7 +100,14 @@
                 <section class="group" aria-labelledby="method-{{ $methodKey }}">
                     <h3 class="group-title" id="method-{{ $methodKey }}">{{ $methodLabels[$methodKey] }}</h3>
                     @if ($method->requiresBank())
-                        @forelse (collect($summary['banks'][$methodKey] ?? [])->sortKeysUsing(fn (string $a, string $b): int => mb_strtolower($a, 'UTF-8') <=> mb_strtolower($b, 'UTF-8')) as $bank => $amounts)
+                        @php
+                            $banks = collect($summary['banks'][$methodKey] ?? [])
+                                ->sortKeysUsing(fn (string $a, string $b): int => mb_strtolower($a, 'UTF-8') <=> mb_strtolower($b, 'UTF-8'));
+                        @endphp
+                        @if ($banks->isEmpty())
+                            <div class="amount-row"><span class="empty">—</span></div>
+                        @endif
+                        @foreach ($banks as $bank => $amounts)
                             @php
                                 $ignoredMethodTokens = collect($methodTokens[$methodKey] ?? [])
                                     ->map(fn (string $token): string => mb_strtoupper(trim($token), 'UTF-8'))->all();
@@ -114,7 +121,11 @@
                                 }));
                                 $provider = trim(implode(' - ', $providerParts));
                             @endphp
-                            @foreach (collect($amounts)->sortKeysUsing(fn (string $a, string $b): int => $currencyOrder->get($a, PHP_INT_MAX) <=> $currencyOrder->get($b, PHP_INT_MAX)) as $code => $amount)
+                            @php
+                                $sortedAmounts = collect($amounts)
+                                    ->sortKeysUsing(fn (string $a, string $b): int => $currencyOrder->get($a, PHP_INT_MAX) <=> $currencyOrder->get($b, PHP_INT_MAX));
+                            @endphp
+                            @foreach ($sortedAmounts as $code => $amount)
                                 @php($currency = \App\Modules\Core\Enums\Currency::from($code))
                                 <div class="amount-row" data-summary-method="{{ $methodKey }}" data-summary-bank="{{ $bank }}" data-summary-currency="{{ $code }}">
                                     <span class="amount-label">{{ $provider !== '' ? $provider.' - ' : '' }}{{ $code }}</span>
@@ -123,11 +134,16 @@
                                     </span>
                                 </div>
                             @endforeach
-                        @empty
-                            <div class="amount-row"><span class="empty">—</span></div>
-                        @endforelse
+                        @endforeach
                     @else
-                        @forelse (collect($summary['methods'][$methodKey] ?? [])->sortKeysUsing(fn (string $a, string $b): int => $currencyOrder->get($a, PHP_INT_MAX) <=> $currencyOrder->get($b, PHP_INT_MAX)) as $code => $amount)
+                        @php
+                            $methodAmounts = collect($summary['methods'][$methodKey] ?? [])
+                                ->sortKeysUsing(fn (string $a, string $b): int => $currencyOrder->get($a, PHP_INT_MAX) <=> $currencyOrder->get($b, PHP_INT_MAX));
+                        @endphp
+                        @if ($methodAmounts->isEmpty())
+                            <div class="amount-row"><span class="empty">—</span></div>
+                        @endif
+                        @foreach ($methodAmounts as $code => $amount)
                             @php($currency = \App\Modules\Core\Enums\Currency::from($code))
                             <div class="amount-row" data-summary-method="{{ $methodKey }}" data-summary-currency="{{ $code }}">
                                 <span class="amount-label">{{ $code }}</span>
@@ -135,9 +151,7 @@
                                     @if ($code !== 'TRY')<span class="amount-fx">≈ {{ $amount['try_equivalent']->format($try) }}</span>@endif
                                 </span>
                             </div>
-                        @empty
-                            <div class="amount-row"><span class="empty">—</span></div>
-                        @endforelse
+                        @endforeach
                     @endif
                 </section>
             @endforeach
