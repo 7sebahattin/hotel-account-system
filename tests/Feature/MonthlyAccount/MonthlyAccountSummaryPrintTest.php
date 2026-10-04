@@ -232,8 +232,9 @@ class MonthlyAccountSummaryPrintTest extends MonthlyAccountTestCase
         $this->assertSame($expected->minorUnits, $actual->minorUnits);
     }
 
-    /** @param array{amount: Money, try_equivalent: Money} $expected
-     *  @param array{amount: Money, try_equivalent: Money} $actual
+    /**
+     * @param  array{amount: Money, try_equivalent: Money}  $expected
+     * @param  array{amount: Money, try_equivalent: Money}  $actual
      */
     private function assertAmountGroupEqual(array $expected, array $actual): void
     {
