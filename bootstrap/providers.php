@@ -4,6 +4,7 @@ use App\Modules\AuditLog\Providers\AuditLogServiceProvider;
 use App\Modules\Auth\Providers\AuthServiceProvider;
 use App\Modules\Authorization\Providers\AuthorizationServiceProvider;
 use App\Modules\Branding\Providers\BrandingServiceProvider;
+use App\Modules\CariCleanup\Providers\CariCleanupServiceProvider;
 use App\Modules\Companies\Providers\CompaniesServiceProvider;
 use App\Modules\Dashboard\Providers\DashboardServiceProvider;
 use App\Modules\FxCorrection\Providers\FxCorrectionServiceProvider;
@@ -25,6 +26,7 @@ return [
     AuditLogServiceProvider::class,
     AuthorizationServiceProvider::class,
     BrandingServiceProvider::class,
+    CariCleanupServiceProvider::class,
     AuthServiceProvider::class,
     CompaniesServiceProvider::class,
     DashboardServiceProvider::class,
