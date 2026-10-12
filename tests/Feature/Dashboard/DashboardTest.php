@@ -13,6 +13,7 @@ use App\Modules\Dashboard\Services\DashboardService;
 use App\Modules\Dashboard\Support\CurrencyTotals;
 use App\Modules\Dashboard\Support\FinancialSummary;
 use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Ledger\Services\LedgerStatementService;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Stays\Services\StayService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -505,12 +506,39 @@ class DashboardTest extends TestCase
             "Sorgu sayısı firma sayısıyla arttı ({$withThree} → {$withFifteen}): N+1 var."
         );
 
-        // TL karşılığı için dört toplu sorgu (13 → 17) ve kullanıcıya özel
-        // Hızlı Menü için bir sabit sorgu (17 → 18). Sayıyla büyümez.
+        // Hızlı Menü ve tek seferlik işlem durumu dahil bütçe 18 kalır:
+        // son hareketler zaten hesaplanan neti tekrar sorgulamaz. Sayıyla büyümez.
         $this->assertLessThanOrEqual(18, $withFifteen, "Finans görünümü {$withFifteen} sorgu çalıştırdı; bütçe 18.");
     }
 
     // ------------------------------------------------------- mobil dokunma
+
+    #[Test]
+    public function panoda_yeniden_kullanilan_net_para_birimi_ve_sayfalama_bakiyelerini_korur(): void
+    {
+        $a = Company::factory()->create();
+        $b = Company::factory()->create();
+        $this->debit($a, '900.00', Currency::TRY, '2026-09-01');
+        $this->credit($b, '300.00', Currency::TRY, '2026-09-02');
+        $this->debit($a, '50.00', Currency::TRY, '2026-09-03');
+        $this->debit($a, '200.00', Currency::EUR, '2026-09-01');
+        $this->credit($b, '50.00', Currency::EUR, '2026-09-02');
+        $this->debit($a, '25.00', Currency::EUR, '2026-09-03');
+
+        foreach (['TRY' => ['650.00', '600.00'], 'EUR' => ['175.00', '150.00']] as $code => $expected) {
+            foreach ([1, 2] as $page) {
+                request()->merge(['sayfa' => $page]);
+                $summary = app(DashboardService::class)->finance(Carbon::today(), currency: $code, perPage: 1);
+                $baseline = app(LedgerStatementService::class)->recentEntriesWithBalance(Currency::from($code), 1, 'sayfa');
+
+                $this->assertSame(Currency::from($code), $summary->selectedCurrency);
+                $this->assertSame($baseline['entries']->getCollection()->pluck('id')->all(), $summary->ledgerEntries->getCollection()->pluck('id')->all());
+                $entry = $summary->ledgerEntries->items()[0];
+                $this->assertSame($expected[$page - 1], $summary->ledgerBalances[$entry->id]->toDecimal());
+                $this->assertSame($baseline['balances'][$entry->id]->toDecimal(), $summary->ledgerBalances[$entry->id]->toDecimal());
+            }
+        }
+    }
 
     #[Test]
     public function panel_satirlari_tutari_da_kapsayan_tek_baglantidir(): void

@@ -1,5 +1,10 @@
 # Cari tek seferlik veri temizleme — güvenlik ve şema analizi
 
+> 12 Ekim 2026 sonraki açık kullanıcı onayı: cari hesap kartları korunarak
+> diğer CARİ girişlerinin fiziksel silinmesi için tek seferlik dar istisna
+> kabul edildi. Bu belgedeki bloke kararı v17'nin tarihsel kararıdır.
+> Güncel kapsam ve güvenlik tasarımı: cari-giris-temizleme-2026-10-12.md.
+
 Tarih: 12 Ekim 2026. Repo: `7sebahattin/hotel-account-system`.
 Başlangıç main: `680ba3e4c34e2346cb6f9ae197b07f09453cacb2`.
 Başlangıç release: `16`. Görev başlangıcındaki GitHub kontrolünde açık PR yoktu.

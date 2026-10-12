@@ -13,4 +13,9 @@ class CariCleanupPolicy
     {
         return $user->is_active && $user->hasRole(RoleName::Admin->value);
     }
+
+    public function execute(User $user): bool
+    {
+        return $this->view($user);
+    }
 }

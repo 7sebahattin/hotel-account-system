@@ -127,7 +127,9 @@ class DashboardService
         } elseif ($tab === 'borc-alacak') {
             $accountRows = $this->statements->nonZeroBalances($selected, $perPage);
         } else {
-            $page = $this->statements->recentEntriesWithBalance($selected, $perPage, 'sayfa');
+            $page = $this->statements->recentEntriesWithBalance(
+                $selected, $perPage, 'sayfa', currentNet: $balances[$selected->value]['net'] ?? Money::zero(),
+            );
             $ledgerPage = $page['entries'];
             $ledgerBalances = $page['balances'];
         }

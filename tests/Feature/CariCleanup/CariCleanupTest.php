@@ -7,6 +7,7 @@ namespace Tests\Feature\CariCleanup;
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission as PermissionName;
 use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\CariCleanup\Services\CariCleanupInventory;
 use App\Modules\CariCleanup\Services\CariCleanupService;
 use App\Modules\Companies\Models\Company;
 use App\Modules\Core\Enums\Currency;
@@ -17,24 +18,33 @@ use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Models\Stay;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Mockery;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 use Tests\TestCase;
 
 /**
- * Uses an independently migrated MySQL/MariaDB test database. This class never
- * resets the schema; every fixture is rolled back after its test.
+ * Uses independently migrated MySQL/MariaDB test schema, never schema resets.
+ * Fixtures and successful cleanup are enclosed by a rollback-only test transaction.
+ * A separate isolated smoke check exercises the actual production commit branch.
  */
 class CariCleanupTest extends TestCase
 {
     use DatabaseTransactions;
+
+    private const TARGETS = [
+        'stays', 'offers', 'offer_periods', 'offer_room_types', 'offer_prices',
+        'payments', 'receipt_book_entries', 'ledger_entries', 'payment_allocations',
+    ];
 
     private User $admin;
 
@@ -43,74 +53,364 @@ class CariCleanupTest extends TestCase
         parent::setUp();
         $this->seedRoles();
         $this->admin = $this->userWithRole(RoleName::Admin);
+        $this->actingAs($this->admin)->withSession([]);
     }
 
     #[Test]
-    public function active_admin_sees_actual_counts_and_a_blocked_cleanup(): void
+    public function active_admin_sees_actual_counts_and_protected_account_cards(): void
     {
         $this->seedRepresentativeRecords();
-
-        $response = $this->actingAs($this->admin)->get(route('cari-cleanup.index'));
-        $response->assertOk()->assertViewIs('cari-cleanup::index')
-            ->assertViewHas('preflight', false)->assertSee('Cari Veri Temizleme');
+        $before = $this->snapshotAllTables();
+        $response = $this->get(route('cari-cleanup.index'));
+        $response->assertOk()->assertViewIs('cari-cleanup::index')->assertSee('Cari Veri Temizleme');
 
         $report = $response->viewData('report');
         $this->assertTrue($report['available']);
-        $this->assertNotEmpty($report['blockers']);
+        $this->assertTrue($report['ready']);
+        $this->assertFalse($report['completed']);
+        $this->assertSame([], $report['blockers']);
         $tables = collect($report['tables'])->keyBy('name');
-        $candidates = ['companies', 'stays', 'payments', 'payment_allocations', 'ledger_entries', 'offers', 'offer_periods', 'offer_room_types', 'offer_prices', 'receipt_book_entries'];
         $schemaTables = Schema::getTableListing(null, false);
         $this->assertCount(count($schemaTables), $tables);
         foreach ($schemaTables as $table) {
-            $this->assertSame(! in_array($table, $candidates, true), $tables[$table]['protected'], $table.' must default to protected outside CARİ scope.');
-        }
-
-        foreach (['companies', 'stays', 'payments', 'payment_allocations', 'ledger_entries', 'offers', 'receipt_book_entries'] as $table) {
             $this->assertSame(DB::table($table)->count(), $tables[$table]['count'], $table);
-            $this->assertFalse($tables[$table]['protected'], $table);
+            $this->assertSame(! in_array($table, self::TARGETS, true), $tables[$table]['protected'], $table);
         }
-
-        foreach (['monthly_account_days', 'monthly_account_revisions', 'monthly_account_items', 'monthly_payment_providers', 'personnel_employees', 'personnel_payroll_entries', 'users', 'roles', 'permissions', 'rooms', 'audit_logs', 'cash_sessions', 'cash_movements'] as $table) {
-            $this->assertSame(DB::table($table)->count(), $tables[$table]['count'], $table);
-            $this->assertTrue($tables[$table]['protected'], $table);
-        }
-
-        $this->assertMatchesRegularExpression('/<button\b[^>]*\bdisabled\b[^>]*>\s*CARİ VERİLERİNİ TEMİZLE\s*<\/button>/u', $response->getContent());
-    }
-
-    #[Test]
-    public function page_and_repeated_preflights_preserve_every_table_row(): void
-    {
-        $this->seedRepresentativeRecords();
-        $this->actingAs($this->admin);
-        $before = $this->snapshotAllTables();
-
-        $this->get(route('cari-cleanup.index'))->assertOk();
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            $response = $this->post(route('cari-cleanup.preflight'), [
-                'backup_confirmed' => true,
-                'password' => 'password',
-                'confirmation' => 'CARİ VERİLERİNİ TEMİZLE',
-                'execute' => true,
-            ]);
-            $response->assertOk()->assertViewHas('preflight', true);
-            $this->assertNotEmpty($response->viewData('report')['blockers']);
-            $this->assertSame($before, $this->snapshotAllTables(), 'Preflight must leave all row contents unchanged.');
-        }
-    }
-
-    #[Test]
-    public function guests_cannot_open_the_page_or_run_preflight(): void
-    {
-        $before = $this->snapshotAllTables();
-        $this->get(route('cari-cleanup.index'))->assertRedirect(route('login'));
-        $this->post(route('cari-cleanup.preflight'))->assertRedirect(route('login'));
+        $this->assertTrue($tables['companies']['protected']);
         $this->assertSame($before, $this->snapshotAllTables());
     }
 
     #[Test]
-    public function non_admins_and_inactive_admins_are_rejected_even_with_permissions(): void
+    public function page_and_repeated_preflight_do_not_delete_or_modify_database_rows(): void
     {
+        $this->seedRepresentativeRecords();
+        $before = $this->snapshotAllTables();
+        $this->get(route('cari-cleanup.index'))->assertOk();
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $response = $this->post(route('cari-cleanup.preflight'), ['execute' => true]);
+            $response->assertOk()->assertViewHas('preflight', true);
+            $this->assertIsString($response->viewData('token'));
+            $this->assertNotEmpty($response->viewData('token'));
+            $this->assertSame($before, $this->snapshotAllTables());
+        }
+    }
+
+    #[Test]
+    public function cleanup_deletes_exactly_nine_tables_and_preserves_every_other_row(): void
+    {
+        $this->seedRepresentativeRecords();
+        $this->assertTrue(DB::table('ledger_entries')->whereNotNull('reverses_entry_id')->exists());
+        $this->assertTrue(DB::table('payment_allocations')->whereNotNull('reverses_allocation_id')->exists());
+        $before = $this->snapshotAllTables();
+        $token = $this->prepareToken();
+
+        $outcome = app(CariCleanupService::class)->execute($this->admin, $token);
+
+        $this->assertNotEmpty($outcome['completed_at']);
+        foreach (self::TARGETS as $table) {
+            $this->assertGreaterThan(0, count($before[$table]), $table.' fixture must exercise deletion.');
+            $this->assertSame(count($before[$table]), $outcome['deleted'][$table], $table);
+            $this->assertDatabaseCount($table, 0);
+        }
+        $this->assertCount(count(self::TARGETS), $outcome['deleted']);
+        $protected = $this->protectedRows($before);
+        $this->assertSame($protected, $this->protectedRows($this->snapshotAllTables()));
+        $this->assertArrayHasKey('companies', $outcome['protected']);
+        foreach ($protected as $table => $rows) {
+            $this->assertSame(count($rows), $outcome['protected'][$table]['count'], $table);
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $outcome['protected'][$table]['sha256'], $table);
+        }
+        $this->assertDatabaseHas('cari_cleanup_operations', ['id' => 1, 'status' => 'completed']);
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function completion_is_persisted_and_prevents_replay_or_new_preflight(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $outcome = app(CariCleanupService::class)->execute($this->admin, $token);
+        $before = $this->snapshotAllTables();
+        $report = app(CariCleanupService::class)->report();
+
+        $this->assertTrue($report['completed']);
+        $this->assertFalse($report['ready']);
+        $this->assertSame($outcome['deleted'], $report['completion_report']['deleted']);
+        $this->assertImmutableSql(fn () => DB::table('cari_cleanup_operations')->where('id', 1)->update(['status' => 'ready']));
+        $this->assertImmutableSql(fn () => DB::table('cari_cleanup_operations')->where('id', 1)->delete());
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $prepared = app(CariCleanupService::class)->prepare($this->admin);
+        $this->assertNull($prepared['token']);
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function missing_or_tampered_tokens_cannot_start_cleanup(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        foreach (['', 'forged-token', $token.'tampered'] as $invalid) {
+            $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $invalid));
+            $this->assertSame($before, $this->snapshotAllTables());
+            $this->assertCapabilityCleared();
+        }
+    }
+
+    #[Test]
+    public function invalid_token_clears_a_stale_connection_capability(): void
+    {
+        $this->seedRepresentativeRecords();
+        $before = $this->snapshotAllTables();
+        DB::statement('SET @cari_cleanup_token = ?', ['stale-capability-from-another-call']);
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, 'invalid-token'));
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function authenticated_http_execution_uses_password_confirmation_and_preflight(): void
+    {
+        $this->seedRepresentativeRecords();
+        $response = $this->post(route('cari-cleanup.preflight'));
+        $response->assertOk();
+        $token = $response->viewData('token');
+        $this->assertIsString($token);
+        $before = $this->snapshotAllTables();
+
+        $this->post(route('cari-cleanup.execute'), $this->executePayload($token))
+            ->assertSessionHasNoErrors()->assertRedirect(route('cari-cleanup.index'));
+
+        foreach (self::TARGETS as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        $this->assertSame($this->protectedRows($before), $this->protectedRows($this->snapshotAllTables()));
+        $completedPage = $this->get(route('cari-cleanup.index'));
+        $completedPage->assertOk();
+        $this->assertTrue($completedPage->viewData('report')['completed']);
+        $completedPage->assertDontSee('action="'.route('cari-cleanup.execute').'"', false);
+        $completedPage->assertDontSee('href="'.route('cari-cleanup.index').'"', false);
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function execution_attempts_are_rate_limited_without_modifying_domain_data(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $payload = array_replace($this->executePayload($token), ['password' => 'incorrect-password']);
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $this->post(route('cari-cleanup.execute'), $payload)->assertSessionHasErrors('password');
+        }
+        $this->post(route('cari-cleanup.execute'), $payload)->assertStatus(429);
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function missing_required_table_metadata_fails_closed_without_schema_mutation(): void
+    {
+        $this->seedRepresentativeRecords();
+        $before = $this->snapshotAllTables();
+        $schema = app(CariCleanupInventory::class)->schema(DB::connection());
+        $schema['tables'] = array_values(array_filter($schema['tables'], fn (array $table): bool => $table['name'] !== 'ledger_entries'));
+        $this->replaceInventorySchema($schema);
+
+        $report = app(CariCleanupService::class)->report();
+        $this->assertFalse($report['available']);
+        $this->assertFalse($report['ready']);
+        $this->assertNotEmpty($report['blockers']);
+        $this->assertNull(app(CariCleanupService::class)->prepare($this->admin)['token']);
+        $this->assertSame($before, $this->snapshotAllTables());
+    }
+
+    #[Test]
+    public function protected_foreign_key_into_cleanup_scope_blocks_all_deletions(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $schema = app(CariCleanupInventory::class)->schema(DB::connection());
+        $schema['dependencies'][] = [
+            'table' => 'personnel_payroll_entries', 'column' => 'legacy_payment_id',
+            'referenced_table' => 'payments', 'referenced_column' => 'id',
+            'delete_rule' => 'CASCADE', 'update_rule' => 'RESTRICT',
+        ];
+        $this->replaceInventorySchema($schema);
+
+        $report = app(CariCleanupService::class)->report();
+        $this->assertTrue($report['available']);
+        $this->assertFalse($report['ready']);
+        $this->assertStringContainsString('personnel_payroll_entries', implode(' ', $report['blockers']));
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function incomplete_protection_migration_does_not_issue_an_execution_token(): void
+    {
+        $before = $this->snapshotAllTables();
+        $schema = app(CariCleanupInventory::class)->schema(DB::connection());
+        $schema['triggers'][] = [
+            'table' => 'ledger_entries', 'name' => 'cari_cleanup_install_guard_ledger_entries',
+            'event' => 'DELETE', 'timing' => 'BEFORE', 'definition' => "SIGNAL SQLSTATE '45000'",
+        ];
+        $this->replaceInventorySchema($schema);
+        $prepared = app(CariCleanupService::class)->prepare($this->admin);
+        $this->assertFalse($prepared['ready']);
+        $this->assertNull($prepared['token']);
+        $this->assertNotEmpty($prepared['blockers']);
+        $this->assertSame($before, $this->snapshotAllTables());
+    }
+
+    #[Test]
+    public function token_is_bound_to_the_current_session_and_admin(): void
+    {
+        $this->seedRepresentativeRecords();
+        $otherAdmin = $this->userWithRole(RoleName::Admin);
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($otherAdmin, $token));
+        session()->forget('cari_cleanup.preflight_hash');
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function expired_token_cannot_start_cleanup(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $this->travel(11)->minutes();
+        try {
+            $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        } finally {
+            $this->travelBack();
+        }
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function token_expiring_during_lock_acquisition_is_rechecked_before_deleting(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $actual = app(CariCleanupInventory::class);
+        $advanced = false;
+        $inventory = Mockery::mock(CariCleanupInventory::class);
+        $inventory->shouldReceive('inspect')->andReturnUsing(function (Connection $db, bool $contents = false, bool $lock = false) use ($actual, &$advanced): array {
+            $report = $actual->inspect($db, $contents, $lock);
+            if ($lock && ! $advanced) {
+                $advanced = true;
+                $this->travel(11)->minutes();
+            }
+
+            return $report;
+        });
+        $this->instance(CariCleanupInventory::class, $inventory);
+
+        try {
+            $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        } finally {
+            $this->travelBack();
+        }
+        $this->assertTrue($advanced, 'Expiry must be tested after the real locking scan.');
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function inventory_failure_prevents_execution_and_issues_no_preflight_token(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        $inventory = Mockery::mock(CariCleanupInventory::class);
+        $inventory->shouldReceive('inspect')->andThrow(new RuntimeException('Injected inventory metadata failure.'));
+        $this->instance(CariCleanupInventory::class, $inventory);
+
+        $report = app(CariCleanupService::class)->report();
+        $this->assertFalse($report['available']);
+        $this->assertFalse($report['ready']);
+        $this->assertNotEmpty($report['blockers']);
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertNull(app(CariCleanupService::class)->prepare($this->admin)['token']);
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function target_content_changed_after_preflight_requires_a_new_preflight(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        DB::table('stays')->update(['guest_name' => 'Ön kontrolden sonra değişti']);
+        $before = $this->snapshotAllTables();
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function account_card_changed_after_preflight_invalidates_the_token(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        DB::table('companies')->update(['phone' => '05550000000']);
+        $before = $this->snapshotAllTables();
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function other_module_changes_after_preflight_are_preserved_at_execution_time(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        DB::table('monthly_payment_providers')->update(['name' => 'Korunan güncel banka '.Str::uuid()]);
+        $before = $this->snapshotAllTables();
+        app(CariCleanupService::class)->execute($this->admin, $token);
+        $this->assertSame($this->protectedRows($before), $this->protectedRows($this->snapshotAllTables()));
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function password_phrase_checkbox_and_preflight_token_are_validated_server_side(): void
+    {
+        $this->withoutMiddleware(ThrottleRequests::class);
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $payload = $this->executePayload($token);
+        $before = $this->snapshotAllTables();
+        foreach ([
+            ['password' => 'incorrect-password'],
+            ['confirmation' => 'cari girişlerini sil'],
+            ['confirmation' => 'yanlış ifade'],
+            ['confirm_irreversible' => 'no'],
+            ['preflight_token' => ''],
+        ] as $invalid) {
+            $response = $this->post(route('cari-cleanup.execute'), array_replace($payload, $invalid));
+            $response->assertSessionHasErrors();
+            $this->assertSame($before, $this->snapshotAllTables());
+        }
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function only_active_admin_can_view_prepare_or_execute_cleanup(): void
+    {
+        $this->app['auth']->forgetGuards();
+        $this->get(route('cari-cleanup.index'))->assertRedirect(route('login'));
+        $this->post(route('cari-cleanup.preflight'))->assertRedirect(route('login'));
+        $this->post(route('cari-cleanup.execute'))->assertRedirect(route('login'));
         foreach ([RoleName::Patron, RoleName::Personel] as $role) {
             $user = $this->userWithRole($role);
             $user->givePermissionTo(array_map(fn (PermissionName $permission): string => $permission->value, PermissionName::cases()));
@@ -119,46 +419,22 @@ class CariCleanupTest extends TestCase
             $this->assertFalse(Gate::forUser($user)->allows('view', CariCleanupService::class));
             $this->get(route('cari-cleanup.index'))->assertForbidden();
             $this->post(route('cari-cleanup.preflight'))->assertForbidden();
+            $this->post(route('cari-cleanup.execute'), $this->executePayload('forged'))->assertForbidden();
             $this->assertSame($before, $this->snapshotAllTables());
         }
-
         $inactive = $this->userWithRole(RoleName::Admin, ['is_active' => false]);
         $this->actingAs($inactive);
         $before = $this->snapshotAllTables();
-        $this->assertFalse(Gate::forUser($inactive)->allows('view', CariCleanupService::class));
         $this->get(route('cari-cleanup.index'))->assertForbidden();
         $this->post(route('cari-cleanup.preflight'))->assertForbidden();
+        $this->post(route('cari-cleanup.execute'), $this->executePayload('forged'))->assertForbidden();
         $this->assertSame($before, $this->snapshotAllTables());
     }
 
     #[Test]
-    public function forged_execution_requests_have_no_route_and_cannot_change_data(): void
+    public function execution_is_post_only_and_real_csrf_checks_are_enforced(): void
     {
-        $this->seedRepresentativeRecords();
-        $this->actingAs($this->admin);
-        $before = $this->snapshotAllTables();
-
-        foreach (['POST', 'PUT', 'PATCH', 'DELETE'] as $method) {
-            $this->call($method, '/admin/cari-temizleme', [
-                'backup_confirmed' => true, 'password' => 'password',
-                'confirmation' => 'CARİ VERİLERİNİ TEMİZLE',
-            ])->assertStatus(405);
-            $this->call($method, '/admin/cari-temizleme/temizle')->assertNotFound();
-        }
-        $this->get(route('cari-cleanup.preflight'))->assertStatus(405);
-        $this->assertSame($before, $this->snapshotAllTables());
-
-        $routes = collect(app('router')->getRoutes()->getRoutes())
-            ->filter(fn ($route): bool => str_starts_with($route->uri(), 'admin/cari-temizleme'));
-        $this->assertCount(2, $routes, 'Only the page and read-only preflight routes may exist.');
-        $this->assertSame(['GET', 'HEAD', 'POST'], $routes->flatMap(fn ($route): array => $route->methods())->sort()->values()->all());
-    }
-
-    #[Test]
-    public function real_request_forgery_protection_rejects_missing_and_invalid_tokens(): void
-    {
-        // Laravel skips token checks during tests. Override only that bypass;
-        // the actual middleware and its session/token comparison remain active.
+        $this->get(route('cari-cleanup.execute'))->assertStatus(405);
         $this->app->bind(PreventRequestForgery::class, fn ($app) => new class($app, $app['encrypter']) extends PreventRequestForgery
         {
             protected function runningUnitTests(): bool
@@ -166,143 +442,218 @@ class CariCleanupTest extends TestCase
                 return false;
             }
         });
-        $this->actingAs($this->admin)->withSession(['_token' => 'valid-cleanup-csrf-token']);
+        $this->withSession(['_token' => 'valid-cleanup-csrf-token']);
         $before = $this->snapshotAllTables();
-
         $this->post(route('cari-cleanup.preflight'))->assertStatus(419);
-        $this->post(route('cari-cleanup.preflight'), ['_token' => 'invalid'])->assertStatus(419);
+        $this->post(route('cari-cleanup.execute'), $this->executePayload('forged'))->assertStatus(419);
+        $this->post(route('cari-cleanup.execute'), $this->executePayload('forged') + ['_token' => 'invalid'])->assertStatus(419);
         $this->post(route('cari-cleanup.preflight'), ['_token' => 'valid-cleanup-csrf-token'])->assertOk();
         $this->assertSame($before, $this->snapshotAllTables());
     }
 
     #[Test]
-    public function report_uses_read_queries_and_real_trigger_metadata(): void
+    public function exception_after_an_intermediate_delete_rolls_back_all_rows_and_operation_state(): void
     {
         $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
         $before = $this->snapshotAllTables();
-        $queries = [];
-        DB::listen(function (QueryExecuted $query) use (&$queries): void {
-            $queries[] = $query->sql;
-        });
-
-        $report = app(CariCleanupService::class)->report();
-        $this->assertTrue($report['available']);
-        $this->assertNotEmpty($report['blockers']);
-        $this->assertNotEmpty($queries);
-        foreach ($queries as $query) {
-            $this->assertMatchesRegularExpression('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN|SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK|START TRANSACTION)\b/i', $query, $query);
-        }
-        $this->assertNotEmpty(array_filter($queries, fn (string $sql): bool => str_contains(strtolower($sql), 'information_schema.triggers')));
-        $triggers = collect($report['triggers'])->keyBy('name');
-        foreach (['ledger_entries_block_delete' => 'ledger_entries', 'payment_allocations_no_delete' => 'payment_allocations'] as $name => $table) {
-            $this->assertSame($table, $triggers[$name]['table']);
-            $this->assertSame('DELETE', $triggers[$name]['event']);
-        }
-        foreach ([['ledger_entries', 'company_id', 'companies'], ['payment_allocations', 'payment_id', 'payments'], ['payment_allocations', 'stay_id', 'stays']] as [$table, $column, $parent]) {
-            $dependency = collect($report['dependencies'])->first(fn (array $row): bool => $row['table'] === $table && $row['column'] === $column);
-            $this->assertNotNull($dependency, $table.'.'.$column);
-            $this->assertSame($parent, $dependency['referenced_table']);
-            $this->assertSame('RESTRICT', $dependency['delete_rule']);
-        }
-        $this->assertSame($before, $this->snapshotAllTables());
-    }
-
-    #[Test]
-    public function missing_required_schema_fails_closed_without_trusting_partial_counts(): void
-    {
-        $this->seedRepresentativeRecords();
-        $before = $this->snapshotAllTables();
-        $report = $this->reportWithMetadata(function (string $sql, array $bindings, Connection $connection): array {
-            $rows = $connection->select($sql, $bindings);
-
-            return str_contains($sql, 'information_schema.TABLES')
-                ? array_values(array_filter($rows, fn (object $row): bool => $row->name !== 'ledger_entries'))
-                : $rows;
-        });
-
-        $this->assertUnavailableReport($report);
-        $this->assertSame($before, $this->snapshotAllTables());
-    }
-
-    #[Test]
-    public function database_metadata_errors_fail_closed_and_preserve_all_rows(): void
-    {
-        $this->seedRepresentativeRecords();
-        $before = $this->snapshotAllTables();
-        $report = $this->reportWithMetadata(function (string $sql, array $bindings, Connection $connection): array {
-            if (str_contains($sql, 'information_schema.TRIGGERS')) {
-                throw new RuntimeException('Simulated metadata access failure.');
+        $injected = false;
+        DB::listen(function (QueryExecuted $query) use (&$injected): void {
+            if (! $injected && preg_match('/^\s*delete\s+from\s+[\x60"]?payments[\x60"]?\b/i', $query->sql)) {
+                $injected = true;
+                throw new RuntimeException('Injected failure after payment DELETE.');
             }
-
-            return $connection->select($sql, $bindings);
         });
-
-        $this->assertUnavailableReport($report);
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertTrue($injected, 'The test must fail after a real DELETE, not during preflight.');
         $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertDatabaseHas('cari_cleanup_operations', ['id' => 1, 'status' => 'ready']);
+        $this->assertCapabilityCleared();
     }
 
     #[Test]
-    public function missing_trigger_diagnostic_never_grants_cleanup_permission(): void
+    public function protected_row_integrity_failure_rolls_back_deleted_and_changed_rows(): void
     {
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
         $before = $this->snapshotAllTables();
-        $report = $this->reportWithMetadata(function (string $sql, array $bindings, Connection $connection): array {
-            $rows = $connection->select($sql, $bindings);
-
-            return str_contains($sql, 'information_schema.TRIGGERS')
-                ? array_values(array_filter($rows, fn (object $row): bool => $row->name !== 'ledger_entries_block_delete'))
-                : $rows;
+        $injected = false;
+        DB::listen(function (QueryExecuted $query) use (&$injected): void {
+            if (! $injected && preg_match('/^\s*delete\s+from\s+[\x60"]?payments[\x60"]?\b/i', $query->sql)) {
+                $injected = true;
+                DB::table('monthly_payment_providers')->update(['name' => 'Injected protected row alteration']);
+            }
         });
-
-        $this->assertTrue($report['available']);
-        $this->assertStringContainsString('ledger_entries_block_delete', implode(' ', $report['blockers']));
-        $this->assertStringContainsString('silme izni değil', implode(' ', $report['blockers']));
+        $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+        $this->assertTrue($injected);
         $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
     }
 
-    /** @param array<string, mixed> $report */
-    private function assertUnavailableReport(array $report): void
+    #[Test]
+    public function another_connection_holding_the_singleton_lock_prevents_execution(): void
     {
-        $this->assertFalse($report['available']);
-        $this->assertNotEmpty($report['blockers']);
-        $this->assertSame([], $report['tables']);
-        foreach (array_merge($report['categories'], $report['protected_groups']) as $category) {
-            $this->assertNull($category['count'], 'Unavailable counts must never be reported as zero.');
-        }
-    }
-
-    /**
-     * Fault injection changes only SELECT results; the real schema and its
-     * triggers remain intact. Restore the facade before transaction teardown.
-     *
-     * @param  callable(string, array, Connection): array  $select
-     * @return array<string, mixed>
-     */
-    private function reportWithMetadata(callable $select): array
-    {
-        $manager = DB::getFacadeRoot();
-        $connection = DB::connection();
-        $readConnection = Mockery::mock(Connection::class);
-        $readConnection->shouldReceive('getDriverName')->andReturn('mysql');
-        $readConnection->shouldReceive('transactionLevel')->andReturn(1);
-        $readConnection->shouldReceive('getDatabaseName')->andReturn($connection->getDatabaseName());
-        $readConnection->shouldReceive('select')->andReturnUsing(fn (string $sql, array $bindings): array => $select($sql, $bindings, $connection));
-        $readConnection->shouldReceive('table')->andReturnUsing(fn (string $name) => $connection->table($name));
-        DB::shouldReceive('connection')->once()->andReturn($readConnection);
-
+        $this->seedRepresentativeRecords();
+        $token = $this->prepareToken();
+        $before = $this->snapshotAllTables();
+        config(['database.connections.cari_cleanup_lock_test' => config('database.connections.'.config('database.default'))]);
+        $other = DB::connection('cari_cleanup_lock_test');
+        $this->assertSame(1, (int) $other->selectOne('SELECT GET_LOCK(?, 0) AS acquired', ['lemon_cari_cleanup'])->acquired);
         try {
-            return app(CariCleanupService::class)->report();
+            $this->assertValidationFailure(fn () => app(CariCleanupService::class)->execute($this->admin, $token));
+            $this->assertSame($before, $this->snapshotAllTables());
         } finally {
-            DB::swap($manager);
+            $other->selectOne('SELECT RELEASE_LOCK(?) AS released', ['lemon_cari_cleanup']);
+            DB::disconnect('cari_cleanup_lock_test');
         }
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function normal_financial_delete_stays_blocked_and_a_session_variable_is_insufficient(): void
+    {
+        $this->seedRepresentativeRecords();
+        $before = $this->snapshotAllTables();
+        DB::statement('SET @cari_cleanup_token = ?', ['arbitrary-unapproved-capability']);
+        try {
+            foreach (['ledger_entries', 'payment_allocations'] as $table) {
+                $id = DB::table($table)->max('id');
+                $this->assertImmutableSql(fn () => DB::table($table)->where('id', $id)->delete());
+            }
+        } finally {
+            DB::statement('SET @cari_cleanup_token = NULL');
+        }
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function wrong_connection_nonce_expiry_or_actor_does_not_authorize_trigger_deletion(): void
+    {
+        $this->seedRepresentativeRecords();
+        $personel = $this->userWithRole(RoleName::Personel);
+        $inactive = $this->userWithRole(RoleName::Admin, ['is_active' => false]);
+        $deleted = $this->userWithRole(RoleName::Admin);
+        DB::table('users')->where('id', $deleted->id)->update(['deleted_at' => now()]);
+        $token = Str::random(64);
+        $connectionId = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+        $valid = [
+            'status' => 'running', 'actor_id' => $this->admin->id, 'connection_id' => $connectionId,
+            'nonce_hash' => hash('sha256', $token), 'expires_at' => now('UTC')->addMinutes(10),
+            'completed_at' => null,
+        ];
+        DB::statement('SET @cari_cleanup_token = ?', [$token]);
+        try {
+            foreach ([
+                ['connection_id' => $connectionId + 1],
+                ['nonce_hash' => hash('sha256', 'wrong nonce')],
+                ['expires_at' => now('UTC')->subMinute()],
+                ['actor_id' => $personel->id],
+                ['actor_id' => $inactive->id],
+                ['actor_id' => $deleted->id],
+                ['status' => 'ready'],
+            ] as $invalid) {
+                DB::table('cari_cleanup_operations')->where('id', 1)->update(array_replace($valid, $invalid));
+                foreach (['ledger_entries', 'payment_allocations'] as $table) {
+                    $id = DB::table($table)->max('id');
+                    $this->assertImmutableSql(fn () => DB::table($table)->where('id', $id)->delete());
+                }
+            }
+        } finally {
+            DB::statement('SET @cari_cleanup_token = NULL');
+        }
+        $this->assertCapabilityCleared();
+    }
+
+    #[Test]
+    public function financial_update_remains_immutable_even_with_a_matching_delete_capability(): void
+    {
+        $this->seedRepresentativeRecords();
+        $token = Str::random(64);
+        DB::table('cari_cleanup_operations')->where('id', 1)->update([
+            'status' => 'running', 'actor_id' => $this->admin->id,
+            'connection_id' => (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id,
+            'nonce_hash' => hash('sha256', $token), 'expires_at' => now('UTC')->addMinutes(10),
+        ]);
+        $before = $this->snapshotAllTables();
+        DB::statement('SET @cari_cleanup_token = ?', [$token]);
+        try {
+            $this->assertImmutableSql(fn () => DB::table('ledger_entries')->where('id', DB::table('ledger_entries')->max('id'))->update(['description' => 'Forbidden change']));
+            $this->assertImmutableSql(fn () => DB::table('payment_allocations')->where('id', DB::table('payment_allocations')->max('id'))->update(['reason' => 'Forbidden change']));
+        } finally {
+            DB::statement('SET @cari_cleanup_token = NULL');
+        }
+        $this->assertSame($before, $this->snapshotAllTables());
+        $this->assertCapabilityCleared();
+    }
+
+    private function prepareToken(): string
+    {
+        $prepared = app(CariCleanupService::class)->prepare($this->admin);
+        $this->assertIsString($prepared['token']);
+        $this->assertNotEmpty($prepared['token']);
+
+        return $prepared['token'];
+    }
+
+    /** @param array<string, list<array<string, mixed>>> $schema */
+    private function replaceInventorySchema(array $schema): void
+    {
+        // Only metadata results are substituted. The real tables, triggers,
+        // constraints and transaction remain untouched in these tests.
+        $inventory = Mockery::mock(CariCleanupInventory::class)->makePartial();
+        $inventory->shouldReceive('schema')->andReturn($schema);
+        $this->instance(CariCleanupInventory::class, $inventory);
+    }
+
+    /** @return array<string, mixed> */
+    private function executePayload(string $token): array
+    {
+        return [
+            'password' => 'password', 'confirmation' => 'CARİ GİRİŞLERİNİ SİL',
+            'preflight_token' => $token, 'confirm_irreversible' => '1',
+        ];
+    }
+
+    private function assertValidationFailure(callable $action): void
+    {
+        try {
+            $action();
+            $this->fail('Cleanup must reject this request.');
+        } catch (ValidationException $exception) {
+            $this->assertNotEmpty($exception->errors());
+        }
+    }
+
+    private function assertImmutableSql(callable $action): void
+    {
+        try {
+            $action();
+            $this->fail('Database immutability guard must reject the statement.');
+        } catch (QueryException $exception) {
+            $this->assertSame('45000', $exception->errorInfo[0] ?? null);
+        }
+    }
+
+    private function assertCapabilityCleared(): void
+    {
+        $this->assertNull(DB::selectOne('SELECT @cari_cleanup_token AS token')->token);
+        $this->assertSame(1, (int) DB::selectOne('SELECT IS_FREE_LOCK(?) AS available', ['lemon_cari_cleanup'])->available);
+    }
+
+    /** @param array<string, list<string>> $snapshot
+     * @return array<string, list<string>>
+     */
+    private function protectedRows(array $snapshot): array
+    {
+        return array_diff_key($snapshot, array_flip([...self::TARGETS, 'cari_cleanup_operations']));
     }
 
     /** @return array<string, list<string>> */
     private function snapshotAllTables(): array
     {
         $snapshot = [];
-        foreach (Schema::getTableListing() as $table) {
-            // SESSION_DRIVER=array keeps even session/cache infrastructure out
-            // of the DB during these requests; include all tables regardless.
+        foreach (Schema::getTableListing(null, false) as $table) {
             $rows = DB::table($table)->get()->map(function (object $row): string {
                 $values = (array) $row;
                 ksort($values);
@@ -337,6 +688,7 @@ class CariCleanupTest extends TestCase
             'stay_ids' => [$stay->id],
         ], $this->admin);
         $this->assertTrue(DB::table('payment_allocations')->where('payment_id', $payment->id)->exists());
+        app(PaymentService::class)->cancel($payment, 'Gerçek ters kayıt FK koruma testi', $this->admin);
 
         $now = now();
         $actor = ['created_by' => $this->admin->id, 'updated_by' => $this->admin->id];

@@ -4,35 +4,82 @@
 @section('content')
     @php
         $displayCount = static fn (?int $count): string => $count === null ? 'Okunamadı' : number_format($count, 0, ',', '.');
+        $labels = [
+            'stays' => 'Konaklamalar',
+            'offers' => 'Teklif belgeleri',
+            'offer_periods' => 'Teklif dönemleri',
+            'offer_room_types' => 'Teklif oda türleri',
+            'offer_prices' => 'Teklif fiyatları',
+            'payments' => 'Tahsilatlar',
+            'receipt_book_entries' => 'Tahsilat makbuzları',
+            'ledger_entries' => 'Cari defter hareketleri',
+            'payment_allocations' => 'Tahsilat dağılımları',
+        ];
+        $counts = array_column($report['tables'], 'count', 'name');
+        $completed = $report['completed'];
+        $canConfirm = ! $completed && $report['ready'] && is_string($token) && $token !== '';
     @endphp
 
     <x-ui.page-header title="Cari Veri Temizleme"
-                      subtitle="Bu işlem yalnızca CARİ modülüne ait veriler için hazırlanmıştır. HESAP, PERSONEL ve YÖNETİM modülleri korunacaktır." />
+                      subtitle="Cari hesap kartları korunur. Bu tek seferlik işlem yalnızca cari girişlerini temizler; HESAP, PERSONEL ve YÖNETİM verileri korunacaktır." />
 
-    <x-ui.alert tone="danger" title="Tam cari temizliği bloke edildi" class="mt-4">
-        <p class="mt-1">Finansal geçmişi koruyan kurallar tam fiziksel silmeye izin vermiyor. Bu sayfa yalnızca mevcut kayıtları ve engelleri inceler. Hiçbir kayıt temizlenmez.</p>
-    </x-ui.alert>
+    @if ($completed)
+        <x-ui.alert tone="success" title="İşlem tamamlandı" class="mt-4">
+            <p class="mt-1">Cari girişleri temizlendi. Cari hesap kartları ve kapsam dışındaki veriler korundu. Bu işlem tekrar çalıştırılamaz.</p>
+            @if ($report['completion_report'] !== null)
+                <p class="mt-2">Tamamlanma: {{ $report['completion_report']['completed_at'] }}</p>
+            @endif
+        </x-ui.alert>
 
-    <div class="mt-5 grid items-start gap-5 xl:grid-cols-2">
-        <x-ui.card title="Silme kapsamı adayları">
-            <p class="mb-4 text-sm text-mut">Aşağıdaki sayılar mevcut veritabanından okunur. Bu liste silme izni vermez; tam temizlik engellendiği için tüm kayıtlar korunur.</p>
-            <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 border-b border-line pb-2 text-xs font-medium text-mut" aria-hidden="true">
-                <span>Bölüm</span><span>Kayıt sayısı</span><span>Durum</span>
-            </div>
-            <ul class="divide-y divide-line">
-                @foreach ($report['categories'] as $category)
-                    <li class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 py-3">
-                        <span class="text-sm text-tx">{{ $category['label'] }}</span>
-                        <span class="text-right text-sm tabular-nums text-tx" aria-label="{{ $category['label'] }} kayıt sayısı">{{ $displayCount($category['count']) }}</span>
-                        <x-ui.badge tone="danger">BLOKE</x-ui.badge>
-                    </li>
+        @if ($report['completion_report'] !== null)
+            <x-ui.card title="Silinen kayıtlar" class="mt-5">
+                <ul class="divide-y divide-line">
+                    @foreach ($report['completion_report']['deleted'] as $table => $count)
+                        <li class="flex items-center justify-between gap-4 py-3 text-sm">
+                            <span class="text-tx">{{ $labels[$table] ?? $table }}</span>
+                            <span class="tabular-nums text-tx">{{ $displayCount($count) }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+            </x-ui.card>
+        @endif
+    @else
+        <x-ui.alert tone="danger" title="Kalıcı ve tek seferlik silme" class="mt-4">
+            <p class="mt-1">Aşağıdaki cari girişleri ve finansal geçmişi fiziksel olarak silinecektir. Bu işlem uygulama içinden geri alınamaz. Cari hesap kartları silinmez; temizlenen girişlere ait bakiyeler kalkar.</p>
+        </x-ui.alert>
+    @endif
+
+    @if ($errors->any())
+        <x-ui.alert tone="danger" title="İşlem tamamlanamadı" class="mt-4">
+            <ul class="mt-2 list-disc space-y-1 pl-5">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
                 @endforeach
             </ul>
-            <p class="mt-3 text-sm text-mut">Teklifler sayısı, belgeler ve bağlı dönem, oda tipi ve fiyat satırlarının toplamıdır. Cari Ekstre ve Grafik, cari defterden hesaplanır; ayrı bir ekstre veya grafik tablosu temizlenmez. Tahsilat makbuzu defteri ayrıca sayılır.</p>
-        </x-ui.card>
+        </x-ui.alert>
+    @endif
+
+    <div class="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        @unless ($completed)
+            <x-ui.card title="Silinecek cari girişleri">
+                <p class="mb-4 text-sm text-mut">Kayıt sayıları mevcut veritabanından okunur. İptal edilmiş girişler ve geçmiş finansal hareketler de kapsamdadır.</p>
+                <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-b border-line pb-2 text-xs font-medium text-mut" aria-hidden="true">
+                    <span>Bölüm</span><span>Kayıt sayısı</span>
+                </div>
+                <ul class="divide-y divide-line">
+                    @foreach ($labels as $table => $label)
+                        <li class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-3">
+                            <span class="text-sm text-tx">{{ $label }}</span>
+                            <span class="text-right text-sm tabular-nums text-tx" aria-label="{{ $label }} kayıt sayısı">{{ $displayCount($counts[$table] ?? null) }}</span>
+                        </li>
+                    @endforeach
+                </ul>
+                <p class="mt-3 text-sm text-mut">Cari Ekstre ve Grafik, cari defterden hesaplanır. Temizleme sonrasında bu girişler bu ekranlarda görünmez.</p>
+            </x-ui.card>
+        @endunless
 
         <x-ui.card title="Korunacak veriler">
-            <p class="mb-4 text-sm text-mut">Hesap geçmişi, personel, yönetim ve kapsam dışındaki bütün tablolar koruma kapsamındadır. Marka logo dosyaları ve sistem ayarları da korunur.</p>
+            <p class="mb-4 text-sm text-mut">Cari hesap kartları, Hesap geçmişi, personel, yönetim ve kapsam dışındaki bütün veriler korunur. Marka logoları ve sistem ayarları da korunacaktır.</p>
             <ul class="divide-y divide-line">
                 @foreach ($report['protected_groups'] as $group)
                     <li class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-3">
@@ -45,96 +92,65 @@
         </x-ui.card>
     </div>
 
-    <x-ui.card title="İşlem ön kontrolü" class="mt-5">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <p class="text-sm text-mut">Ön kontrol kayıt sayılarını, ilişkileri ve finansal korumaları yeniden okur. Veritabanında değişiklik yapmaz.</p>
-                <p class="mt-1 text-xs text-mut">Son okuma: {{ $report['checked_at'] }}</p>
+    @unless ($completed)
+        <x-ui.card title="İşlem ön kontrolü" class="mt-5">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-mut">Ön kontrol, silinecek girişleri ve korunacak verilerin ilişkilerini denetler. Bu adım hiçbir veri silmez.</p>
+                    <p class="mt-1 text-xs text-mut">Son okuma: {{ $report['checked_at'] }}</p>
+                </div>
+                <form method="POST" action="{{ route('cari-cleanup.preflight') }}" class="shrink-0">
+                    @csrf
+                    <x-ui.button class="w-full sm:w-auto">Ön Kontrolü Çalıştır</x-ui.button>
+                </form>
             </div>
-            <form method="POST" action="{{ route('cari-cleanup.preflight') }}" class="shrink-0">
-                @csrf
-                <x-ui.button class="w-full sm:w-auto">Ön Kontrolü Çalıştır</x-ui.button>
-            </form>
-        </div>
 
-        @if ($preflight)
-            <p class="mt-4 text-sm font-medium text-danger" role="status">{{ $report['available'] ? 'Ön kontrol tamamlandı: tam temizlik engellendi.' : 'Ön kontrolün tüm verileri okunamadı: tam temizlik kapalı kalır.' }} Hiçbir kayıt değiştirilmedi.</p>
-        @endif
+            @if ($preflight && $canConfirm)
+                <x-ui.alert tone="success" title="Ön kontrol başarılı" class="mt-4">
+                    <p class="mt-1">Silme kapsamı doğrulandı. Hiçbir kayıt değiştirilmedi. Son onayı 10 dakika içinde tamamlayın; bu süre geçerse ön kontrolü yeniden çalıştırın.</p>
+                </x-ui.alert>
+            @endif
 
-        <x-ui.alert tone="danger" title="Silmeye engel durumlar" class="mt-4">
-            <ul class="mt-2 list-disc space-y-2 pl-5">
-                @foreach ($report['blockers'] as $blocker)
-                    <li>{{ $blocker }}</li>
-                @endforeach
-            </ul>
-        </x-ui.alert>
-
-        <div class="mt-5 border-t border-line pt-4">
-            <p id="cleanup-disabled-reason" class="mb-3 text-sm text-mut">Güvenli tam temizlik mümkün olmadığı için son onay kapalıdır. Yedek alınmış olması finansal korumaları kaldırmaz. Kısmi temizlik uygulanmaz.</p>
-            <x-ui.button type="button" variant="danger" disabled aria-describedby="cleanup-disabled-reason" class="w-full sm:w-auto">CARİ VERİLERİNİ TEMİZLE</x-ui.button>
-        </div>
-    </x-ui.card>
-
-    <div class="mt-5 space-y-3">
-        <details class="rounded-xl border border-line bg-card">
-            <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium text-tx">Tablo kapsamı ve kayıt sayıları</summary>
-            <div class="border-t border-line p-4">
-                <p class="mb-3 text-sm text-mut">Tanımlı adayların dışında bulunan tablolar da otomatik olarak korunur. Aday tablolarda da silme kapalıdır.</p>
-                @if ($report['tables'] === [])
-                    <p class="text-sm text-danger">Tablo envanteri okunamadı. Tam temizlik kapalı kalır.</p>
-                @else
-                    <ul class="divide-y divide-line">
-                        @foreach ($report['tables'] as $table)
-                            <li class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:gap-x-4">
-                                <div class="min-w-0">
-                                    <p class="break-all font-mono text-xs text-tx">{{ $table['name'] }}</p>
-                                    <p class="mt-1 text-xs text-mut">{{ $table['module'] }}</p>
-                                </div>
-                                <span class="text-right text-sm tabular-nums text-tx">{{ $displayCount($table['count']) }}</span>
-                                <x-ui.badge :tone="$table['protected'] ? 'neutral' : 'danger'" class="col-span-2 w-fit sm:col-span-1">{{ $table['protected'] ? 'KORUNACAK' : 'BLOKE' }}</x-ui.badge>
-                            </li>
+            @if ($report['blockers'] !== [])
+                <x-ui.alert tone="danger" title="Silmeye engel durumlar" class="mt-4">
+                    <ul class="mt-2 list-disc space-y-2 pl-5">
+                        @foreach ($report['blockers'] as $blocker)
+                            <li>{{ $blocker }}</li>
                         @endforeach
                     </ul>
-                @endif
-            </div>
-        </details>
+                    <p class="mt-3">Engeller çözülmeden hiçbir kayıt silinmez. Kısmi temizlik yapılmaz.</p>
+                </x-ui.alert>
+            @endif
+        </x-ui.card>
 
-        <details class="rounded-xl border border-line bg-card">
-            <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium text-tx">Veritabanı bağımlılıkları</summary>
-            <div class="border-t border-line p-4">
-                <p class="mb-3 text-sm text-mut">Yabancı anahtarlar aşağıda gösterilir. Cari defterin kaynak bağlantıları, denetim geçmişi ve eski kasa referansları ayrıca korunmalıdır; bu tarihsel bağlantıların tamamı yabancı anahtarla tanımlı değildir.</p>
-                @if ($report['dependencies'] === [])
-                    <p class="text-sm text-mut">Bağımlılık envanterinde gösterilecek kayıt yok. Bu durum silme izni vermez.</p>
-                @else
-                    <ul class="divide-y divide-line">
-                        @foreach ($report['dependencies'] as $dependency)
-                            <li class="py-3 text-xs">
-                                <p class="break-all font-mono text-tx">{{ $dependency['table'] }}.{{ $dependency['column'] }} → {{ $dependency['referenced_table'] }}.{{ $dependency['referenced_column'] }}</p>
-                                <p class="mt-1 text-mut">Silme kuralı: {{ $dependency['delete_rule'] }}</p>
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
-            </div>
-        </details>
+        <x-ui.card title="Son onay" class="mt-5">
+            @if ($canConfirm)
+                <p class="mb-4 text-sm text-mut">Listelenen cari girişleri kalıcı olarak silinecektir. Cari hesap kartları ve korunacak veriler bu işlemin dışındadır.</p>
+                <form method="POST" action="{{ route('cari-cleanup.execute') }}" class="space-y-5">
+                    @csrf
+                    <input type="hidden" name="preflight_token" value="{{ $token }}">
 
-        <details class="rounded-xl border border-line bg-card">
-            <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium text-tx">Finansal koruma tetikleyicileri</summary>
-            <div class="border-t border-line p-4">
-                <p class="mb-3 text-sm text-mut">Defter ve ödeme dağılımı geçmişi değiştirilemez veya silinemez. Bu korumalar kaldırılmaz. Tetikleyicinin eksik olması da silme izni vermez.</p>
-                @if ($report['triggers'] === [])
-                    <p class="text-sm text-danger">Gösterilecek tetikleyici bilgisi bulunamadı. Tam temizlik kapalı kalır.</p>
-                @else
-                    <ul class="divide-y divide-line">
-                        @foreach ($report['triggers'] as $trigger)
-                            <li class="py-3 text-xs">
-                                <p class="break-all font-mono text-tx">{{ $trigger['name'] }}</p>
-                                <p class="mt-1 break-all text-mut">{{ $trigger['table'] }} · {{ $trigger['event'] }}</p>
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
-            </div>
-        </details>
-    </div>
+                    <label class="flex items-start gap-3 text-sm text-tx" for="confirm_irreversible">
+                        <input id="confirm_irreversible" name="confirm_irreversible" type="checkbox" value="1" required
+                               class="mt-0.5 size-5 shrink-0 rounded border-field accent-acc">
+                        <span>Güncel veritabanı yedeğini aldım. Yalnızca listelenen cari girişlerinin geri alınamaz biçimde silineceğini, cari hesap kartlarının korunacağını onaylıyorum.</span>
+                    </label>
+
+                    <div>
+                        <label for="cleanup-password" class="block text-sm text-mut">Admin parolanız <span class="text-acc-tx" aria-hidden="true">*</span></label>
+                        <input id="cleanup-password" name="password" type="password" autocomplete="current-password" required
+                               class="mt-1 block min-h-11 w-full rounded-lg border border-field bg-card px-3 text-tx focus:border-acc-tx">
+                    </div>
+
+                    <x-ui.input name="confirmation" label="Doğrulama ifadesi" required
+                                autocomplete="off" spellcheck="false" hint="Aynen yazın: CARİ GİRİŞLERİNİ SİL" />
+
+                    <x-ui.button variant="danger" class="w-full sm:w-auto">CARİ GİRİŞLERİNİ SİL</x-ui.button>
+                </form>
+            @else
+                <p id="cleanup-disabled-reason" class="mb-3 text-sm text-mut">Son onayı açmak için ön kontrolün başarıyla tamamlanması gerekir. Hiçbir veri otomatik olarak silinmez.</p>
+                <x-ui.button type="button" variant="danger" disabled aria-describedby="cleanup-disabled-reason" class="w-full sm:w-auto">CARİ GİRİŞLERİNİ SİL</x-ui.button>
+            @endif
+        </x-ui.card>
+    @endunless
 @endsection

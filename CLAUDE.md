@@ -1,6 +1,34 @@
 # CLAUDE.md
 
-## Onaylı CARİ temizlik ön kontrolü — 12 Ekim 2026
+## Onaylı CARİ veri girişlerini tek seferlik silme istisnası — 12 Ekim 2026
+
+Kullanıcı önceki blokeli ekranın ardından kapsamı açıkça netleştirdi:
+**Cari hesap kartları kalır; konaklamalar, teklifler, tahsilatlar, makbuzlar
+ve bağlı cari hareketler fiziksel silinir.** “Finansal kayıtların silinmesine
+yalnız bu tek seferlik işlem için istisna” sorusuna “tamam değiştir ve girilen
+veriyi silelim” yanıtıyla açık onay verdi. Bu dar istisna aşağıdaki önceki
+salt okunur kararın ve §6/L1, §18 finansal hard-delete yasağının yalnız
+bu işlem için önündedir; normal finansal UPDATE/DELETE yasağı sürer.
+
+- Hedefler yalnız stays, offers/offer_periods/offer_room_types/offer_prices,
+  payments, receipt_book_entries, ledger_entries ve payment_allocations.
+- companies ve HESAP/PERSONEL/kullanıcı/yetki/oda/audit/eski kasa dahil
+  diğer bütün mevcut tablolar/dosyalar korunur. ID sıraları sıfırlanmaz.
+- Geçici CariCleanup modülü aktif Admin'e açık ön kontrol ve parola/açık ifade
+  ile manuel POST silme içerir. Deploy veya migration CARİ verisi silmez.
+- cari_cleanup_operations tek kullanımlık işlem durumunu ve içerik doğrulama
+  raporunu kalıcı tutar; tamamlanmış durum UPDATE/DELETE ile açılamaz.
+- İki finansal DELETE trigger'ı yalnız bağlantıya bağlı süreli capability ve
+  aktif Admin kanıtıyla bu işlemde izin verir. UPDATE korumaları değişmez;
+  FK kapatma, TRUNCATE ve silme transaction'ında DDL yoktur.
+- Tüm silmeler, kapsam dışı tam satır içerik karşılaştırması ve başarı kilidi
+  tek transaction'dadır. Eşzamanlı/tekrar istekler reddedilir; hatada rollback.
+- Uygulama yolu, gerçek MySQL testleri, full CI ve bağımsız güvenlik incelemesi
+  zorunludur. Canlı son işlem Admin'in yönetim sayfasındaki manuel onayıdır.
+- Ayrıntı: docs/cari-giris-temizleme-2026-10-12.md. Aşağıdaki eski karar
+  tarihsel bağlamdır; yeni açık kullanıcı onayıyla yukarıdaki kapsam değişti.
+
+## Önceki CARİ temizlik ön kontrolü kararı — 12 Ekim 2026
 
 Kullanıcının tek seferlik CARİ temizleme isteği, finansal korumalar nedeniyle
 tam fiziksel silme güvenli değilse işlemin bloke edilmesini zorunlu kılar.
