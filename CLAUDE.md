@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+## Onaylı CARİ temizlik ön kontrolü — 12 Ekim 2026
+
+Kullanıcının tek seferlik CARİ temizleme isteği, finansal korumalar nedeniyle
+tam fiziksel silme güvenli değilse işlemin bloke edilmesini zorunlu kılar.
+`CariCleanup` yalnız aktif Admin'e açık geçici, salt okunur envanter/ön kontrol
+ekranıdır (`/admin/cari-temizleme`). Tüm gerçek tablolar sayılır; on CARİ aday
+tablosu silme izni değildir, diğer tüm tablolar varsayılan korunur. Ledger ve
+ödeme dağılımı append-only korumaları değiştirilmez. Silme servisi veya HTTP
+ucu yoktur; ön kontrol başarılı silme yetkisi vermez. Şema/yetki seeder'ı ve
+tek kullanımlık durum tablosu eklenmez. Bu isteğin yayın onayı yalnız bu güvenli
+teşhis ekranını kapsar; canlı veri silme yetkisi içermez. Karar ve geçici kod
+kaldırma planı: `docs/cari-temizleme-guvenlik-analizi-2026-10-12.md`.
+
 ## Onaylı masaüstü Hızlı Menü istisnası — 3 Ekim 2026
 
 Kullanıcının açık isteğiyle yalnız masaüstünde görünen, kullanıcı tarafından
