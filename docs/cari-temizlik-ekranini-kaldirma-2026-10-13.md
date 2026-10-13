@@ -43,7 +43,11 @@ bağımsız koşulsuz engeller kurulur/doğrulanır. Ancak sonra asıl trigger'l
 değiştirilir. Her ikisi tamamlanmadan geçici engeller kaldırılmaz.
 Ara hata kapalı durumda kalır; yeniden deneme korumalar altında idempotenttir.
 İşlem ready/running/completed olsa da satıra dokunmadan emekli edilebilir.
-down() eski capability'yi geri açmaz; geri alma girişimini açıkça reddeder.
+down() açıklamalı NO-OP'tur: hiçbir DDL/DML çalıştırmaz, eski capability'yi
+geri açmaz ve koşulsuz korumaları yerinde bırakır. Böylece mevcut konaklama
+eşzamanlılık testinin DatabaseMigrations yaşam döngüsü korunur; test veya
+koruma eşiği değiştirilmez. Eski migration'ın down() yolu completed arşivini
+assertReady ile korumaya devam eder.
 
 İki finansal UPDATE trigger'ı ve bütün diğer modül/state trigger'ları değişmez.
 Çalışan eski temizleme, ortak advisory lock nedeniyle emeklilik migration'ıyla
@@ -64,7 +68,8 @@ tamamlar; eski provider dosyasına bağımlı önbellek kalmamalıdır.
   provası yapıldı. İlk asıl trigger DROP'undan sonra hata enjekte edildi:
   iki guard yerinde kaldı, nonempty finansal DELETE45000 aldı.
   Recovery ve ikinci up geçti; 49 tablonun bütün satır içerikleri, rapor,
-  UPDATE/state trigger'ları aynı kaldı. down tekrar açmayı reddetti.
+  UPDATE/state trigger'ları aynı kaldı. down sonrası bütün satır/trigger'lar
+  aynı kaldı; silme istisnası açılmadı.
 - Eski migration'ın yeni path'te aynı içerik/hash ile bulunduğu ve migrate
   status'ta tekrar çalışmadığı doğrulandı.
 - Runtime app/bootstrap/config/resources/routes içinde CariCleanup veya eski

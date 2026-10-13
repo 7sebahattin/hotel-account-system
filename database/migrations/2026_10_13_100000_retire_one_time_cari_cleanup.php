@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\DB;
  * yerinde bırakır; yeniden çalıştırma aynı korumalar altında tamamlanır.
  *
  * Kalıcı completed raporu ve onu koruyan state trigger'ları aynen kalır.
- * down() istisnayı yeniden açmaz; bu güvenlik geçişi yalnız ileri yöndedir.
+ * down() hiçbir işlem yapmaz; istisnayı yeniden açmaz. Rollback sırasında da
+ * koşulsuz finansal korumalar yerinde kalır; bu geçiş yalnız ileri yöndedir.
  */
 return new class extends Migration
 {
@@ -66,7 +67,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new RuntimeException('Tek seferlik cari temizleme emekli edildi; geri alma silme istisnasını yeniden açamaz. İleri düzeltme kullanın.');
+        // İleri güvenlik düzeltmesi geri alınmaz. Testlerde migration kaydı
+        // geri sarılabilse de DELETE istisnası veya silme API'si yeniden açılmaz.
+        // Tablo satırları ve tamamlanmış işlem raporu aynen korunur.
     }
 
     private function installGuards(): void
