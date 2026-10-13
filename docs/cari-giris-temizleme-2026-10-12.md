@@ -108,6 +108,11 @@ zamanda değişmez” gibi eşzamanlı normal uygulama faaliyetini dışlayan bi
 yapılmaz. İşlem sırasında kısa süreli satır kilitleri normal yazmaları bekletebilir;
 kilit/deadlock hatası güvenli rollback ve yeniden ön kontrol gerektirir.
 
+COMMIT yanıtı sırasında bağlantı kesilirse istemci sonucu kesin bilemeyebilir.
+Bu nedenle genel hata mesajı silmenin geri alındığını varsaymaz; kalıcı işlem
+durumu yeniden okunur. Tamamlanma kilidi silmeyle aynı commit'te olduğundan
+belirsiz bir HTTP yanıtı ikinci silmeye izin vermez.
+
 Audit ve eski kasa geçmişi fiziksel korunur. Polimorfik işaretçiler silinen
 kaynak ID'lerini tarihsel olarak göstermeye devam edebilir; arşiv tutarları
 ve işaretçileri yeniden yazılmaz. Bu işlem audit'e normal delete olayları
@@ -124,6 +129,12 @@ CSRF, parola/ifade/token, stale/expired token, eksik metadata/koruma,
 bilinmeyen korunan FK, yarım DDL guard'ı, tekrar/eşzamanlı istek, ara hata
 rollback, checksum farkı rollback ve bağlantı temizliği sınandı.
 Yeni testlerde şema reseti veya finansal koruma atlatma yoktur.
+
+13 Ekim son doğrulamasında test envanteri açık bağlantı veritabanı adıyla
+sınırlandırıldı. Laravel'in şemasız tablo listesi, ayrı commit/rollback prova
+veritabanlarını da kapsıyordu; uygulamanın runtime envanteri zaten yalnız
+aktif şemayı okur. Böylece test beklenen sayıyı veya koruma kümesini gevşetmeden
+aynı sunucudaki bağımsız test veritabanlarını birbirinden ayırır.
 
 Ayrı hotel_account_cleanup_smoke şemasında dış transaction olmadan gerçek
 commit provası yapıldı: 3 cari kartı ve tüm korunan tablolar aynı kaldı; ters

@@ -162,7 +162,7 @@ class CariCleanupService
         } catch (Throwable $exception) {
             Session::forget(self::SESSION_KEY);
             report($exception);
-            throw ValidationException::withMessages(['cleanup' => 'Temizlik tamamlanamadı; bu işlemin yaptığı tüm veri değişiklikleri geri alındı. Ön kontrolü yeniden çalıştırın.']);
+            throw ValidationException::withMessages(['cleanup' => 'Temizlik sonucu doğrulanamadı. Sayfayı yenileyerek kalıcı işlem durumunu kontrol edin. Tekrar denemeden önce ön kontrolü çalıştırın.']);
         } finally {
             // Session variables transaction rollback ile silinmez. Havuzda yeniden
             // kullanılan bağlantıda capability kalmaması için her çıkışta temizlenir.

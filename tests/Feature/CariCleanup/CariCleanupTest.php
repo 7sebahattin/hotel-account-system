@@ -70,7 +70,7 @@ class CariCleanupTest extends TestCase
         $this->assertFalse($report['completed']);
         $this->assertSame([], $report['blockers']);
         $tables = collect($report['tables'])->keyBy('name');
-        $schemaTables = Schema::getTableListing(null, false);
+        $schemaTables = Schema::getTableListing(DB::connection()->getDatabaseName(), false);
         $this->assertCount(count($schemaTables), $tables);
         foreach ($schemaTables as $table) {
             $this->assertSame(DB::table($table)->count(), $tables[$table]['count'], $table);
@@ -653,7 +653,7 @@ class CariCleanupTest extends TestCase
     private function snapshotAllTables(): array
     {
         $snapshot = [];
-        foreach (Schema::getTableListing(null, false) as $table) {
+        foreach (Schema::getTableListing(DB::connection()->getDatabaseName(), false) as $table) {
             $rows = DB::table($table)->get()->map(function (object $row): string {
                 $values = (array) $row;
                 ksort($values);
