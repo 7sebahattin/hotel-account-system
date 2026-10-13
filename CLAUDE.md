@@ -1,5 +1,19 @@
 # CLAUDE.md
 
+## Tamamlanan CARİ temizliğinin geçici ekranını kaldırma — 13 Ekim 2026
+
+Kullanıcı canlıdaki manuel temizliğin tamamlandığını bildirdi ve sayfanın
+kaldırılmasını istedi. Tek seferlik fiziksel silme istisnası artık sona erer.
+CariCleanup runtime modülü, provider kaydı, menü ve bütün HTTP uçları kaldırılır.
+İki finansal DELETE trigger'ı bağımsız geçiş engelleri altında eski koşulsuz
+SIGNAL korumasına döndürülür; normal §6/L1 ve §18 değişmezleri yeniden tam geçerlidir.
+Tamamlanma kaydı/raporu, state ve UPDATE trigger'ları ve bütün tablo satırları
+aynen korunur. Hiçbir veri yeniden silinmez, durum sıfırlanmaz veya sayfa açılmaz.
+Eski migration aynı basename/içerikle database/migrations'a taşınır; geçmiş
+yeniden çalıştırılmaz. Yeni ileri migration bu istisnayı geri açan down içermez.
+Aşağıdaki önceki onaylar tarihsel bağlamdır. Kaldırma notu:
+docs/cari-temizlik-ekranini-kaldirma-2026-10-13.md.
+
 ## Onaylı CARİ veri girişlerini tek seferlik silme istisnası — 12 Ekim 2026
 
 Kullanıcı önceki blokeli ekranın ardından kapsamı açıkça netleştirdi:
