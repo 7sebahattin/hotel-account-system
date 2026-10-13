@@ -268,25 +268,30 @@ class LedgerStatementService
      * `toplam net − (daha yeni satırların neti)`, sonrakiler için bir önceki
      * satırın bakiyesinden o satırın neti düşülerek bulunur. Sorgular:
      * toplam net (1) + sayfalama (2) + daha yeni satırlar (yalnızca 2. sayfadan
-     * itibaren, 1). Kayıt sayısıyla BÜYÜMEZ.
+     * itibaren, 1). Çağıran aynı para biriminin tüm defterden hesaplanan netini
+     * zaten okuduysa currentNet ile geçebilir; toplam net sorgusu tekrarlanmaz.
+     * Kayıt sayısıyla BÜYÜMEZ.
      *
      * @return array{entries: LengthAwarePaginator<int, LedgerEntry>, balances: array<int, Money>}
      */
-    public function recentEntriesWithBalance(Currency $currency, int $perPage, string $pageName = 'page'): array
+    public function recentEntriesWithBalance(Currency $currency, int $perPage, string $pageName = 'page', ?Money $currentNet = null): array
     {
         $ordered = fn () => LedgerEntry::query()
             ->where('currency', $currency->value)
             ->orderByDesc('entry_date')
             ->orderByDesc('id');
 
-        $totals = DB::table('ledger_entries')
-            ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
-            ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
-            ->where('currency', $currency->value)
-            ->first();
+        $running = $currentNet;
+        if ($running === null) {
+            $totals = DB::table('ledger_entries')
+                ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
+                ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
+                ->where('currency', $currency->value)
+                ->first();
 
-        $running = Money::fromDecimal((string) ($totals->total_debit ?? '0'))
-            ->subtract(Money::fromDecimal((string) ($totals->total_credit ?? '0')));
+            $running = Money::fromDecimal((string) ($totals->total_debit ?? '0'))
+                ->subtract(Money::fromDecimal((string) ($totals->total_credit ?? '0')));
+        }
 
         $entries = $ordered()->paginate($perPage, ['*'], $pageName);
         $offset = ($entries->currentPage() - 1) * $entries->perPage();
