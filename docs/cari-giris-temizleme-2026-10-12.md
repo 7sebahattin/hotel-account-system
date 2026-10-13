@@ -1,5 +1,10 @@
 # CARİ veri girişlerinin tek seferlik temizlenmesi — 12 Ekim 2026
 
+> 13 Ekim 2026: Kullanıcı manuel temizliğin tamamlandığını bildirip geçici
+> sayfanın kaldırılmasını istedi. Aşağıdaki geliştirme/kullanım tasarımı
+> tarihsel kayıttır. Güncel kaldırma ve koşulsuz korumaya dönüş notu:
+> cari-temizlik-ekranini-kaldirma-2026-10-13.md.
+
 REPO: 7sebahattin/hotel-account-system
 START_MAIN: e49a2f7bdbd80f64ea053955c237f52f38e6097a
 BRANCH: codex/cari-entry-cleanup

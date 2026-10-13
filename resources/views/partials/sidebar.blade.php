@@ -56,7 +56,6 @@
                 ['route' => 'branding.logos.edit', 'label' => 'Marka Logoları', 'can' => 'brand.manage', 'icon' => 'building'],
                 ['route' => 'monthly-account.providers.index', 'label' => 'Banka / Ödeme Kuruluşları', 'can' => Permission::MonthlyAccountManageProviders->value, 'icon' => 'building'],
                 ['route' => 'audit.index', 'label' => 'Denetim Kayıtları', 'can' => Permission::AuditView->value, 'icon' => 'log'],
-                ['route' => 'cari-cleanup.index', 'label' => 'Cari Veri Temizleme', 'can' => null, 'icon' => 'shield', 'visible' => \Illuminate\Support\Facades\Gate::allows('view', \App\Modules\CariCleanup\Services\CariCleanupService::class) && ! app(\App\Modules\CariCleanup\Services\CariCleanupService::class)->isCompleted()],
             ],
         ],
     ];
@@ -68,7 +67,7 @@
     foreach ($groups as $group) {
         $items = array_values(array_filter(
             $group['items'],
-            fn (array $item): bool => ($item['visible'] ?? true) && ($item['can'] === null || $user->can($item['can'])),
+            fn (array $item): bool => $item['can'] === null || $user->can($item['can']),
         ));
 
         if ($items !== []) {
@@ -107,7 +106,6 @@
         'personnel.kiosk' => ['personnel.kiosk*'],
         'personnel.terminals.index' => ['personnel.terminals.*'],
         'audit.index' => ['audit.*'],
-        'cari-cleanup.index' => ['cari-cleanup.*'],
     ];
 
     $isActive = static fn (string $route): bool => request()->routeIs(...($patterns[$route] ?? [$route]));
