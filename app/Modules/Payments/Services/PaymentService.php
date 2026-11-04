@@ -7,9 +7,9 @@ namespace App\Modules\Payments\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
-use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
@@ -20,14 +20,15 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
 use App\Modules\Payments\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
+use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Exceptions\PaymentHasLinkedAllocations;
 use App\Modules\Payments\Exceptions\PaymentNotCancelled;
 use App\Modules\Payments\Exceptions\PaymentNotTrashed;
-use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Models\Payment;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Database\QueryException;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -331,9 +332,9 @@ class PaymentService
     /**
      * Çöp kutusundaki tahsilatlar (en son çöpe atılan üstte).
      *
-     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, Payment>
+     * @return LengthAwarePaginator<int, Payment>
      */
-    public function trashedPaginated(int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    public function trashedPaginated(int $perPage = 25): LengthAwarePaginator
     {
         return Payment::query()
             ->with(['company', 'creator'])
