@@ -34,7 +34,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
 /**
  * Tahsilat modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -312,7 +311,7 @@ class PaymentService
 
             try {
                 $payment->delete();
-            } catch (Throwable $e) {
+            } catch (\Throwable $e) {
                 // Bağlantı hatası (1451) dışındaki SQL sorunlarını "bağlı dağılım var" diye gizleme.
                 if (! $e instanceof QueryException || (int) ($e->errorInfo[1] ?? 0) !== 1451) {
                     throw $e;
