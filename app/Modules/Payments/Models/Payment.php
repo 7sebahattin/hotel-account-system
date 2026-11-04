@@ -52,6 +52,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $cancelled_at
  * @property int|null $cancelled_by
  * @property string|null $cancellation_reason
+ * @property Carbon|null $trashed_at
+ * @property int|null $trashed_by
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property-read Company|null $company
@@ -126,6 +128,8 @@ class Payment extends Model
             'payment_method' => PaymentMethod::class,
             'status' => PaymentStatus::class,
             'cancelled_at' => 'datetime',
+            'trashed_at' => 'datetime',
+            'trashed_by' => 'integer',
         ];
     }
 
@@ -184,6 +188,11 @@ class Payment extends Model
     public function isMissingExchangeRate(): bool
     {
         return $this->currency !== Currency::TRY && $this->exchange_rate_to_try === null;
+    }
+
+    public function isTrashed(): bool
+    {
+        return $this->trashed_at !== null;
     }
 
     public function isCancelled(): bool

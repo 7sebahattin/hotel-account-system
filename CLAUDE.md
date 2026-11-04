@@ -1,5 +1,27 @@
 # CLAUDE.md
 
+## Onaylı Tahsilat çöp kutusu ve Konaklama fatura işareti — 4 Kasım 2026
+
+Kullanıcı, açık sorulara şu yanıtları vererek iki dar değişikliği onayladı:
+
+- **Tahsilat çöp kutusu:** İptal edilmiş tahsilatı Admin, Patron ve Personel
+  (`payments.create`) çöp kutusuna taşıyabilir ve geri alabilir
+  (`/payments/trash`). Aktif tahsilat çöpe atılamaz (DB CHECK dahil). Çöpe
+  taşıma yalnızca `trashed_at/trashed_by` yazar; cari hareketi, dağılım ve
+  makbuz değişmez. **Kalıcı silme yalnızca Admin'dedir** (`payments.force_delete`,
+  yalnızca çöpteki kayıt) ve §18 "finansal kayıt için hard delete yok"
+  kuralına bilerek açılmış dar istisnadır: yalnızca `payments` satırı silinir;
+  ledger'daki orijinal+ters kayıt çifti (net sıfır) ve denetim kaydı kalır.
+  Tahsilata hiç dağılım uygulanmışsa (`payment_allocations` append-only) FK
+  silmeyi reddeder; kayıt çöpte kalır. `ledger_entries`/`payment_allocations`
+  DELETE trigger'larına DOKUNULMADI. Stays `forceDelete` kalıbıyla aynıdır.
+- **Fatura işareti:** `stays.invoiced_at/invoiced_by` (NULL = kesilmedi) salt bir
+  takip bayrağıdır; e-Fatura/fatura üretimi değildir (§3.2 sürer), finansal alan
+  değildir, cari hareketi üretmez. Admin/Patron/Personel (`stays.update`)
+  değiştirebilir, iptal edilmiş konaklamada değişmez; her geçiş onay penceresi
+  ister ve denetim kaydına yazılır. Testler: `PaymentTrashTest`,
+  `StayInvoiceToggleTest`.
+
 ## Tamamlanan CARİ temizliğinin geçici ekranını kaldırma — 13 Ekim 2026
 
 Kullanıcı canlıdaki manuel temizliğin tamamlandığını bildirdi ve sayfanın

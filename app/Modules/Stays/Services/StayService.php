@@ -248,6 +248,47 @@ class StayService
     }
 
     /**
+     * "Fatura kesildi / kesilmedi" takip işaretini değiştirir.
+     *
+     * Finansal alan DEĞİLDİR: cari hareketi üretmez, ters kayıt gerektirmez.
+     * Yalnızca kim/ne zaman denetim kaydına yazılır. İptal edilmiş konaklamada
+     * değişmez.
+     *
+     * @throws CannotUpdateCancelledStay
+     */
+    public function setInvoiced(Stay $stay, bool $invoiced, ?User $actor = null): Stay
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($stay, $invoiced, $user): Stay {
+            $fresh = Stay::query()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
+            $stay->setRawAttributes($fresh->getAttributes(), true);
+            if ($stay->isCancelled()) {
+                throw CannotUpdateCancelledStay::make($stay->id);
+            }
+            if ($stay->isInvoiced() === $invoiced) {
+                return $stay;
+            }
+
+            $stay->forceFill([
+                'invoiced_at' => $invoiced ? Carbon::now() : null,
+                'invoiced_by' => $invoiced ? $user->getKey() : null,
+                'updated_by' => $user->getKey(),
+            ])->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::Updated,
+                subject: $stay,
+                oldValues: ['invoiced' => ! $invoiced],
+                newValues: ['invoiced' => $invoiced],
+                user: $user,
+            );
+
+            return $stay;
+        });
+    }
+
+    /**
      * Konaklamayı veritabanından KALICI olarak siler (hard delete).
      *
      * Yalnızca `StayPolicy::forceDelete()`ten geçen çağrılar buraya ulaşır

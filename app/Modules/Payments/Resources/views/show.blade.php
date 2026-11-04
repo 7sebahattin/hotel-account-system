@@ -9,7 +9,12 @@
                 {{ $payment->company?->name ?? '—' }}
                 · <span class="tabular-nums">{{ $payment->payment_date->format('d.m.Y') }}</span>
             </p>
-            <div class="mt-2">@include('payments::_status', ['payment' => $payment])</div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                @include('payments::_status', ['payment' => $payment])
+                @if ($payment->isTrashed())
+                    <x-ui.badge tone="neutral">Çöp kutusunda</x-ui.badge>
+                @endif
+            </div>
         </x-slot:meta>
 
         <x-slot:actions>
@@ -19,6 +24,30 @@
 
             @can('update', $payment)
                 <x-ui.button :href="route('payments.edit', $payment)">Bilgileri düzenle</x-ui.button>
+            @endcan
+
+            {{-- İptal edilmiş tahsilat herkes tarafından çöp kutusuna taşınabilir. --}}
+            @can('trash', $payment)
+                <form method="POST" action="{{ route('payments.move-to-trash', $payment) }}"
+                      onsubmit="return confirm('Bu tahsilat çöp kutusuna taşınsın mı? Listelerden kalkar; cari hareketi etkilenmez. Çöp kutusundan geri alınabilir.')">
+                    @csrf @method('PATCH')
+                    <x-ui.button type="submit" variant="danger">Çöp kutusuna taşı</x-ui.button>
+                </form>
+            @endcan
+
+            @can('restore', $payment)
+                <form method="POST" action="{{ route('payments.restore', $payment) }}">
+                    @csrf @method('PATCH')
+                    <x-ui.button type="submit" variant="secondary">Çöp kutusundan geri al</x-ui.button>
+                </form>
+            @endcan
+
+            @can('forceDelete', $payment)
+                <form method="POST" action="{{ route('payments.destroy', $payment) }}"
+                      onsubmit="return confirm('Bu tahsilat kaydı veritabanından KALICI olarak silinecek. Bu işlem GERİ ALINAMAZ. Emin misiniz?')">
+                    @csrf @method('DELETE')
+                    <x-ui.button type="submit" variant="danger">Kalıcı olarak sil</x-ui.button>
+                </form>
             @endcan
         </x-slot:actions>
     </x-ui.page-header>

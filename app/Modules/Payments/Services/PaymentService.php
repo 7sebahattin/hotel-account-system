@@ -9,6 +9,7 @@ use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
+use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
@@ -19,8 +20,13 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
 use App\Modules\Payments\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
+use App\Modules\Payments\Exceptions\PaymentHasLinkedAllocations;
+use App\Modules\Payments\Exceptions\PaymentNotCancelled;
+use App\Modules\Payments\Exceptions\PaymentNotTrashed;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use App\Modules\Payments\Models\Payment;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -207,6 +213,142 @@ class PaymentService
     }
 
     /**
+     * İptal edilmiş tahsilatı ÇÖP KUTUSUNA taşır (herkes — PaymentPolicy::trash).
+     *
+     * Cari hareketine, dağılıma veya makbuza dokunmaz; yalnızca kaydı normal
+     * listelerden gizler. Aktif tahsilat çöpe atılamaz.
+     *
+     * @throws PaymentNotCancelled
+     */
+    public function trash(Payment $payment, ?User $actor = null): Payment
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($payment, $user): Payment {
+            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            if (! $fresh->isCancelled()) {
+                throw PaymentNotCancelled::make($fresh->id);
+            }
+            $payment->setRawAttributes($fresh->getAttributes(), true);
+            if ($payment->isTrashed()) {
+                return $payment;
+            }
+
+            $payment->trashed_at = Carbon::now();
+            $payment->trashed_by = $user->getKey();
+            $payment->updated_by = $user->getKey();
+            $payment->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::Deleted,
+                subject: $payment,
+                oldValues: ['trashed_at' => null],
+                newValues: ['trashed_at' => $payment->trashed_at->toDateTimeString(), 'trashed_by' => $user->getKey(), 'trash' => true],
+                user: $user,
+            );
+
+            return $payment;
+        });
+    }
+
+    /** Çöpteki tahsilatı listeye geri alır. */
+    public function restore(Payment $payment, ?User $actor = null): Payment
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($payment, $user): Payment {
+            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $payment->setRawAttributes($fresh->getAttributes(), true);
+            if (! $payment->isTrashed()) {
+                return $payment;
+            }
+
+            $payment->trashed_at = null;
+            $payment->trashed_by = null;
+            $payment->updated_by = $user->getKey();
+            $payment->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::Restored,
+                subject: $payment,
+                oldValues: ['trash' => true],
+                newValues: ['trashed_at' => null, 'trash' => false],
+                user: $user,
+            );
+
+            return $payment;
+        });
+    }
+
+    /**
+     * Çöpteki tahsilatı veritabanından KALICI siler — yalnızca Admin.
+     *
+     * Ledger append-only olduğu için (§6/L1) iptalde yazılan orijinal + ters
+     * kayıt çifti deftere yazılı KALIR (net sıfır); yalnızca artık gereksiz
+     * Payment satırı kaldırılır. Tahsilata hiç dağılım uygulanmışsa
+     * (`payment_allocations` append-only'dir) FK kısıtı silmeyi reddeder ve
+     * bu durum PaymentHasLinkedAllocations olarak dışarı taşınır.
+     *
+     * @throws PaymentNotTrashed
+     * @throws PaymentHasLinkedAllocations
+     */
+    public function forceDelete(Payment $payment, ?User $actor = null): void
+    {
+        $user = $this->resolveActor($actor);
+        if (! $user->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+
+        DB::transaction(function () use ($payment, $user): void {
+            app(CompanyService::class)->lockAccounts([$payment->company_id]);
+            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            if (! $fresh->isTrashed() || ! $fresh->isCancelled()) {
+                throw PaymentNotTrashed::make($fresh->id);
+            }
+            $payment->setRawAttributes($fresh->getAttributes(), true);
+            $before = $this->snapshot($payment);
+
+            try {
+                $payment->delete();
+            } catch (QueryException $e) {
+                // Bağlantı hatası dışındaki SQL sorunlarını "bağlı dağılım var" diye gizleme.
+                if ((int) ($e->errorInfo[1] ?? 0) !== 1451) {
+                    throw $e;
+                }
+                throw PaymentHasLinkedAllocations::make($payment->getKey(), previous: $e);
+            }
+
+            $this->auditLogger->log(
+                event: AuditEvent::Deleted,
+                subject: $payment,
+                oldValues: $before,
+                newValues: ['permanently_deleted' => true],
+                user: $user,
+            );
+        });
+    }
+
+    /**
+     * Çöp kutusundaki tahsilatlar (en son çöpe atılan üstte).
+     *
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<int, Payment>
+     */
+    public function trashedPaginated(int $perPage = 25): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    {
+        return Payment::query()
+            ->with(['company', 'creator'])
+            ->whereNotNull('trashed_at')
+            ->orderByDesc('trashed_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+    }
+
+    public function trashedCount(): int
+    {
+        return Payment::query()->whereNotNull('trashed_at')->count();
+    }
+
+    /**
      * Firmanın son tahsilatları — firma detay ekranı için.
      *
      * @return Collection<int, Payment>
@@ -215,6 +357,7 @@ class PaymentService
     {
         return Payment::query()
             ->where('company_id', $companyId)
+            ->whereNull('trashed_at')
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->limit($limit)
@@ -223,7 +366,7 @@ class PaymentService
 
     public function countForCompany(int $companyId): int
     {
-        return Payment::query()->where('company_id', $companyId)->count();
+        return Payment::query()->where('company_id', $companyId)->whereNull('trashed_at')->count();
     }
 
     /**
@@ -770,6 +913,7 @@ class PaymentService
     public function recent(int $limit = 10): Collection
     {
         return Payment::query()
+            ->whereNull('trashed_at')
             ->orderByDesc('payment_date')
             ->orderByDesc('id')
             ->limit($limit)

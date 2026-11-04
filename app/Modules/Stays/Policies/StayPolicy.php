@@ -72,6 +72,16 @@ class StayPolicy
             && $user->can(Permission::StaysForceDelete->value) && $stay->isCancelled();
     }
 
+    /**
+     * Fatura kesildi/kesilmedi işareti: konaklama düzenleyebilen herkes
+     * (Admin/Patron/Personel) değiştirebilir; kayıt sahipliği/süre penceresi
+     * ARANMAZ çünkü finansal alan değildir. İptal edilmiş kayıtta değişmez.
+     */
+    public function toggleInvoice(User $user, Stay $stay): bool
+    {
+        return $user->can(Permission::StaysUpdate->value) && ! $stay->isCancelled();
+    }
+
     private function isOwnRecentRecord(User $user, Stay $stay): bool
     {
         if ($stay->created_by !== $user->getKey()) {

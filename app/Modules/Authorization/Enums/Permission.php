@@ -45,6 +45,14 @@ enum Permission: string
     case PaymentsCreate = 'payments.create';
     case PaymentsCancel = 'payments.cancel';
 
+    /**
+     * Çöp kutusundaki tahsilatı veritabanından KALICI siler — yalnızca Admin
+     * (RoleName::Admin tüm yetkileri alır), yalnızca çöpteki iptal edilmiş
+     * tahsilatta (PaymentPolicy::forceDelete). Çöpe taşıma/geri alma ayrı
+     * yetki gerektirmez (payments.create).
+     */
+    case PaymentsForceDelete = 'payments.force_delete';
+
     case LedgerView = 'ledger.view';
     case LedgerViewAll = 'ledger.view_all';
 
@@ -99,7 +107,8 @@ enum Permission: string
             self::StaysView, self::StaysCreate,
             self::StaysUpdate, self::StaysDelete, self::StaysForceDelete => 'Konaklamalar',
             self::RoomsManage => 'Odalar',
-            self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
+            self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel,
+            self::PaymentsForceDelete => 'Tahsilatlar',
             self::LedgerView, self::LedgerViewAll => 'Cari Hesap',
             self::DashboardFinancial => 'Dashboard',
             self::ExportExcel => 'Dışa Aktarma',
@@ -136,6 +145,7 @@ enum Permission: string
             self::PaymentsView => 'Tahsilatları görüntüle',
             self::PaymentsCreate => 'Cari tahsilat',
             self::PaymentsCancel => 'Tahsilat iptal et',
+            self::PaymentsForceDelete => 'Çöp kutusundaki tahsilatı kalıcı olarak sil',
             self::LedgerView => 'Firma cari ekstresini görüntüle',
             self::LedgerViewAll => 'Tüm firma bakiyelerini ve toplam alacağı görüntüle',
             self::DashboardFinancial => 'Finansal dashboard kartlarını görüntüle',
