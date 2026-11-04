@@ -232,7 +232,10 @@ class PaymentCrudTest extends TestCase
         ]);
     }
 
-    /** Tahsilat SİLİNMEZ: ne route, ne servis metodu, ne soft delete kolonu. */
+    /**
+     * Olağan silme/geri alma akışı yoktur: iptal geri alınamaz, soft delete kolonu yoktur.
+     * Kalıcı silme YALNIZCA çöp kutusu + Admin istisnasıdır (PaymentTrashTest, 4 Kasım 2026).
+     */
     #[Test]
     public function silme_ve_geri_alma_akisi_yoktur(): void
     {

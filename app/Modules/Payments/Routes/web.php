@@ -62,9 +62,9 @@ Route::middleware('auth')->prefix('payments')->name('payments.')->group(function
 
     Route::patch('{payment}/restore', [PaymentController::class, 'restore'])
         ->middleware('can:'.Permission::PaymentsCreate->value)
-        ->name('restore');
+        ->name('untrash');
 
     Route::delete('{payment}', [PaymentController::class, 'destroy'])
         ->middleware('can:'.Permission::PaymentsForceDelete->value)
-        ->name('destroy');
+        ->name('force-delete');
 });

@@ -94,7 +94,7 @@ class PaymentTrashTest extends TestCase
         $this->assertCount(0, $index->viewData('payments')->items());
 
         $trash = $this->actingAs($this->userWithRole(RoleName::Personel))->get(route('payments.trash'));
-        $trash->assertOk()->assertSee('Çöp kutusu boş.', false);
+        $trash->assertOk()->assertDontSee('Çöp kutusu boş.', false);
         $this->assertCount(1, $trash->viewData('payments')->items());
     }
 
@@ -105,7 +105,7 @@ class PaymentTrashTest extends TestCase
         $this->payments->trash($payment, $this->admin);
 
         $this->actingAs($this->userWithRole(RoleName::Personel))
-            ->patch(route('payments.restore', $payment))->assertRedirect(route('payments.trash'));
+            ->patch(route('payments.untrash', $payment))->assertRedirect(route('payments.trash'));
 
         $this->assertFalse($payment->fresh()->isTrashed());
     }
@@ -119,11 +119,11 @@ class PaymentTrashTest extends TestCase
 
         foreach ([RoleName::Patron, RoleName::Personel] as $role) {
             $this->actingAs($this->userWithRole($role))
-                ->delete(route('payments.destroy', $payment))->assertForbidden();
+                ->delete(route('payments.force-delete', $payment))->assertForbidden();
         }
         $this->assertDatabaseHas('payments', ['id' => $payment->id]);
 
-        $this->actingAs($this->admin)->delete(route('payments.destroy', $payment))
+        $this->actingAs($this->admin)->delete(route('payments.force-delete', $payment))
             ->assertRedirect(route('payments.trash'));
 
         $this->assertDatabaseMissing('payments', ['id' => $payment->id]);
@@ -136,7 +136,7 @@ class PaymentTrashTest extends TestCase
     {
         $payment = $this->cancelledPayment();
 
-        $this->actingAs($this->admin)->delete(route('payments.destroy', $payment))->assertForbidden();
+        $this->actingAs($this->admin)->delete(route('payments.force-delete', $payment))->assertForbidden();
         $this->assertDatabaseHas('payments', ['id' => $payment->id]);
     }
 

@@ -226,7 +226,8 @@ class StayListingTest extends TestCase
         // TEK etkileşimli öğe ⋮ menüsüdür ve bağlantıların hepsi onun içindedir.
         $rowLinks = $xpath->query('//table//tbody/tr[@data-stay-row-url]//a')->length;
         $this->assertSame($rowLinks, $xpath->query('//table//tbody/tr[@data-stay-row-url]//details[@data-stay-row-menu]//a')->length);
-        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//button')->length);
+        // Fatura kesildi/kesilmedi anahtarı (4 Kasım 2026, kullanıcı talimatı) tek istisnadır.
+        $this->assertSame(0, $xpath->query('//table//tbody/tr[@data-stay-row-url]//button[not(@role="switch")]')->length);
         $this->assertSame(1, $xpath->query('//div[contains(@class, "xl:hidden")]//a[@href="'.route('stays.show', $stay).'"]')->length);
     }
 }
