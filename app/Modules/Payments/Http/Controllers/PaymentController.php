@@ -174,7 +174,7 @@ class PaymentController extends Controller
     {
         $this->authorize('restore', $payment);
 
-        $this->payments->restore($payment, $request->user());
+        $this->payments->restoreFromTrash($payment, $request->user());
 
         return redirect()->route('payments.trash')
             ->with('success', 'Tahsilat çöp kutusundan geri alındı.');

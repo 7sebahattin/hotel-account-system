@@ -34,6 +34,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Tahsilat modülünün dışa açık tek kapısı (CLAUDE.md §4.3).
@@ -253,7 +254,7 @@ class PaymentService
     }
 
     /** Çöpteki tahsilatı listeye geri alır. */
-    public function restore(Payment $payment, ?User $actor = null): Payment
+    public function restoreFromTrash(Payment $payment, ?User $actor = null): Payment
     {
         $user = $this->resolveActor($actor);
 
@@ -311,9 +312,9 @@ class PaymentService
 
             try {
                 $payment->delete();
-            } catch (QueryException $e) {
-                // Bağlantı hatası dışındaki SQL sorunlarını "bağlı dağılım var" diye gizleme.
-                if ((int) ($e->errorInfo[1] ?? 0) !== 1451) {
+            } catch (Throwable $e) {
+                // Bağlantı hatası (1451) dışındaki SQL sorunlarını "bağlı dağılım var" diye gizleme.
+                if (! $e instanceof QueryException || (int) ($e->errorInfo[1] ?? 0) !== 1451) {
                     throw $e;
                 }
                 throw PaymentHasLinkedAllocations::make($payment->getKey(), previous: $e);
