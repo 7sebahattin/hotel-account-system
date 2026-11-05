@@ -42,6 +42,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $try_equivalent
  * @property string|null $notes
  * @property StayStatus $status
+ * @property Carbon|null $invoiced_at
+ * @property int|null $invoiced_by
  * @property int $created_by
  * @property int|null $updated_by
  * @property Carbon $created_at
@@ -94,6 +96,8 @@ class Stay extends Model
             'exchange_rate_to_try' => 'decimal:4',
             'try_equivalent' => 'decimal:2',
             'status' => StayStatus::class,
+            'invoiced_at' => 'datetime',
+            'invoiced_by' => 'integer',
             'nights' => 'integer',
         ];
     }
@@ -170,6 +174,12 @@ class Stay extends Model
     public static function calculateDailyAmount(Money $dailyRate, int $nights): Money
     {
         return $dailyRate->multiply($nights);
+    }
+
+    /** Fatura kesildi mi? (Yalnızca takip işareti — e-Fatura entegrasyonu değildir.) */
+    public function isInvoiced(): bool
+    {
+        return $this->invoiced_at !== null;
     }
 
     public function isCancelled(): bool

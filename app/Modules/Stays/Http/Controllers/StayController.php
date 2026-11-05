@@ -150,6 +150,23 @@ class StayController extends Controller
             ->with('success', 'Konaklama iptal edildi ve cari hareketi ters kaydedildi.');
     }
 
+    /** Fatura kesildi / kesilmedi işareti (finansal alan değildir). */
+    public function toggleInvoice(Request $request, Stay $stay): RedirectResponse
+    {
+        $this->authorize('toggleInvoice', $stay);
+        $data = $request->validate(['invoiced' => ['required', 'boolean']]);
+
+        try {
+            $this->stays->setInvoiced($stay, (bool) $data['invoiced'], $request->user());
+        } catch (CannotUpdateCancelledStay $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $data['invoiced']
+            ? 'Konaklama "fatura kesildi" olarak işaretlendi.'
+            : 'Konaklama "fatura kesilmedi" olarak işaretlendi.');
+    }
+
     /**
      * Kalıcı silme (hard delete) — YALNIZCA Admin, YALNIZCA zaten iptal
      * edilmiş bir kayıtta (StayPolicy::forceDelete).

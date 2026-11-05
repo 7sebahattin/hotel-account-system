@@ -37,6 +37,11 @@ Route::middleware('auth')->prefix('stays')->name('stays.')->group(function (): v
         ->middleware('can:'.Permission::StaysUpdate->value)
         ->name('update');
 
+    // Fatura kesildi/kesilmedi takip işareti — konaklama düzenleyebilen herkes.
+    Route::patch('{stay}/invoice', [StayController::class, 'toggleInvoice'])
+        ->middleware('can:'.Permission::StaysUpdate->value)
+        ->name('invoice');
+
     // V1'de konaklama SİLİNMEZ, iptal edilir. Yetki adı stays.delete kalır.
     Route::patch('{stay}/cancel', [StayController::class, 'cancel'])
         ->middleware('can:'.Permission::StaysDelete->value)

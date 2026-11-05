@@ -44,6 +44,7 @@
 
     <x-ui.card title="Ödeme durumu" class="mt-4 p-5">
         @include('stays::_payment-status')
+        @include('stays::_invoice-toggle', ['interactive' => true])
         @if ($paymentSummary['legacy'])
             <p class="mt-2 text-xs text-mut">Bu hesapta geçmiş tahsilatlar henüz konaklamalarla eşleştirilmedi. Kesin cari bakiye için ekstreyi kullanın.</p>
         @endif

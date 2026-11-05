@@ -5,6 +5,7 @@
     <x-ui.page-header title="Tahsilatlar"
                       :subtitle="number_format($payments->total(), 0, ',', '.').' tahsilat kaydı'">
         <x-slot:actions>
+            <x-ui.button variant="secondary" :href="route('payments.trash')">Çöp kutusu ({{ $trashedCount }})</x-ui.button>
             @can('create', \App\Modules\Payments\Models\Payment::class)
                 <x-ui.button :href="route('payments.create')">Cari Tahsilat</x-ui.button>
             @endcan

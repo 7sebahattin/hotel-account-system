@@ -263,7 +263,7 @@
                                 {{ $stay->amountMoney()->format($stay->currency) }}
                                 <x-ui.fx-note :rate="$stay->exchange_rate_to_try" :equivalent="$stay->tryEquivalentMoney()" class="max-w-32 ml-auto whitespace-normal text-right font-normal" />
                             </td>
-                            <td class="px-3 py-3 whitespace-nowrap">@include('stays::_payment-status')</td>
+                            <td class="px-3 py-3 whitespace-nowrap">@include('stays::_payment-status')@include('stays::_invoice-toggle', ['interactive' => true])</td>
                             <td class="px-3 py-3">
                                 <div class="flex items-center gap-2">
                                     @include('stays::_creator', ['stay' => $stay])
@@ -315,7 +315,7 @@
                                 @if ($stay->roomLabel()) · Oda <span class="tabular-nums">{{ $stay->roomLabel() }}</span> @endif</span>
                         </p>
 
-                        <span class="shrink-0 text-right">@include('stays::_payment-status')</span>
+                        <span class="shrink-0 text-right">@include('stays::_payment-status')@include('stays::_invoice-toggle')</span>
                     </div>
                 </a>
             @empty
