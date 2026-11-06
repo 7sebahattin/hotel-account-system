@@ -11,11 +11,6 @@ Route::middleware('auth')->prefix('payments')->name('payments.')->group(function
         ->middleware('can:'.Permission::PaymentsView->value)
         ->name('index');
 
-    // Çöp kutusu — {payment} joker rotalarından ÖNCE tanımlanmalıdır.
-    Route::get('trash', [PaymentController::class, 'trash'])
-        ->middleware('can:'.Permission::PaymentsView->value)
-        ->name('trash');
-
     Route::get('create', [PaymentController::class, 'create'])
         ->middleware('can:'.Permission::PaymentsCreate->value)
         ->name('create');
@@ -54,17 +49,9 @@ Route::middleware('auth')->prefix('payments')->name('payments.')->group(function
         ->middleware('can:'.Permission::PaymentsCancel->value)
         ->name('cancel');
 
-    // Çöp kutusu: iptal edilmiş tahsilatı herkes (payments.create) çöpe atar
-    // ve geri alır; KALICI silme yalnızca Admin'dedir (PaymentPolicy::forceDelete).
+    // "Sil" = ortak Çöp Kutusu'na taşı (aktifse önce iptal edilir). Geri alma ve
+    // kalıcı silme /trash ekranındadır (Trash modülü).
     Route::patch('{payment}/trash', [PaymentController::class, 'moveToTrash'])
         ->middleware('can:'.Permission::PaymentsCreate->value)
         ->name('move-to-trash');
-
-    Route::patch('{payment}/restore', [PaymentController::class, 'restore'])
-        ->middleware('can:'.Permission::PaymentsCreate->value)
-        ->name('untrash');
-
-    Route::delete('{payment}', [PaymentController::class, 'destroy'])
-        ->middleware('can:'.Permission::PaymentsForceDelete->value)
-        ->name('force-delete');
 });

@@ -281,30 +281,23 @@ class StayCrudTest extends TestCase
     }
 
     /**
-     * Kalıcı silme (hard delete), kullanıcı talimatıyla eklenen DAR bir
-     * istisnadır (bkz. StayForceDeleteTest): yalnızca `stays.force_delete`
-     * yetkisiyle (yalnızca Admin'e atanır) ve yalnızca ZATEN iptal edilmiş
-     * bir kayıtta çalışır — genel kural hâlâ geçerlidir, konaklama SERBESTÇE
-     * silinemez. Bu test, ucun TEK ve BEKLENEN rotadan ibaret kaldığını,
-     * genel bir "silme" kapısına DÖNÜŞMEDİĞİNİ doğrular.
+     * 6 Kasım 2026: konaklamanın doğrudan DELETE ucu YOKTUR. "Sil" yalnızca çöp
+     * kutusuna taşımadır (PATCH, stays.delete yetkisi); geri alma ve KALICI silme
+     * ortak Çöp Kutusu ekranındadır (trash.destroy, yalnızca Admin).
      */
     #[Test]
-    public function hard_delete_ucu_yalnizca_dar_bir_istisnadir(): void
+    public function konaklamanin_dogrudan_silme_ucu_yoktur_yalnizca_cop_kutusuna_tasima_vardir(): void
     {
         $this->assertTrue(Schema::hasColumn('stays', 'deleted_at'));
 
         $deleteRoutes = collect(app('router')->getRoutes()->getRoutes())
             ->filter(fn ($route) => str_contains($route->uri(), 'stays')
                 && in_array('DELETE', $route->methods(), true));
+        $this->assertCount(0, $deleteRoutes, 'Konaklama için doğrudan DELETE ucu olmamalı');
 
-        $this->assertCount(1, $deleteRoutes, 'Tek DELETE ucu: kalıcı silme (stays.destroy)');
-
-        $route = $deleteRoutes->first();
-        $this->assertSame('stays.destroy', $route->getName());
-        $this->assertContains(
-            'can:'.Permission::StaysForceDelete->value,
-            $route->middleware(),
-            'Bu uç yalnızca dar force_delete yetkisiyle korunmalı, genel stays.delete ile DEĞİL',
-        );
+        $trash = app('router')->getRoutes()->getByName('stays.trash');
+        $this->assertNotNull($trash);
+        $this->assertContains('PATCH', $trash->methods());
+        $this->assertContains('can:'.Permission::StaysDelete->value, $trash->middleware());
     }
 }

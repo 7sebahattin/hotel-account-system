@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Companies\Services;
 
 use App\Models\User;
+use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Enums\AccountType;
 use App\Modules\Companies\Exceptions\CompanyHasLedgerEntries;
 use App\Modules\Companies\Models\Company;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Ledger\Services\LedgerService;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -109,6 +114,54 @@ class CompanyService
         DB::transaction(function () use ($company): void {
             $company->delete();
         });
+    }
+
+    /**
+     * Çöp kutusundaki (soft delete) firmalar.
+     *
+     * @return Collection<int, Company>
+     */
+    public function trashed(int $limit = 300): Collection
+    {
+        return Company::onlyTrashed()->orderByDesc('deleted_at')->limit($limit)->get();
+    }
+
+    public function trashedCount(): int
+    {
+        return Company::onlyTrashed()->count();
+    }
+
+    public function findIncludingTrashed(int $id): Company
+    {
+        return Company::withTrashed()->findOrFail($id);
+    }
+
+    /**
+     * Çöpteki firmayı KALICI siler — yalnızca Admin. Cari hareketi (defter satırı)
+     * olan firma silinemez (CLAUDE.md §5.2); önce o kayıtlar çöpten kalıcı silinmelidir.
+     *
+     * @throws TrashActionFailed
+     */
+    public function forceDelete(Company $company, User $actor): void
+    {
+        if (! $actor->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+        if (! $company->trashed()) {
+            throw new TrashActionFailed('Firma çöp kutusunda değil.');
+        }
+        if ($this->ledger->hasEntriesForCompany($company->getKey())) {
+            throw new TrashActionFailed("«{$company->name}» firmasının cari hareketi var; kalıcı silinemez. Önce bağlı konaklama/tahsilatlar kalıcı silinmelidir.");
+        }
+
+        try {
+            DB::transaction(fn () => $company->forceDelete());
+        } catch (\Throwable $e) {
+            if ($e instanceof QueryException) {
+                throw new TrashActionFailed("«{$company->name}» firması başka kayıtlarla (konaklama, tahsilat, teklif…) bağlantılı olduğundan kalıcı silinemedi.", 0, $e);
+            }
+            throw $e;
+        }
     }
 
     public function restore(Company $company): void

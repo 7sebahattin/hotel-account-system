@@ -127,7 +127,7 @@ class CompanyController extends Controller
         }
 
         return redirect()->route('companies.index')
-            ->with('success', 'Firma silindi. Kayıt saklanır, geri alınabilir.');
+            ->with('success', 'Firma çöp kutusuna taşındı. Çöp Kutusu\'ndan geri alınabilir.');
     }
 
     public function restore(Company $company): RedirectResponse

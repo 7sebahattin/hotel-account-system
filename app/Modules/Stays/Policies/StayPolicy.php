@@ -6,7 +6,6 @@ namespace App\Modules\Stays\Policies;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
-use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Stays\Models\Stay;
 
 class StayPolicy
@@ -58,18 +57,13 @@ class StayPolicy
     }
 
     /**
-     * Kalıcı silme (hard delete) — yalnızca Admin'e açık, YALNIZCA zaten
-     * iptal edilmiş bir kayıtta.
-     *
-     * Ledger append-only'dir (CLAUDE.md §6/L1): aktif bir konaklamanın borcu
-     * deftere zaten işlenmiştir ve hard-delete bu borcu KALDIRAMAZ — yalnızca
-     * kaynak Stay satırını izsiz bırakır. Bu yüzden hard-delete, borcu ters
-     * kayıtla zaten sıfırlanmış (İptal edilmiş) kayıtlarla sınırlıdır.
+     * "Sil" = çöp kutusuna taşı. Konaklamayı iptal edebilen (stays.delete) kullanıcı
+     * çöpe de atabilir; aktif konaklama önce iptal edilir (ters kayıt). Geri alma ve
+     * kalıcı silme ortak Çöp Kutusu ekranındadır (Core\Trash).
      */
-    public function forceDelete(User $user, Stay $stay): bool
+    public function trash(User $user, Stay $stay): bool
     {
-        return $user->hasRole(RoleName::Admin->value)
-            && $user->can(Permission::StaysForceDelete->value) && $stay->isCancelled();
+        return $user->can(Permission::StaysDelete->value);
     }
 
     /**

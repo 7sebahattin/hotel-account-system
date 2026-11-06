@@ -91,14 +91,15 @@ class RoomCrudTest extends TestCase
     }
 
     #[Test]
-    public function kullanilmamis_oda_silinebilir(): void
+    public function kullanilmamis_oda_cope_tasinabilir(): void
     {
         $admin = $this->userWithRole(RoleName::Admin);
         $room = Room::factory()->create();
 
         $this->actingAs($admin)->delete(route('rooms.destroy', $room))->assertRedirect(route('rooms.index'));
 
-        $this->assertDatabaseMissing('rooms', ['id' => $room->id]);
+        // 6 Kasım 2026: silme artık çöp kutusuna taşımadır (soft delete).
+        $this->assertSoftDeleted('rooms', ['id' => $room->id]);
     }
 
     #[Test]

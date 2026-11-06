@@ -110,6 +110,6 @@ class UserController extends Controller
         }
 
         return redirect()->route('users.index')
-            ->with('success', 'Kullanıcı silindi.');
+            ->with('success', 'Kullanıcı çöp kutusuna taşındı. Çöp Kutusu\'ndan geri alınabilir.');
     }
 }

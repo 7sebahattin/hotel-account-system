@@ -11,6 +11,8 @@ use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Core\Trash\FinancialPurgeGate;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Payments\Enums\AllocationMode;
@@ -21,12 +23,8 @@ use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
 use App\Modules\Payments\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
-use App\Modules\Payments\Exceptions\PaymentHasLinkedAllocations;
-use App\Modules\Payments\Exceptions\PaymentNotCancelled;
-use App\Modules\Payments\Exceptions\PaymentNotTrashed;
 use App\Modules\Payments\Models\Payment;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -214,12 +212,11 @@ class PaymentService
     }
 
     /**
-     * İptal edilmiş tahsilatı ÇÖP KUTUSUNA taşır (herkes — PaymentPolicy::trash).
+     * Tahsilatı ÇÖP KUTUSUNA taşır ("Sil").
      *
-     * Cari hareketine, dağılıma veya makbuza dokunmaz; yalnızca kaydı normal
-     * listelerden gizler. Aktif tahsilat çöpe atılamaz.
-     *
-     * @throws PaymentNotCancelled
+     * Aktif bir tahsilat önce İPTAL edilir (cari ters kayıt + dağılım çözülür) ve
+     * ancak sonra çöpe girer; böylece çöpteki her tahsilat net sıfırdır. Zaten
+     * iptal edilmişse yalnızca çöpe taşınır. Tek transaction.
      */
     public function trash(Payment $payment, ?User $actor = null): Payment
     {
@@ -227,12 +224,13 @@ class PaymentService
 
         return DB::transaction(function () use ($payment, $user): Payment {
             $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
-            if (! $fresh->isCancelled()) {
-                throw PaymentNotCancelled::make($fresh->id);
-            }
             $payment->setRawAttributes($fresh->getAttributes(), true);
             if ($payment->isTrashed()) {
                 return $payment;
+            }
+            if (! $payment->isCancelled()) {
+                $this->cancel($payment, 'Silindi (çöp kutusuna taşındı)', $user);
+                $payment->refresh();
             }
 
             $payment->trashed_at = Carbon::now();
@@ -252,7 +250,7 @@ class PaymentService
         });
     }
 
-    /** Çöpteki tahsilatı listeye geri alır. */
+    /** Çöpteki tahsilatı listeye geri alır (iptal edilmiş olarak; iptal geri alınmaz). */
     public function restoreFromTrash(Payment $payment, ?User $actor = null): Payment
     {
         $user = $this->resolveActor($actor);
@@ -282,16 +280,15 @@ class PaymentService
     }
 
     /**
-     * Çöpteki tahsilatı veritabanından KALICI siler — yalnızca Admin.
+     * Çöpteki tahsilatı KOMPLE siler — yalnızca Admin: tahsilat satırı + ona bağlı
+     * dağılım satırları + defter (ledger) satırları (orijinal + ters kayıt).
      *
-     * Ledger append-only olduğu için (§6/L1) iptalde yazılan orijinal + ters
-     * kayıt çifti deftere yazılı KALIR (net sıfır); yalnızca artık gereksiz
-     * Payment satırı kaldırılır. Tahsilata hiç dağılım uygulanmışsa
-     * (`payment_allocations` append-only'dir) FK kısıtı silmeyi reddeder ve
-     * bu durum PaymentHasLinkedAllocations olarak dışarı taşınır.
+     * Çöpe yalnızca iptal edilmiş tahsilat girdiği için defter satırları net
+     * sıfırdır; bu bir güvenlik kontrolü olarak yeniden doğrulanır ve bakiye
+     * değişmez. DELETE tetikleyicileri yalnızca `FinancialPurgeGate` açıkken ve
+     * yalnızca burada sayılan kimlikler için izin verir. Hepsi tek transaction.
      *
-     * @throws PaymentNotTrashed
-     * @throws PaymentHasLinkedAllocations
+     * @throws TrashActionFailed
      */
     public function forceDelete(Payment $payment, ?User $actor = null): void
     {
@@ -304,26 +301,40 @@ class PaymentService
             app(CompanyService::class)->lockAccounts([$payment->company_id]);
             $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if (! $fresh->isTrashed() || ! $fresh->isCancelled()) {
-                throw PaymentNotTrashed::make($fresh->id);
+                throw new TrashActionFailed("#{$fresh->id} numaralı tahsilat çöp kutusunda değil; yalnızca çöpteki iptal edilmiş tahsilat kalıcı silinebilir.");
             }
             $payment->setRawAttributes($fresh->getAttributes(), true);
             $before = $this->snapshot($payment);
 
+            $allocations = app(PaymentAllocationService::class);
+            $allocationIds = $allocations->idsFor('payment_id', $payment->id);
+            $ledgerIds = $this->ledger->entryIdsForSource(Payment::LEDGER_SOURCE_TYPE, $payment->id);
+            if (! $this->ledger->entriesNetToZero($ledgerIds)) {
+                throw new TrashActionFailed("#{$payment->id} numaralı tahsilatın defter kayıtları net sıfır değil; kalıcı silme bakiyeyi bozacağı için reddedildi.");
+            }
+
             try {
-                $payment->delete();
+                app(FinancialPurgeGate::class)->run($user, $ledgerIds, $allocationIds, function () use ($payment, $allocations, $ledgerIds, $allocationIds): void {
+                    $this->ledger->purgeEntries($ledgerIds);
+                    $allocations->purge($allocationIds);
+                    $payment->delete();
+                });
             } catch (\Throwable $e) {
-                // Bağlantı hatası (1451) dışındaki SQL sorunlarını "bağlı dağılım var" diye gizleme.
-                if (! $e instanceof QueryException || (int) ($e->errorInfo[1] ?? 0) !== 1451) {
-                    throw $e;
+                if ($e instanceof QueryException) {
+                    throw new TrashActionFailed("#{$payment->id} numaralı tahsilat başka kayıtlarla bağlantılı olduğundan kalıcı silinemedi; kayıt çöpte kaldı.", 0, $e);
                 }
-                throw PaymentHasLinkedAllocations::make($payment->getKey(), previous: $e);
+                throw $e;
             }
 
             $this->auditLogger->log(
                 event: AuditEvent::Deleted,
                 subject: $payment,
                 oldValues: $before,
-                newValues: ['permanently_deleted' => true],
+                newValues: [
+                    'permanently_deleted' => true,
+                    'purged_ledger_entry_ids' => $ledgerIds,
+                    'purged_allocation_ids' => $allocationIds,
+                ],
                 user: $user,
             );
         });
@@ -332,16 +343,17 @@ class PaymentService
     /**
      * Çöp kutusundaki tahsilatlar (en son çöpe atılan üstte).
      *
-     * @return LengthAwarePaginator<int, Payment>
+     * @return Collection<int, Payment>
      */
-    public function trashedPaginated(int $perPage = 25): LengthAwarePaginator
+    public function trashed(int $limit = 300): Collection
     {
         return Payment::query()
-            ->with(['company', 'creator'])
+            ->with(['company', 'trasher'])
             ->whereNotNull('trashed_at')
             ->orderByDesc('trashed_at')
             ->orderByDesc('id')
-            ->paginate($perPage);
+            ->limit($limit)
+            ->get();
     }
 
     public function trashedCount(): int

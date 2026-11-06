@@ -13,9 +13,6 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\CannotUpdateCancelledPayment;
 use App\Modules\Payments\Exceptions\PaymentAlreadyCancelled;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
-use App\Modules\Payments\Exceptions\PaymentHasLinkedAllocations;
-use App\Modules\Payments\Exceptions\PaymentNotCancelled;
-use App\Modules\Payments\Exceptions\PaymentNotTrashed;
 use App\Modules\Payments\Filters\PaymentFilter;
 use App\Modules\Payments\Http\Requests\AllocationOptionsRequest;
 use App\Modules\Payments\Http\Requests\CancelPaymentRequest;
@@ -49,17 +46,6 @@ class PaymentController extends Controller
             'methods' => PaymentMethod::cases(),
             'statuses' => PaymentStatus::cases(),
             'perPageOptions' => QueryFilter::PER_PAGE_OPTIONS,
-            'trashedCount' => $this->payments->trashedCount(),
-        ]);
-    }
-
-    /** Çöp kutusu — iptal edilip silinen tahsilatlar. */
-    public function trash(): View
-    {
-        $this->authorize('viewAny', Payment::class);
-
-        return view('payments::trash', [
-            'payments' => $this->payments->trashedPaginated(),
         ]);
     }
 
@@ -160,39 +146,12 @@ class PaymentController extends Controller
     {
         $this->authorize('trash', $payment);
 
-        try {
-            $this->payments->trash($payment, $request->user());
-        } catch (PaymentNotCancelled $e) {
-            return back()->with('error', $e->getMessage());
-        }
+        $wasActive = ! $payment->isCancelled();
+        $this->payments->trash($payment, $request->user());
 
-        return redirect()->route('payments.index')
-            ->with('success', 'Tahsilat çöp kutusuna taşındı. Cari hareketi etkilenmedi.');
-    }
-
-    public function restore(Request $request, Payment $payment): RedirectResponse
-    {
-        $this->authorize('restore', $payment);
-
-        $this->payments->restoreFromTrash($payment, $request->user());
-
-        return redirect()->route('payments.trash')
-            ->with('success', 'Tahsilat çöp kutusundan geri alındı.');
-    }
-
-    /** Kalıcı silme — YALNIZCA Admin, YALNIZCA çöpteki iptal edilmiş kayıt. */
-    public function destroy(Request $request, Payment $payment): RedirectResponse
-    {
-        $this->authorize('forceDelete', $payment);
-
-        try {
-            $this->payments->forceDelete($payment, $request->user());
-        } catch (PaymentNotTrashed|PaymentHasLinkedAllocations $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return redirect()->route('payments.trash')
-            ->with('success', 'Tahsilat kaydı veritabanından kalıcı olarak silindi.');
+        return redirect()->route('payments.index')->with('success', $wasActive
+            ? 'Tahsilat iptal edildi (cari hareketi ters kaydedildi) ve çöp kutusuna taşındı.'
+            : 'Tahsilat çöp kutusuna taşındı.');
     }
 
     /**

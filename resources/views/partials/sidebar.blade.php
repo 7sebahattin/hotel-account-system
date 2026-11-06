@@ -12,6 +12,7 @@
             'label' => null, // ana grup başlıksızdır
             'items' => [
                 ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null, 'icon' => 'home'],
+                ['route' => 'trash.index', 'label' => 'Çöp Kutusu', 'can' => Permission::TrashView->value, 'icon' => 'trash'],
             ],
         ],
         [
@@ -85,6 +86,7 @@
     */
     $patterns = [
         'home' => ['home'],
+        'trash.index' => ['trash.*'],
         'companies.index' => ['companies.*'],
         'stays.index' => ['stays.*'],
         'offers.index' => ['offers.*'],

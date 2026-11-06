@@ -145,7 +145,7 @@ class CariCleanupRetirementTest extends TestCase
     }
 
     #[Test]
-    public function financial_trigger_bodies_are_unconditional_and_original_update_guards_remain(): void
+    public function update_triggers_stay_unconditional_and_delete_triggers_only_know_the_scoped_trash_gate(): void
     {
         $expected = [
             'ledger_entries_block_delete' => ['ledger_entries', 'DELETE', 'ledger_entries kayitlari silinemez; duzeltme ters kayit ile yapilir.'],
@@ -159,7 +159,19 @@ class CariCleanupRetirementTest extends TestCase
             $this->assertSame($table, $trigger->table_name);
             $this->assertSame($event, $trigger->event_name);
             $this->assertSame('BEFORE', $trigger->timing);
-            $this->assertSame("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '".$message."'", preg_replace('/\s+/', ' ', trim($trigger->body, " \t\n\r\0\x0B;")));
+            if ($event === 'UPDATE') {
+                $this->assertSame("SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '".$message."'", preg_replace('/\s+/', ' ', trim($trigger->body, " \t\n\r\0\x0B;")));
+
+                continue;
+            }
+            // 6 Kasım 2026: DELETE yalnızca Core\Trash\FinancialPurgeGate'in bağlantıya bağlı,
+            // süreli ve satır kimliklerine kapsanmış izniyle açılır; her zaman SIGNAL ile biter.
+            $body = (string) $trigger->body;
+            $this->assertStringContainsString('LEMON_TRASH_PURGE_V1', $body);
+            $this->assertStringContainsString('IFNULL(', $body);
+            $this->assertStringContainsString('FIND_IN_SET(OLD.id', $body);
+            $this->assertStringContainsString("actor_role.name = 'admin'", $body);
+            $this->assertStringContainsString("SET MESSAGE_TEXT = '".$message."'", $body);
         }
         $triggers = DB::select('SELECT ACTION_STATEMENT AS body FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = ?', [DB::connection()->getDatabaseName()]);
         foreach ($triggers as $trigger) {

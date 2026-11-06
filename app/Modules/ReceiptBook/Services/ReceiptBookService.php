@@ -7,11 +7,15 @@ namespace App\Modules\ReceiptBook\Services;
 use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
+use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -103,6 +107,59 @@ class ReceiptBookService
             );
 
             $entry->deleteQuietly();
+        });
+    }
+
+    /**
+     * Çöp kutusundaki (soft delete) makbuzlar.
+     *
+     * @return Collection<int, ReceiptBookEntry>
+     */
+    public function trashed(int $limit = 300): Collection
+    {
+        return ReceiptBookEntry::onlyTrashed()->orderByDesc('deleted_at')->limit($limit)->get();
+    }
+
+    public function trashedCount(): int
+    {
+        return ReceiptBookEntry::onlyTrashed()->count();
+    }
+
+    public function findIncludingTrashed(int $id): ReceiptBookEntry
+    {
+        return ReceiptBookEntry::withTrashed()->findOrFail($id);
+    }
+
+    public function restoreFromTrash(ReceiptBookEntry $entry): void
+    {
+        $entry->restore();
+    }
+
+    /**
+     * Çöpteki makbuzu KALICI siler — yalnızca Admin. Makbuz muhasebe kaydı olmadığı için
+     * başka kayıt etkilenmez; silinen değerler denetim kaydına yazılır.
+     *
+     * @throws TrashActionFailed
+     */
+    public function forceDelete(ReceiptBookEntry $entry, User $actor): void
+    {
+        if (! $actor->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+        if (! $entry->trashed()) {
+            throw new TrashActionFailed('Makbuz çöp kutusunda değil.');
+        }
+
+        DB::transaction(function () use ($entry, $actor): void {
+            $this->audit->log(
+                AuditEvent::Deleted,
+                $entry,
+                oldValues: $entry->auditableValues($entry->getAttributes()),
+                newValues: ['permanently_deleted' => true],
+                user: $actor,
+            );
+
+            $entry->forceDeleteQuietly();
         });
     }
 

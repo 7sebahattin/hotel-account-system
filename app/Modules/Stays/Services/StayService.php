@@ -11,6 +11,8 @@ use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Companies\Services\CompanyService;
 use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
+use App\Modules\Core\Trash\FinancialPurgeGate;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
 use App\Modules\Payments\Services\PaymentAllocationService;
@@ -19,8 +21,6 @@ use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\ExchangeRateAlreadyRecorded;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
-use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
-use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Models\Stay;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -289,30 +289,76 @@ class StayService
     }
 
     /**
-     * Konaklamayı veritabanından KALICI olarak siler (hard delete).
+     * Konaklamayı ÇÖP KUTUSUNA taşır ("Sil": soft delete).
      *
-     * Yalnızca `StayPolicy::forceDelete()`ten geçen çağrılar buraya ulaşır
-     * (Admin + zaten İPTAL edilmiş kayıt), ama kural burada da AYRICA
-     * doğrulanır — Service son savunmadır (CLAUDE.md §7.1). Ledger append-only
-     * olduğu için (§6/L1) bu işlem konaklamanın ledger etkisini GERİ ALMAZ:
-     * iptal sırasında zaten yazılan orijinal + ters kayıt çifti deftere
-     * kalıcı olarak yazılı kalır, yalnızca artık gereksiz olan Stay satırının
-     * kendisi kaldırılır.
+     * Aktif bir konaklama önce İPTAL edilir (cari ters kayıt + ödeme dağılımı
+     * çözülür) ve ancak sonra çöpe girer; böylece çöpteki her konaklama net
+     * sıfırdır. Zaten iptal edilmişse yalnızca çöpe taşınır. Tek transaction.
+     */
+    public function trash(Stay $stay, ?User $actor = null): Stay
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($stay, $user): Stay {
+            app(CompanyService::class)->lockAccounts([$stay->company_id]);
+            $fresh = Stay::query()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
+            $stay->setRawAttributes($fresh->getAttributes(), true);
+            if (! $stay->isCancelled()) {
+                $this->cancel($stay, $user);
+                $stay->refresh();
+            }
+
+            $stay->updated_by = $user->getKey();
+            $stay->save();
+            $stay->delete();
+
+            $this->auditLogger->log(
+                event: AuditEvent::Deleted,
+                subject: $stay,
+                oldValues: ['trash' => false],
+                newValues: ['trash' => true, 'trashed_by' => $user->getKey()],
+                user: $user,
+            );
+
+            return $stay;
+        });
+    }
+
+    /** Çöpteki konaklamayı geri alır (iptal edilmiş olarak; iptal geri alınmaz). */
+    public function restoreFromTrash(Stay $stay, ?User $actor = null): Stay
+    {
+        $user = $this->resolveActor($actor);
+
+        return DB::transaction(function () use ($stay, $user): Stay {
+            $stay->restore();
+            $stay->updated_by = $user->getKey();
+            $stay->save();
+
+            $this->auditLogger->log(
+                event: AuditEvent::Restored,
+                subject: $stay,
+                oldValues: ['trash' => true],
+                newValues: ['trash' => false],
+                user: $user,
+            );
+
+            return $stay;
+        });
+    }
+
+    /**
+     * Çöpteki konaklamayı KOMPLE siler — yalnızca Admin: konaklama satırı + ona
+     * bağlı ödeme dağılımı satırları + defter (ledger) satırları (orijinal + ters).
      *
-     * Bu konaklamaya bugüne kadar bir ödeme dağılımı uygulanmışsa (geçmişte
-     * serbest bırakılmış olsa bile — `payment_allocations` de append-only'dir)
-     * `stay_id` FK kısıtı (RESTRICT) silmeyi veritabanı düzeyinde reddeder;
-     * bu durum StayHasLinkedAllocations olarak dışarı taşınır.
+     * Çöpe yalnızca iptal edilmiş konaklama girdiği için defter satırları net
+     * sıfırdır; bu güvenlik kontrolü olarak yeniden doğrulanır ve bakiye
+     * değişmez. DELETE tetikleyicileri yalnızca `FinancialPurgeGate` açıkken ve
+     * yalnızca burada sayılan kimlikler için izin verir. Hepsi tek transaction.
      *
-     * @throws StayNotCancelled
-     * @throws StayHasLinkedAllocations
+     * @throws TrashActionFailed
      */
     public function forceDelete(Stay $stay, ?User $actor = null): void
     {
-        if (! $stay->isCancelled()) {
-            throw StayNotCancelled::make($stay->getKey());
-        }
-
         $user = $this->resolveActor($actor);
         if (! $user->hasRole(RoleName::Admin->value)) {
             throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
@@ -320,30 +366,67 @@ class StayService
 
         DB::transaction(function () use ($stay, $user): void {
             app(CompanyService::class)->lockAccounts([$stay->company_id]);
-            $fresh = Stay::query()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
-            if (! $fresh->isCancelled()) {
-                throw StayNotCancelled::make($fresh->id);
+            $fresh = Stay::withTrashed()->whereKey($stay->id)->lockForUpdate()->firstOrFail();
+            if (! $fresh->trashed() || ! $fresh->isCancelled()) {
+                throw new TrashActionFailed("#{$fresh->id} numaralı konaklama çöp kutusunda değil; yalnızca çöpteki iptal edilmiş konaklama kalıcı silinebilir.");
             }
             $stay->setRawAttributes($fresh->getAttributes(), true);
             $before = $this->snapshot($stay);
 
+            $allocations = app(PaymentAllocationService::class);
+            $allocationIds = $allocations->idsFor('stay_id', $stay->id);
+            $ledgerIds = $this->ledger->entryIdsForSource(Stay::LEDGER_SOURCE_TYPE, $stay->id);
+            if (! $this->ledger->entriesNetToZero($ledgerIds)) {
+                throw new TrashActionFailed("#{$stay->id} numaralı konaklamanın defter kayıtları net sıfır değil; kalıcı silme bakiyeyi bozacağı için reddedildi.");
+            }
+
             try {
-                $stay->forceDelete();
-            } catch (QueryException $e) {
-                // Bağlantı hatası dışındaki SQL sorunlarını "bağlı ödeme var" diye gizleme.
-                if ((int) ($e->errorInfo[1] ?? 0) !== 1451) {
-                    throw $e;
+                app(FinancialPurgeGate::class)->run($user, $ledgerIds, $allocationIds, function () use ($stay, $allocations, $ledgerIds, $allocationIds): void {
+                    $this->ledger->purgeEntries($ledgerIds);
+                    $allocations->purge($allocationIds);
+                    $stay->forceDelete();
+                });
+            } catch (\Throwable $e) {
+                if ($e instanceof QueryException) {
+                    throw new TrashActionFailed("#{$stay->id} numaralı konaklama başka kayıtlarla bağlantılı olduğundan kalıcı silinemedi; kayıt çöpte kaldı.", 0, $e);
                 }
-                throw StayHasLinkedAllocations::make($stay->getKey(), previous: $e);
+                throw $e;
             }
 
             $this->auditLogger->log(
                 event: AuditEvent::Deleted,
                 subject: $stay,
                 oldValues: $before,
+                newValues: [
+                    'permanently_deleted' => true,
+                    'purged_ledger_entry_ids' => $ledgerIds,
+                    'purged_allocation_ids' => $allocationIds,
+                ],
                 user: $user,
             );
         });
+    }
+
+    /**
+     * Çöp kutusundaki konaklamalar (en son çöpe atılan üstte).
+     *
+     * @return Collection<int, Stay>
+     */
+    public function trashed(int $limit = 300): Collection
+    {
+        return Stay::onlyTrashed()->with(['company', 'updater'])
+            ->orderByDesc('deleted_at')->orderByDesc('id')->limit($limit)->get();
+    }
+
+    public function trashedCount(): int
+    {
+        return Stay::onlyTrashed()->count();
+    }
+
+    /** Çöpteki dahil tek konaklama (çöp kutusu sağlayıcısı için). */
+    public function findIncludingTrashed(int $id): Stay
+    {
+        return Stay::withTrashed()->findOrFail($id);
     }
 
     /**
@@ -488,7 +571,7 @@ class StayService
      */
     public function roomHasHistory(int $roomId): bool
     {
-        return Stay::query()->where('room_id', $roomId)->exists();
+        return Stay::withTrashed()->where('room_id', $roomId)->exists();
     }
 
     /**

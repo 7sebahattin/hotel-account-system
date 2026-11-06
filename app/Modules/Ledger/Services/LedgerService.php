@@ -183,6 +183,52 @@ class LedgerService
         return $this->activeEntriesForSource($sourceType, $sourceId)->first();
     }
 
+    /**
+     * Bir kaynağa (konaklama/tahsilat) ait TÜM defter satırı kimlikleri —
+     * ters kayıtlar dahil. Yalnızca çöp kutusundan kalıcı silme hazırlığı içindir.
+     *
+     * @return array<int, int>
+     */
+    public function entryIdsForSource(string $sourceType, int $sourceId): array
+    {
+        return LedgerEntry::query()
+            ->where('source_type', $sourceType)->where('source_id', $sourceId)
+            ->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all();
+    }
+
+    /**
+     * Verilen satırların her para biriminde NET SIFIR olup olmadığı. Kalıcı silme
+     * yalnızca borcu zaten ters kayıtla sıfırlanmış kaynaklarda bakiyeyi korur.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function entriesNetToZero(array $ids): bool
+    {
+        if ($ids === []) {
+            return true;
+        }
+
+        return ! DB::table('ledger_entries')->whereIn('id', $ids)->groupBy('company_id', 'currency')
+            ->havingRaw('SUM(debit) <> SUM(credit)')->exists();
+    }
+
+    /**
+     * Çöp kutusundan kalıcı silme: verilen defter satırlarını SİLER. Veritabanı
+     * tetikleyicisi yalnızca `Core\Trash\FinancialPurgeGate` açıkken ve yalnızca
+     * kapıya sayılan kimlikler için izin verir; kapı yoksa SQL reddedilir.
+     * Ters kayıtlar (daha yüksek kimlik) önce silinir — kendine FK RESTRICT.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function purgeEntries(array $ids): int
+    {
+        if ($ids === []) {
+            return 0;
+        }
+
+        return DB::table('ledger_entries')->whereIn('id', $ids)->orderByDesc('id')->delete();
+    }
+
     public function hasEntriesForCompany(int $companyId): bool
     {
         return LedgerEntry::query()->where('company_id', $companyId)->exists();

@@ -7,6 +7,7 @@ namespace App\Modules\Payments\Providers;
 use App\Modules\Core\Providers\ModuleServiceProvider;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Policies\PaymentPolicy;
+use App\Modules\Payments\Trash\PaymentTrashProvider;
 
 class PaymentsServiceProvider extends ModuleServiceProvider
 {
@@ -14,5 +15,9 @@ class PaymentsServiceProvider extends ModuleServiceProvider
 
     protected array $policies = [
         Payment::class => PaymentPolicy::class,
+    ];
+
+    protected array $trashProviders = [
+        PaymentTrashProvider::class,
     ];
 }

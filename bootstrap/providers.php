@@ -15,6 +15,7 @@ use App\Modules\Personnel\Providers\PersonnelServiceProvider;
 use App\Modules\ReceiptBook\Providers\ReceiptBookServiceProvider;
 use App\Modules\Rooms\Providers\RoomsServiceProvider;
 use App\Modules\Stays\Providers\StaysServiceProvider;
+use App\Modules\Trash\Providers\TrashServiceProvider;
 use App\Modules\Users\Providers\UsersServiceProvider;
 use App\Providers\AppServiceProvider;
 
@@ -37,5 +38,6 @@ return [
     ReceiptBookServiceProvider::class,
     RoomsServiceProvider::class,
     StaysServiceProvider::class,
+    TrashServiceProvider::class,
     UsersServiceProvider::class,
 ];

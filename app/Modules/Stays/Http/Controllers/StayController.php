@@ -15,8 +15,6 @@ use App\Modules\Stays\Enums\StayPricingMode;
 use App\Modules\Stays\Enums\StayStatus;
 use App\Modules\Stays\Exceptions\CannotUpdateCancelledStay;
 use App\Modules\Stays\Exceptions\StayAlreadyCancelled;
-use App\Modules\Stays\Exceptions\StayHasLinkedAllocations;
-use App\Modules\Stays\Exceptions\StayNotCancelled;
 use App\Modules\Stays\Filters\StayFilter;
 use App\Modules\Stays\Http\Requests\StayRequest;
 use App\Modules\Stays\Models\Stay;
@@ -167,22 +165,17 @@ class StayController extends Controller
             : 'Konaklama "fatura kesilmedi" olarak işaretlendi.');
     }
 
-    /**
-     * Kalıcı silme (hard delete) — YALNIZCA Admin, YALNIZCA zaten iptal
-     * edilmiş bir kayıtta (StayPolicy::forceDelete).
-     */
-    public function destroy(Request $request, Stay $stay): RedirectResponse
+    /** "Sil" = ortak Çöp Kutusu'na taşı (aktifse önce iptal edilir). */
+    public function moveToTrash(Request $request, Stay $stay): RedirectResponse
     {
-        $this->authorize('forceDelete', $stay);
+        $this->authorize('trash', $stay);
 
-        try {
-            $this->stays->forceDelete($stay, $request->user());
-        } catch (StayNotCancelled|StayHasLinkedAllocations $e) {
-            return back()->with('error', $e->getMessage());
-        }
+        $wasActive = ! $stay->isCancelled();
+        $this->stays->trash($stay, $request->user());
 
-        return redirect()->route('stays.index')
-            ->with('success', 'Konaklama kaydı veritabanından kalıcı olarak silindi.');
+        return redirect()->route('stays.index')->with('success', $wasActive
+            ? 'Konaklama iptal edildi (cari hareketi ters kaydedildi) ve çöp kutusuna taşındı.'
+            : 'Konaklama çöp kutusuna taşındı.');
     }
 
     /**

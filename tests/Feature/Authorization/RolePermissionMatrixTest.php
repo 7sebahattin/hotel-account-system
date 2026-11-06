@@ -75,6 +75,7 @@ class RolePermissionMatrixTest extends TestCase
             Permission::OffersView,
             Permission::OffersCreate,
             Permission::OffersUpdate,
+            Permission::TrashView,
             Permission::MonthlyAccountView,
             Permission::MonthlyAccountUpdate,
             Permission::PersonnelView,
@@ -88,7 +89,7 @@ class RolePermissionMatrixTest extends TestCase
         }
 
         // Kaldırılan dört kasa yetkisi yoktur; Teklifler modülünün üç yetkisi Patron'a eklenmiştir.
-        $this->assertCount(31, $granted);
+        $this->assertCount(32, $granted);
     }
 
     #[Test]
@@ -131,6 +132,7 @@ class RolePermissionMatrixTest extends TestCase
             Permission::StaysUpdate->value,
             Permission::PaymentsView->value,
             Permission::PaymentsCreate->value,
+            Permission::TrashView->value,
             /*
              * Gün 10 — kasa: personel fiziksel kasadan sorumludur, kendi
              * vardiyasını görmek ve saymak zorundadır. Bu, "finansal toplamları

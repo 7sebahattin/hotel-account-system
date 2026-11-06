@@ -10,6 +10,7 @@ use App\Modules\Core\Concerns\HasCreator;
 use App\Modules\Rooms\Database\Factories\RoomFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -33,13 +34,14 @@ use Illuminate\Support\Carbon;
  * @property int|null $updated_by
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ * @property Carbon|null $deleted_at
  * @property-read User|null $creator
  * @property-read User|null $updater
  */
 class Room extends Model
 {
     /** @use HasFactory<RoomFactory> */
-    use Auditable, HasCreator, HasFactory;
+    use Auditable, HasCreator, HasFactory, SoftDeletes;
 
     protected $fillable = ['room_no', 'room_name', 'room_type', 'is_active'];
 

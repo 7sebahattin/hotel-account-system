@@ -7,6 +7,7 @@ namespace App\Modules\Rooms\Providers;
 use App\Modules\Core\Providers\ModuleServiceProvider;
 use App\Modules\Rooms\Models\Room;
 use App\Modules\Rooms\Policies\RoomPolicy;
+use App\Modules\Rooms\Trash\RoomTrashProvider;
 
 class RoomsServiceProvider extends ModuleServiceProvider
 {
@@ -14,5 +15,9 @@ class RoomsServiceProvider extends ModuleServiceProvider
 
     protected array $policies = [
         Room::class => RoomPolicy::class,
+    ];
+
+    protected array $trashProviders = [
+        RoomTrashProvider::class,
     ];
 }
