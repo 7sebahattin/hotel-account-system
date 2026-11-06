@@ -275,7 +275,7 @@ class TrashTest extends TestCase
     #[Test]
     public function makbuz_cope_gider_geri_gelir_ve_yalnizca_admin_kalici_siler(): void
     {
-        $entry = ReceiptBookEntry::factory()->create();
+        $entry = ReceiptBookEntry::factory()->create(['created_by' => $this->admin->id, 'updated_by' => $this->admin->id]);
 
         $this->actingAs($this->admin)->delete(route('receipt-book.destroy', $entry))->assertRedirect();
         $this->assertSoftDeleted('receipt_book_entries', ['id' => $entry->id]);

@@ -208,8 +208,16 @@ class LedgerService
             return true;
         }
 
-        return ! DB::table('ledger_entries')->whereIn('id', $ids)->groupBy('company_id', 'currency')
-            ->havingRaw('SUM(debit) <> SUM(credit)')->exists();
+        $rows = DB::table('ledger_entries')->whereIn('id', $ids)->groupBy('company_id', 'currency')
+            ->selectRaw('company_id, currency, SUM(debit) as total_debit, SUM(credit) as total_credit')->get();
+
+        foreach ($rows as $row) {
+            if (Money::fromDecimal((string) $row->total_debit)->minorUnits !== Money::fromDecimal((string) $row->total_credit)->minorUnits) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
