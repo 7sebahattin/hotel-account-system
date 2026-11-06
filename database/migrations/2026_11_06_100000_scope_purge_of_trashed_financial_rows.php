@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Kapı yalnızca `Core\Trash\FinancialPurgeGate` tarafından, çağrının sayılan
  * satır kimlikleri için, 60 saniyeliğine ve aktif bir Admin adına açılır:
- *   @lemon_purge_actor / @lemon_purge_until /
- *   @lemon_purge_ledger_ids / @lemon_purge_allocation_ids
+ *   oturum değişkenleri: lemon_purge_actor, lemon_purge_until,
+ *   lemon_purge_ledger_ids, lemon_purge_allocation_ids
  * Kimlik listesinde olmayan satır, süresi dolmuş izin veya Admin olmayan aktör
  * SIGNAL ile reddedilir. NULL mantığı kapalı kalır (IFNULL(..., 0)): değişken
  * tanımsızsa DELETE yine engellidir. UPDATE tetikleyicileri DEĞİŞMEZ.

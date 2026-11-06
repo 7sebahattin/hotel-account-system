@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Core\Providers;
 
+use App\Modules\Core\Trash\TrashProvider;
 use App\Modules\Core\Trash\TrashRegistry;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -40,7 +41,7 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * Çöp kutusu sağlayıcıları (Core\Trash\TrashProvider uygulayan sınıflar).
      * Modül, silinebilir kayıt türlerini burada ortak çöp kutusuna bağlar.
      *
-     * @var array<int, class-string<\App\Modules\Core\Trash\TrashProvider>>
+     * @var array<int, class-string<TrashProvider>>
      */
     protected array $trashProviders = [];
 

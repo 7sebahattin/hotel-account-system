@@ -28,7 +28,6 @@ enum Permission: string
     case StaysUpdate = 'stays.update';
     case StaysDelete = 'stays.delete';
 
-
     /** Oda tanımları (Yönetim → Odalar). Görüntüleme ayrı yetki değildir. */
     case RoomsManage = 'rooms.manage';
 
@@ -44,7 +43,6 @@ enum Permission: string
     case PaymentsView = 'payments.view';
     case PaymentsCreate = 'payments.create';
     case PaymentsCancel = 'payments.cancel';
-
 
     case LedgerView = 'ledger.view';
     case LedgerViewAll = 'ledger.view_all';
