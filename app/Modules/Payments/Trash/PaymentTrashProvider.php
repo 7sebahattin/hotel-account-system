@@ -40,7 +40,7 @@ class PaymentTrashProvider implements TrashProvider
     {
         return $this->payments->trashed()->map(fn (Payment $payment): TrashItem => new TrashItem(
             id: $payment->id,
-            title: ($payment->company?->name ?? '—').' · '.$payment->amountMoney()->format($payment->currency),
+            title: data_get($payment, 'company.name', '—').' · '.$payment->amountMoney()->format($payment->currency),
             detail: $payment->payment_date->format('d.m.Y')
                 .' · '.($payment->payment_method?->label() ?? 'Yöntem yok')
                 .($payment->receipt_no ? ' · '.$payment->receipt_no : '')

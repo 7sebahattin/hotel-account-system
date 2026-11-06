@@ -42,7 +42,7 @@ class StayTrashProvider implements TrashProvider
         return $this->stays->trashed()->map(fn (Stay $stay): TrashItem => new TrashItem(
             id: $stay->id,
             title: $stay->guest_name.' · '.$stay->amountMoney()->format($stay->currency),
-            detail: ($stay->company?->name ?? '—')
+            detail: data_get($stay, 'company.name', '—')
                 .' · '.$stay->check_in_date->format('d.m.Y').' → '.$stay->check_out_date->format('d.m.Y'),
             trashedAt: $stay->deleted_at,
             trashedBy: $stay->updater?->name,

@@ -40,6 +40,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $updated_by
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ * @property Carbon|null $deleted_at
  * @property-read User|null $creator
  * @property-read User|null $updater
  */
