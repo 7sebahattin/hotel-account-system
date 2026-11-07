@@ -1,5 +1,26 @@
 # CLAUDE.md
 
+## KURAL: Roller/yetkiler deploy ile sıfırlanmaz — 7 Kasım 2026
+
+Kullanıcı talimatı: "roller yetkiler alanında bir güncelleme yapılmadıkça burası
+değişmesin". `RolePermissionSeeder` her deploy'da koşar (§15) ama **yıkıcı değildir**:
+mevcut rolün yetkilerine `syncPermissions` UYGULANMAZ; varsayılan matris yalnızca
+(1) rol ilk kez kurulurken ve (2) kodla yeni eklenen (DB'de henüz olmayan) yetki için,
+o yetkiyi varsayılan olarak taşıyan rollere uygulanır. "Roller / Yetkiler" ekranından
+yapılan değişiklikler korunur. Seeder'a `syncPermissions` GERİ EKLENMEZ.
+Test: `SeederPreservesRoleChangesTest`.
+
+## Yazdırma sayfalarında "PDF indir" — 7 Kasım 2026
+
+Kullanıcı talimatı: tüm yazdırma sayfalarına "Yazdır"ın yanında PDF indir; mobilde
+oluşan PDF paylaşım ekranıyla (WhatsApp) gönderilmeye hazır açılsın. Kullanıcı
+yöntemi seçti: **tarayıcıda PDF** (sunucu/composer değişmez). `partials/pdf-download`
+(`layouts.print` + üç bağımsız yazdırma sayfası) "Yazdır" düğmelerini bulup yanına
+düğme ekler; html2pdf.js (cdnjs, sürüm sabit) ilk tıklamada yüklenir, sayfa görüntü
+tabanlı A4 PDF'e çevrilir. Dokunmatik cihazda `navigator.share({files})`, aksi hâlde
+dosya indirilir. Yeni yazdırma sayfası `layouts.print` kullanmalı ya da bu partial'ı
+include etmelidir. Test: `PdfDownloadButtonTest`.
+
 ## Onaylı ortak Çöp Kutusu ve Konaklama fatura işareti — 4–6 Kasım 2026
 
 Kullanıcı açık sorulara şu yanıtları vererek onayladı: **tek ve ayrı bir "Çöp Kutusu"

@@ -169,5 +169,6 @@
             @endforeach
         </section>
     </main>
+@include('partials.pdf-download')
 </body>
 </html>

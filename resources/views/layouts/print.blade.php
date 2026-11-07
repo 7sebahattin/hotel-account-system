@@ -140,5 +140,6 @@
 </head>
 <body>
     @yield('content')
+    @include('partials.pdf-download')
 </body>
 </html>

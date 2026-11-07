@@ -542,5 +542,6 @@
         </table>
         <footer class="foot"><span>Lemon Cari Takip · {{ $month->translatedFormat('F Y') }} Aylık Hesap Raporu</span><span>Oluşturulma: {{ $generatedAt->format('d.m.Y H:i') }}</span></footer>
     </main>
+@include('partials.pdf-download')
 </body>
 </html>
