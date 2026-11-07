@@ -56,6 +56,7 @@
     --color-nav-line: #2b3752;
     --color-nav-tx: #e8e6e1; /* nav üzerinde 13.04 */
     --color-nav-mut: #9aa3b2; /* nav üzerinde  6.40 */
+    --color-nav-danger: #f87171; /* nav üzerinde ≈6.9 — yalnız Çöp Kutusu ikonu */
 
     /*
         Form kontrolü sınırı — YALNIZCA input/select/textarea ve ikincil buton.
