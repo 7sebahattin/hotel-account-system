@@ -55,7 +55,7 @@
             <span class="nav-surface min-w-0">@include('partials.brand', ['compact' => true])</span>
         </header>
 
-        <main id="icerik" class="mx-auto w-full max-w-7xl px-4 pb-28 pt-4 sm:px-6 md:pb-6 lg:pb-8 lg:pt-5">
+        <main id="icerik" class="mx-auto w-full max-w-[120rem] px-4 pb-28 pt-4 sm:px-6 md:pb-6 lg:pb-8 lg:pt-5">
             @include('partials.flash')
             @yield('content')
         </main>

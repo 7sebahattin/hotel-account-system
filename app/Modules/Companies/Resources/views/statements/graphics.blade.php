@@ -38,7 +38,7 @@
             Bu filtrelerle borçlu cari bulunamadı.
         </x-ui.empty>
     @else
-        <section class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Borç özeti">
+        <section class="mt-4 grid gap-3 grid-cols-[repeat(auto-fit,minmax(15rem,1fr))]" aria-label="Borç özeti">
             <x-ui.card class="sm:col-span-2 xl:col-span-1">
                 <p class="text-xs font-medium uppercase tracking-wide text-mut">Borçlu Cari</p>
                 <p class="mt-2 text-3xl font-semibold tabular-nums text-tx"
