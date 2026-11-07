@@ -52,6 +52,7 @@
 
     <x-ui.input label="Giriş tarihi" name="check_in_date" type="date" required
                 data-check-in
+                hint="Başka bir programdan kopyaladığınız tarihi (31.10.2026) Ctrl+V ile yapıştırabilirsiniz."
                 :value="$s?->check_in_date?->toDateString()" />
 
     <x-ui.input label="Çıkış tarihi" name="check_out_date" type="date" required

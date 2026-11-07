@@ -97,7 +97,8 @@
                 <tr>
                     <td class="num">{{ $row->entry->entry_date->format('d.m.Y') }}</td>
                     <td @class(['rev' => $row->isReversal()])>{{ $row->type()->label() }}</td>
-                    <td>{{ $row->entry->description }}</td>
+                    {{-- "İşlem" sütunu zaten "Konaklama" yazıyor; açıklamadaki aynı ön ek yazdırmada tekrar edilmez. --}}
+                    <td>{{ $row->type() === \App\Modules\Ledger\Enums\LedgerEntryType::Stay ? preg_replace('/^Konaklama:\s*/u', '', $row->entry->description) : $row->entry->description }}</td>
                     <td class="num">
                         @unless ($row->entry->debitMoney()->isZero())
                             {{ $row->entry->debitMoney()->format($row->currency()) }}
