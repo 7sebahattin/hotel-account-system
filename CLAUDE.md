@@ -30,6 +30,17 @@ Teklif/Personel silme akışı olmadığı için, Roller ayar olduğu için kaps
   açılır (migration `2026_11_06_100000`); UPDATE korumaları değişmez. Firma: cari
   hareketi varsa silinemez; kullanıcı: kayıt oluşturduysa FK reddeder; oda: konaklama
   geçmişi (çöptekiler dahil) varsa silinemez. Testler: `TrashTest`.
+- **Çöpteki veri HİÇBİR yerde görünmez (7 Kasım 2026):** listeler, ekstre, toplamlar ve raporlar
+  çöpteki kaydı içermez. Tahsilat `Payment` global kapsamı (`notTrashed`), konaklama/firma/oda/
+  makbuz/kullanıcı SoftDeletes ile gizlenir; çöp kutusu `withoutGlobalScopes()` kullanır. Defter
+  append-only olduğundan satırlar silinmez: `Ledger\Support\LedgerVisibility` (`LedgerEntry`
+  global kapsamı `visible` + ham `DB::table('ledger_entries')` sorguları) çöpteki kaynağın
+  satırlarını süzer; kaynak modüller (`StaysServiceProvider`, `PaymentsServiceProvider`)
+  `hideSourceWhenSet()` ile kaydeder. Çöpe yalnızca net sıfır kayıt girdiği için bakiye değişmez.
+  Fiziksel kontroller (firma silme, kalıcı silme hazırlığı) `withoutGlobalScope('visible')` kullanır.
+- **Cari ekstre hızlı dönem (7 Kasım 2026):** `?hizli=bu-ay|gecen-ay` tarih aralığını sunucuda
+  belirler (`StatementCriteria::QUICK_RANGES`); bu modda özet (ekran + yazdırma) yalnızca
+  **"Cari bakiye"**yi gösterir (devreden/toplam borç/toplam alacak gizlenir). Test: `StatementQuickFilterTest`.
 - **Fatura işareti:** `stays.invoiced_at/invoiced_by` (NULL = kesilmedi) salt takip
   bayrağıdır; e-Fatura değildir (§3.2 sürer), finansal alan değildir, cari hareketi
   üretmez. Admin/Patron/Personel (`stays.update`) değiştirir, iptal edilmiş konaklamada

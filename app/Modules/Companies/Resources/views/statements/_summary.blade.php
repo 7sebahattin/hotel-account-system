@@ -7,6 +7,7 @@
                 <span class="text-xs text-mut">{{ $summary->currency->label() }}</span>
             </div>
 
+            @unless ($criteria->isBalanceOnly())
             <dl class="mt-3 space-y-1.5 text-sm">
                 @if ($summary->hasCarryForward())
                     <div class="flex justify-between gap-3">
@@ -23,11 +24,12 @@
                     <dd class="font-medium tabular-nums text-credit">{{ $summary->totalCredit->format($summary->currency) }}</dd>
                 </div>
             </dl>
+            @endunless
 
             @php $closingFx = $fx['closing'][$summary->currency->value] ?? null; @endphp
-            <div class="mt-3 border-t border-line pt-3">
+            <div @class(['mt-3', 'border-t border-line pt-3' => ! $criteria->isBalanceOnly()])>
                 <div class="flex items-baseline justify-between gap-3">
-                    <span class="text-sm text-mut">Bakiye</span>
+                    <span class="text-sm text-mut">{{ $criteria->isBalanceOnly() ? 'Cari bakiye' : 'Bakiye' }}</span>
                     <span class="text-right">
                         <span @class([
                             'block text-base tabular-nums',
