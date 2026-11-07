@@ -124,6 +124,16 @@
             kaydırılabilir yapıyordu. Kağıt ölçüleri @media print'te korunur;
             ekranda dar viewport'a uyan boşluk kullanılır.
         */
+        /*
+            Konaklama raporunun 8 kolonu sabit yüzdelerle dar ekrana sıkışınca yazılar
+            iç içe biniyordu. Ekranda tabloya asgari genişlik verilir; .scroll-x kutusu
+            yatay kayar. PDF üretilirken (A4 genişliğinde çekilir) ve yazdırmada uygulanmaz.
+        */
+        @media screen and (max-width: 900px) {
+            .stays-print-table { min-width: 720px; }
+            .pdf-capturing .stays-print-table { min-width: 0; }
+        }
+
         @media screen and (max-width: 640px) {
             body { padding: 12px 10px; font-size: 12px; }
             .summaries { gap: 8px; }
