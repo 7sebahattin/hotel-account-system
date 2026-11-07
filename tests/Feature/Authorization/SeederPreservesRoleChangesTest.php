@@ -7,6 +7,7 @@ namespace Tests\Feature\Authorization;
 use App\Modules\Authorization\Database\Seeders\RolePermissionSeeder;
 use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Authorization\Models\Role;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -16,6 +17,14 @@ use Tests\TestCase;
  */
 class SeederPreservesRoleChangesTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seedRoles();
+    }
+
     #[Test]
     public function reseeding_keeps_manual_role_permission_changes(): void
     {
