@@ -25,18 +25,12 @@
                 </form>
             @endcan
 
-            {{--
-                Kalıcı silme — yalnızca Admin, yalnızca ZATEN iptal edilmiş bir
-                kayıtta (StayPolicy::forceDelete). Ledger bu işlemden etkilenmez:
-                iptal sırasında yazılan orijinal + ters kayıt çifti deftere
-                kalıcı olarak yazılı kalır (CLAUDE.md §6/L1), yalnızca artık
-                gereksiz olan bu Stay satırı veritabanından kaldırılır.
-            --}}
-            @can('forceDelete', $stay)
-                <form method="POST" action="{{ route('stays.destroy', $stay) }}"
-                      onsubmit="return confirm('Bu konaklama kaydı veritabanından KALICI olarak silinecek. Bu işlem GERİ ALINAMAZ. Emin misiniz?')">
-                    @csrf @method('DELETE')
-                    <x-ui.button type="submit" variant="danger">Kalıcı olarak sil</x-ui.button>
+            {{-- "Sil" = çöp kutusuna taşı; aktifse önce iptal edilir. Geri alma/kalıcı silme: Çöp Kutusu. --}}
+            @can('trash', $stay)
+                <form method="POST" action="{{ route('stays.trash', $stay) }}"
+                      onsubmit="return confirm('{{ $stay->isCancelled() ? 'Bu konaklama çöp kutusuna taşınsın mı?' : 'Bu konaklama önce İPTAL edilecek (cari hareketi ters kaydedilir) ve çöp kutusuna taşınacak. Emin misiniz?' }} Çöp kutusundan geri alınabilir.')">
+                    @csrf @method('PATCH')
+                    <x-ui.button type="submit" variant="danger">Sil</x-ui.button>
                 </form>
             @endcan
         </x-slot:actions>

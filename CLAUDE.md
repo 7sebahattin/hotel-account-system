@@ -1,26 +1,40 @@
 # CLAUDE.md
 
-## Onaylı Tahsilat çöp kutusu ve Konaklama fatura işareti — 4 Kasım 2026
+## Onaylı ortak Çöp Kutusu ve Konaklama fatura işareti — 4–6 Kasım 2026
 
-Kullanıcı, açık sorulara şu yanıtları vererek iki dar değişikliği onayladı:
+Kullanıcı açık sorulara şu yanıtları vererek onayladı: **tek ve ayrı bir "Çöp Kutusu"
+alanı** (Windows gibi), silinen kayıtlar **türüne göre kendi grubunda** listelenir,
+Admin çöpten silince kayıt **komple** silinir. Kapsam: Tahsilat, Konaklama, Makbuz,
+Cari hesap (firma), Oda, Kullanıcı. (Aylık Hesap sürümlü kendi silme modeliyle,
+Teklif/Personel silme akışı olmadığı için, Roller ayar olduğu için kapsam dışıdır.)
 
-- **Tahsilat çöp kutusu:** İptal edilmiş tahsilatı Admin, Patron ve Personel
-  (`payments.create`) çöp kutusuna taşıyabilir ve geri alabilir
-  (`/payments/trash`). Aktif tahsilat çöpe atılamaz (DB CHECK dahil). Çöpe
-  taşıma yalnızca `trashed_at/trashed_by` yazar; cari hareketi, dağılım ve
-  makbuz değişmez. **Kalıcı silme yalnızca Admin'dedir** (`payments.force_delete`,
-  yalnızca çöpteki kayıt) ve §18 "finansal kayıt için hard delete yok"
-  kuralına bilerek açılmış dar istisnadır: yalnızca `payments` satırı silinir;
-  ledger'daki orijinal+ters kayıt çifti (net sıfır) ve denetim kaydı kalır.
-  Tahsilata hiç dağılım uygulanmışsa (`payment_allocations` append-only) FK
-  silmeyi reddeder; kayıt çöpte kalır. `ledger_entries`/`payment_allocations`
-  DELETE trigger'larına DOKUNULMADI. Stays `forceDelete` kalıbıyla aynıdır.
-- **Fatura işareti:** `stays.invoiced_at/invoiced_by` (NULL = kesilmedi) salt bir
-  takip bayrağıdır; e-Fatura/fatura üretimi değildir (§3.2 sürer), finansal alan
-  değildir, cari hareketi üretmez. Admin/Patron/Personel (`stays.update`)
-  değiştirebilir, iptal edilmiş konaklamada değişmez; her geçiş onay penceresi
-  ister ve denetim kaydına yazılır. Testler: `PaymentTrashTest`,
-  `StayInvoiceToggleTest`.
+- **Mimari:** `Core\Trash\TrashProvider` sözleşmesi + `TrashRegistry`; her modül
+  sağlayıcısını `ModuleServiceProvider::$trashProviders` ile bağlar. `Trash` modülü
+  (`/trash`, `trash.index|restore|destroy`) yalnızca sözleşmeyi bilir. Yetkiler
+  `trash.view` (Admin/Patron/Personel, görünen gruplar kendi modül yetkisine bağlı) ve
+  `trash.force_delete` (yalnızca Admin; sağlayıcı/servis rolü ayrıca doğrular).
+- **"Sil" = çöpe taşı:** Tahsilat/Konaklama için aktif kayıt **önce otomatik iptal edilir**
+  (cari ters kayıt + dağılım çözülür), sonra çöpe girer; çöpteki her finansal kayıt net
+  sıfırdır. Tahsilatı tahsilat girebilen **herkes** (`payments.create`) siler; diğer
+  türlerde silme yetkisi mevcut silme yetkisidir (stays.delete, companies.delete,
+  rooms.manage, users.manage, makbuzda Admin). Geri alınan tahsilat/konaklama **iptal
+  olarak kalır** (iptal geri alınmaz). İşaret: `payments.trashed_at/by`; stays/companies/
+  users/rooms/receipt_book_entries `deleted_at` (SoftDeletes).
+- **Kalıcı silme (§18 "finansal hard delete yok" kuralına bilerek açılmış dar istisna):**
+  yalnızca Admin, yalnızca çöpteki kayıt. Tahsilat/konaklamada kayıt + ona bağlı
+  `payment_allocations` satırları + `ledger_entries` satırları (orijinal+ters) **tek
+  transaction'da** silinir; defter satırları net sıfır değilse reddedilir (bakiye
+  değişmez). Kapı: `ledger_entries_block_delete` ve `payment_allocations_no_delete`
+  tetikleyicileri yalnızca `Core\Trash\FinancialPurgeGate`in bağlantıya bağlı, 60 sn'lik,
+  **sayılan satır kimlikleriyle sınırlı**, aktif-Admin kanıtlı oturum değişkenleriyle
+  açılır (migration `2026_11_06_100000`); UPDATE korumaları değişmez. Firma: cari
+  hareketi varsa silinemez; kullanıcı: kayıt oluşturduysa FK reddeder; oda: konaklama
+  geçmişi (çöptekiler dahil) varsa silinemez. Testler: `TrashTest`.
+- **Fatura işareti:** `stays.invoiced_at/invoiced_by` (NULL = kesilmedi) salt takip
+  bayrağıdır; e-Fatura değildir (§3.2 sürer), finansal alan değildir, cari hareketi
+  üretmez. Admin/Patron/Personel (`stays.update`) değiştirir, iptal edilmiş konaklamada
+  değişmez; her geçiş onay penceresi ister, denetim kaydına yazılır.
+  Test: `StayInvoiceToggleTest`.
 
 ## Tamamlanan CARİ temizliğinin geçici ekranını kaldırma — 13 Ekim 2026
 

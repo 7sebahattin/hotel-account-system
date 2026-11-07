@@ -8,8 +8,12 @@ use App\Models\User;
 use App\Modules\AuditLog\Enums\AuditEvent;
 use App\Modules\AuditLog\Services\AuditLogger;
 use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Users\Exceptions\LastActiveAdminException;
 use App\Modules\Users\Exceptions\SelfActionException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -80,6 +84,56 @@ class UserService
 
         $user->is_active = $active;
         $user->save();
+    }
+
+    /**
+     * Çöp kutusundaki (soft delete) kullanıcılar.
+     *
+     * @return Collection<int, User>
+     */
+    public function trashed(int $limit = 300): Collection
+    {
+        return User::onlyTrashed()->orderByDesc('deleted_at')->limit($limit)->get();
+    }
+
+    public function trashedCount(): int
+    {
+        return User::onlyTrashed()->count();
+    }
+
+    public function findIncludingTrashed(int $id): User
+    {
+        return User::withTrashed()->findOrFail($id);
+    }
+
+    public function restoreFromTrash(User $user): void
+    {
+        $user->restore();
+    }
+
+    /**
+     * Çöpteki kullanıcıyı KALICI siler — yalnızca Admin. Kullanıcı kayıt oluşturduysa
+     * (created_by, denetim vb.) veritabanı bağlantıları silmeyi reddeder.
+     *
+     * @throws TrashActionFailed
+     */
+    public function forceDelete(User $user, User $actor): void
+    {
+        if (! $actor->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+        if (! $user->trashed()) {
+            throw new TrashActionFailed('Kullanıcı çöp kutusunda değil.');
+        }
+
+        try {
+            DB::transaction(fn () => $user->forceDelete());
+        } catch (\Throwable $e) {
+            if ($e instanceof QueryException) {
+                throw new TrashActionFailed("«{$user->name}» kullanıcısı sistemde kayıt oluşturduğu için kalıcı silinemedi; kayıt çöpte kaldı.", 0, $e);
+            }
+            throw $e;
+        }
     }
 
     public function delete(User $user, ?User $actor = null): void

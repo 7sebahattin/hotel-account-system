@@ -47,9 +47,9 @@ Route::middleware('auth')->prefix('stays')->name('stays.')->group(function (): v
         ->middleware('can:'.Permission::StaysDelete->value)
         ->name('cancel');
 
-    // Kalıcı silme (hard delete) — YALNIZCA Admin, YALNIZCA zaten iptal
-    // edilmiş bir kayıtta (StayPolicy::forceDelete, kullanıcı talimatı).
-    Route::delete('{stay}', [StayController::class, 'destroy'])
-        ->middleware('can:'.Permission::StaysForceDelete->value)
-        ->name('destroy');
+    // "Sil" = ortak Çöp Kutusu'na taşı (aktifse önce iptal edilir). Geri alma ve
+    // kalıcı silme /trash ekranındadır (Trash modülü).
+    Route::patch('{stay}/trash', [StayController::class, 'moveToTrash'])
+        ->middleware('can:'.Permission::StaysDelete->value)
+        ->name('trash');
 });

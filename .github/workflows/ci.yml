@@ -67,6 +67,9 @@ jobs:
       - name: Personel kart okuyucu testleri
         run: npm run test:personnel
 
+      - name: Tarih yapıştırma testleri
+        run: npm run test:date-paste
+
       - name: Ortam hazırlığı
         run: |
           cp .env.example .env

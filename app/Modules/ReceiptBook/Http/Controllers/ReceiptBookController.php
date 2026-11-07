@@ -133,6 +133,6 @@ class ReceiptBookController extends Controller
         $this->receiptBook->delete($entry);
 
         return redirect()->route('receipt-book.index')
-            ->with('success', 'Makbuz silindi.');
+            ->with('success', 'Makbuz çöp kutusuna taşındı. Çöp Kutusu\'ndan geri alınabilir.');
     }
 }

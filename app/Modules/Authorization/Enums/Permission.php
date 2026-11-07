@@ -28,30 +28,21 @@ enum Permission: string
     case StaysUpdate = 'stays.update';
     case StaysDelete = 'stays.delete';
 
-    /**
-     * Kalıcı silme (hard delete) — stays.delete'ten AYRI ve BİLEREK dar bir
-     * yetkidir. stays.delete zaten "İptal et" akışına bağlıdır (CLAUDE.md
-     * §7.2 notu) ve Patron'da da vardır; bu yeni yetki yalnızca Admin'e
-     * atanır (RoleName::permissions()) ve StayPolicy::forceDelete() onu
-     * yalnızca ZATEN İPTAL EDİLMİŞ bir kayıtta kabul eder — ledger append-only
-     * olduğu için (§6/L1) aktif bir kaydın borcu hard-delete ile kaldırılamaz.
-     */
-    case StaysForceDelete = 'stays.force_delete';
-
     /** Oda tanımları (Yönetim → Odalar). Görüntüleme ayrı yetki değildir. */
     case RoomsManage = 'rooms.manage';
+
+    /** Ortak Çöp Kutusu ekranını görüntüle / kayıt geri al (6 Kasım 2026). */
+    case TrashView = 'trash.view';
+
+    /**
+     * Çöp kutusundaki kaydı veritabanından KALICI sil — yalnızca Admin
+     * (RoleName::Admin tüm yetkileri alır; Policy/sağlayıcı ayrıca rolü doğrular).
+     */
+    case TrashForceDelete = 'trash.force_delete';
 
     case PaymentsView = 'payments.view';
     case PaymentsCreate = 'payments.create';
     case PaymentsCancel = 'payments.cancel';
-
-    /**
-     * Çöp kutusundaki tahsilatı veritabanından KALICI siler — yalnızca Admin
-     * (RoleName::Admin tüm yetkileri alır), yalnızca çöpteki iptal edilmiş
-     * tahsilatta (PaymentPolicy::forceDelete). Çöpe taşıma/geri alma ayrı
-     * yetki gerektirmez (payments.create).
-     */
-    case PaymentsForceDelete = 'payments.force_delete';
 
     case LedgerView = 'ledger.view';
     case LedgerViewAll = 'ledger.view_all';
@@ -105,10 +96,10 @@ enum Permission: string
             self::CompaniesView, self::CompaniesCreate, self::CompaniesUpdate,
             self::CompaniesDelete, self::CompaniesRestore => 'Firmalar',
             self::StaysView, self::StaysCreate,
-            self::StaysUpdate, self::StaysDelete, self::StaysForceDelete => 'Konaklamalar',
+            self::StaysUpdate, self::StaysDelete => 'Konaklamalar',
             self::RoomsManage => 'Odalar',
-            self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel,
-            self::PaymentsForceDelete => 'Tahsilatlar',
+            self::TrashView, self::TrashForceDelete => 'Çöp Kutusu',
+            self::PaymentsView, self::PaymentsCreate, self::PaymentsCancel => 'Tahsilatlar',
             self::LedgerView, self::LedgerViewAll => 'Cari Hesap',
             self::DashboardFinancial => 'Dashboard',
             self::ExportExcel => 'Dışa Aktarma',
@@ -140,12 +131,12 @@ enum Permission: string
             self::StaysCreate => 'Konaklama ekle',
             self::StaysUpdate => 'Konaklama düzenle',
             self::StaysDelete => 'Konaklama sil',
-            self::StaysForceDelete => 'Konaklamayı kalıcı olarak sil (yalnızca iptal edilmiş kayıt)',
             self::RoomsManage => 'Oda tanımlarını yönet',
+            self::TrashView => 'Çöp kutusunu görüntüle ve kayıt geri al',
+            self::TrashForceDelete => 'Çöp kutusundaki kaydı kalıcı olarak sil',
             self::PaymentsView => 'Tahsilatları görüntüle',
             self::PaymentsCreate => 'Cari tahsilat',
             self::PaymentsCancel => 'Tahsilat iptal et',
-            self::PaymentsForceDelete => 'Çöp kutusundaki tahsilatı kalıcı olarak sil',
             self::LedgerView => 'Firma cari ekstresini görüntüle',
             self::LedgerViewAll => 'Tüm firma bakiyelerini ve toplam alacağı görüntüle',
             self::DashboardFinancial => 'Finansal dashboard kartlarını görüntüle',

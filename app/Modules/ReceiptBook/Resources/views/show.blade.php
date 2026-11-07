@@ -13,7 +13,7 @@
 
             @can('delete', $entry)
                 <form method="POST" action="{{ route('receipt-book.destroy', $entry) }}"
-                      onsubmit="return confirm('Bu makbuz kalıcı olarak silinsin mi? Bu işlem geri alınamaz.')">
+                      onsubmit="return confirm('Bu makbuz çöp kutusuna taşınsın mı? Çöp Kutusu'ndan geri alınabilir.')">
                     @csrf @method('DELETE')
                     <x-ui.button type="submit" variant="danger">Sil</x-ui.button>
                 </form>

@@ -80,6 +80,6 @@ class RoomController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('rooms.index')->with('success', 'Oda silindi.');
+        return redirect()->route('rooms.index')->with('success', 'Oda çöp kutusuna taşındı. Çöp Kutusu\'ndan geri alınabilir.');
     }
 }

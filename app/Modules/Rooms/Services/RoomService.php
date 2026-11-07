@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Rooms\Services;
 
+use App\Models\User;
+use App\Modules\Authorization\Enums\RoleName;
+use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Rooms\Exceptions\RoomHasStayHistory;
 use App\Modules\Rooms\Models\Room;
 use App\Modules\Stays\Services\StayService;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -69,6 +75,59 @@ class RoomService
         DB::transaction(function () use ($room): void {
             $room->delete();
         });
+    }
+
+    /**
+     * Çöp kutusundaki (soft delete) odalar.
+     *
+     * @return Collection<int, Room>
+     */
+    public function trashed(int $limit = 300): Collection
+    {
+        return Room::onlyTrashed()->orderByDesc('deleted_at')->limit($limit)->get();
+    }
+
+    public function trashedCount(): int
+    {
+        return Room::onlyTrashed()->count();
+    }
+
+    public function findIncludingTrashed(int $id): Room
+    {
+        return Room::withTrashed()->findOrFail($id);
+    }
+
+    public function restoreFromTrash(Room $room): void
+    {
+        $room->restore();
+    }
+
+    /**
+     * Çöpteki odayı KALICI siler — yalnızca Admin ve yalnızca konaklama geçmişi
+     * olmayan oda (çöpteki konaklamalar da geçmiş sayılır).
+     *
+     * @throws TrashActionFailed
+     */
+    public function forceDelete(Room $room, User $actor): void
+    {
+        if (! $actor->hasRole(RoleName::Admin->value)) {
+            throw new AuthorizationException('Kalıcı silme yalnızca admin hesabına açıktır.');
+        }
+        if (! $room->trashed()) {
+            throw new TrashActionFailed('Oda çöp kutusunda değil.');
+        }
+        if ($this->stays->roomHasHistory($room->getKey())) {
+            throw new TrashActionFailed("«{$room->room_no}» odası konaklama geçmişinde kullanıldığı için kalıcı silinemez.");
+        }
+
+        try {
+            DB::transaction(fn () => $room->forceDelete());
+        } catch (\Throwable $e) {
+            if ($e instanceof QueryException) {
+                throw new TrashActionFailed("«{$room->room_no}» odası kalıcı silinemedi.", 0, $e);
+            }
+            throw $e;
+        }
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Modules\ReceiptBook\Providers;
 use App\Modules\Core\Providers\ModuleServiceProvider;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
 use App\Modules\ReceiptBook\Policies\ReceiptBookEntryPolicy;
+use App\Modules\ReceiptBook\Trash\ReceiptBookTrashProvider;
 
 class ReceiptBookServiceProvider extends ModuleServiceProvider
 {
@@ -14,5 +15,9 @@ class ReceiptBookServiceProvider extends ModuleServiceProvider
 
     protected array $policies = [
         ReceiptBookEntry::class => ReceiptBookEntryPolicy::class,
+    ];
+
+    protected array $trashProviders = [
+        ReceiptBookTrashProvider::class,
     ];
 }

@@ -51,6 +51,7 @@ enum RoleName: string
                 Permission::StaysUpdate,
                 Permission::StaysDelete,
                 Permission::RoomsManage,
+                Permission::TrashView,
                 Permission::PaymentsView,
                 Permission::PaymentsCreate,
                 Permission::PaymentsCancel,
@@ -84,6 +85,7 @@ enum RoleName: string
                 Permission::StaysUpdate,
                 Permission::PaymentsView,
                 Permission::PaymentsCreate,
+                Permission::TrashView,
 
                 /*
                  * Personel zaten Tahsilat kaydı girebiliyor (PaymentsCreate) —

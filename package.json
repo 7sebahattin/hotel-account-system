@@ -6,7 +6,8 @@
         "build": "vite build",
         "dev": "vite",
         "test:monthly-account": "node --test tests/Js/monthly-account.test.mjs",
-        "test:personnel": "node --test tests/Js/personnel.test.mjs"
+        "test:personnel": "node --test tests/Js/personnel.test.mjs",
+        "test:date-paste": "node --test tests/Js/date-paste.test.mjs"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

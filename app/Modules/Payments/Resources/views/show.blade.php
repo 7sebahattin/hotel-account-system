@@ -26,27 +26,12 @@
                 <x-ui.button :href="route('payments.edit', $payment)">Bilgileri düzenle</x-ui.button>
             @endcan
 
-            {{-- İptal edilmiş tahsilat herkes tarafından çöp kutusuna taşınabilir. --}}
+            {{-- "Sil" = çöp kutusuna taşı; aktifse önce iptal edilir. Geri alma/kalıcı silme: Çöp Kutusu. --}}
             @can('trash', $payment)
                 <form method="POST" action="{{ route('payments.move-to-trash', $payment) }}"
-                      onsubmit="return confirm('Bu tahsilat çöp kutusuna taşınsın mı? Listelerden kalkar; cari hareketi etkilenmez. Çöp kutusundan geri alınabilir.')">
+                      onsubmit="return confirm('{{ $payment->isCancelled() ? 'Bu tahsilat çöp kutusuna taşınsın mı?' : 'Bu tahsilat önce İPTAL edilecek (cari hareketi ters kaydedilir) ve çöp kutusuna taşınacak. Emin misiniz?' }} Çöp kutusundan geri alınabilir.')">
                     @csrf @method('PATCH')
-                    <x-ui.button type="submit" variant="danger">Çöp kutusuna taşı</x-ui.button>
-                </form>
-            @endcan
-
-            @can('restore', $payment)
-                <form method="POST" action="{{ route('payments.untrash', $payment) }}">
-                    @csrf @method('PATCH')
-                    <x-ui.button type="submit" variant="secondary">Çöp kutusundan geri al</x-ui.button>
-                </form>
-            @endcan
-
-            @can('forceDelete', $payment)
-                <form method="POST" action="{{ route('payments.force-delete', $payment) }}"
-                      onsubmit="return confirm('Bu tahsilat kaydı veritabanından KALICI olarak silinecek. Bu işlem GERİ ALINAMAZ. Emin misiniz?')">
-                    @csrf @method('DELETE')
-                    <x-ui.button type="submit" variant="danger">Kalıcı olarak sil</x-ui.button>
+                    <x-ui.button type="submit" variant="danger">Sil</x-ui.button>
                 </form>
             @endcan
         </x-slot:actions>

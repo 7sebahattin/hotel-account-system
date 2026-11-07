@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Core\Providers;
 
+use App\Modules\Core\Trash\TrashProvider;
+use App\Modules\Core\Trash\TrashRegistry;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -35,10 +37,20 @@ abstract class ModuleServiceProvider extends ServiceProvider
      */
     protected array $policies = [];
 
+    /**
+     * Çöp kutusu sağlayıcıları (Core\Trash\TrashProvider uygulayan sınıflar).
+     * Modül, silinebilir kayıt türlerini burada ortak çöp kutusuna bağlar.
+     *
+     * @var array<int, class-string<TrashProvider>>
+     */
+    protected array $trashProviders = [];
+
     private ?string $modulePath = null;
 
     public function register(): void
     {
+        $this->app->singleton(TrashRegistry::class);
+
         $config = $this->path('Config/'.$this->namespace.'.php');
 
         if (is_file($config)) {
@@ -58,6 +70,10 @@ abstract class ModuleServiceProvider extends ServiceProvider
 
         if (is_dir($migrations = $this->path('Database/Migrations'))) {
             $this->loadMigrationsFrom($migrations);
+        }
+
+        foreach ($this->trashProviders as $provider) {
+            $this->app->make(TrashRegistry::class)->register($provider);
         }
 
         foreach ($this->policies as $model => $policy) {

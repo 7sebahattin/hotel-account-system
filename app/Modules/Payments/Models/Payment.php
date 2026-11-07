@@ -60,6 +60,7 @@ use Illuminate\Support\Carbon;
  * @property-read User|null $creator
  * @property-read User|null $updater
  * @property-read User|null $canceller
+ * @property-read User|null $trasher
  */
 class Payment extends Model
 {
@@ -157,6 +158,11 @@ class Payment extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function trasher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'trashed_by');
     }
 
     public function canceller(): BelongsTo

@@ -314,7 +314,8 @@ class ReceiptBookTest extends TestCase
 
         $this->actingAs($admin)->get(route('receipt-book.show', $entry))
             ->assertOk()
-            ->assertSee('kalıcı olarak silinsin');
+            // 6 Kasım 2026: makbuz "Sil" artık çöp kutusuna taşımadır; kalıcı silme Çöp Kutusu'ndadır.
+            ->assertSee('çöp kutusuna taşınsın');
 
         foreach ([RoleName::Patron, RoleName::Personel] as $role) {
             $this->actingAs($this->userWithRole($role))->get(route('receipt-book.index'))

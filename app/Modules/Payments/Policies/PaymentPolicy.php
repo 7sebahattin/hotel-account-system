@@ -6,7 +6,6 @@ namespace App\Modules\Payments\Policies;
 
 use App\Models\User;
 use App\Modules\Authorization\Enums\Permission;
-use App\Modules\Authorization\Enums\RoleName;
 use App\Modules\Payments\Models\Payment;
 
 class PaymentPolicy
@@ -57,25 +56,13 @@ class PaymentPolicy
     }
 
     /**
-     * Çöp kutusuna taşıma: tahsilat girebilen herkes (Admin/Patron/Personel),
-     * yalnızca İPTAL EDİLMİŞ ve henüz çöpte olmayan kayıt için.
+     * "Sil" = çöp kutusuna taşı: tahsilat girebilen herkes (Admin/Patron/Personel).
+     * Aktif tahsilat önce iptal edilir (PaymentService::trash). Geri alma ve
+     * kalıcı silme ortak Çöp Kutusu ekranındadır (Core\Trash).
      */
     public function trash(User $user, Payment $payment): bool
     {
-        return $user->can(Permission::PaymentsCreate->value)
-            && $payment->isCancelled() && ! $payment->isTrashed();
-    }
-
-    public function restore(User $user, Payment $payment): bool
-    {
-        return $user->can(Permission::PaymentsCreate->value) && $payment->isTrashed();
-    }
-
-    /** Kalıcı silme: yalnızca Admin, yalnızca çöpteki kayıt. */
-    public function forceDelete(User $user, Payment $payment): bool
-    {
-        return $user->hasRole(RoleName::Admin->value)
-            && $user->can(Permission::PaymentsForceDelete->value) && $payment->isTrashed();
+        return $user->can(Permission::PaymentsCreate->value) && ! $payment->isTrashed();
     }
 
     private function isOwnRecentRecord(User $user, Payment $payment): bool

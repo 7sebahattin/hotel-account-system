@@ -15,6 +15,7 @@ use App\Modules\ReceiptBook\Enums\ReceiptPaymentMethod;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
@@ -39,13 +40,14 @@ use Illuminate\Support\Carbon;
  * @property int|null $updated_by
  * @property Carbon $created_at
  * @property Carbon $updated_at
+ * @property Carbon|null $deleted_at
  * @property-read User|null $creator
  * @property-read User|null $updater
  */
 class ReceiptBookEntry extends Model
 {
     /** @use HasFactory<ReceiptBookEntryFactory> */
-    use Auditable, HasCreator, HasFactory;
+    use Auditable, HasCreator, HasFactory, SoftDeletes;
 
     protected $table = 'receipt_book_entries';
 

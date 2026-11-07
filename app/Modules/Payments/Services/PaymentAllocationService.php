@@ -28,6 +28,34 @@ class PaymentAllocationService
             ->whereNotExists(fn (Builder $q) => $q->selectRaw('1')->from('payment_allocations as r')->whereColumn('r.reverses_allocation_id', 'a.id'));
     }
 
+    /**
+     * Kalıcı silme (çöp kutusu) için bir tahsilatın / konaklamanın TÜM dağılım
+     * satırı kimlikleri — ters dağılımlar dahil.
+     *
+     * @return array<int, int>
+     */
+    public function idsFor(string $column, int $id): array
+    {
+        return DB::table('payment_allocations')->where($column, $id)->orderBy('id')
+            ->pluck('id')->map(fn ($value): int => (int) $value)->all();
+    }
+
+    /**
+     * Dağılım satırlarını SİLER. Yalnızca `Core\Trash\FinancialPurgeGate` açıkken
+     * ve yalnızca kapıya sayılan kimlikler için tetikleyici izin verir.
+     * Ters dağılımlar (yüksek kimlik) önce silinir — kendine FK RESTRICT.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function purge(array $ids): int
+    {
+        if ($ids === []) {
+            return 0;
+        }
+
+        return DB::table('payment_allocations')->whereIn('id', $ids)->orderByDesc('id')->delete();
+    }
+
     /** @param array<int, int> $stayIds
      * @return array<int, int>
      */
