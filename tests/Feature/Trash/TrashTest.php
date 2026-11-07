@@ -11,6 +11,8 @@ use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Trash\FinancialPurgeGate;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Services\LedgerService;
+use App\Modules\Ledger\Services\LedgerStatementService;
+use App\Modules\Ledger\Support\StatementCriteria;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\ReceiptBook\Models\ReceiptBookEntry;
@@ -117,7 +119,7 @@ class TrashTest extends TestCase
 
         $balanceBefore = $this->balance();
         $this->assertDatabaseCount('payment_allocations', 2); // dağılım + ters dağılım
-        $ledgerBefore = LedgerEntry::query()->count();
+        $ledgerBefore = LedgerEntry::withoutGlobalScope('visible')->count();
 
         $this->actingAs($this->admin)->delete(route('trash.destroy', ['payments', $payment->id]))
             ->assertRedirect(route('trash.index', ['tur' => 'payments']))
@@ -125,8 +127,8 @@ class TrashTest extends TestCase
 
         $this->assertDatabaseMissing('payments', ['id' => $payment->id]);
         $this->assertDatabaseCount('payment_allocations', 0);
-        $this->assertSame($ledgerBefore - 2, LedgerEntry::query()->count(), 'Tahsilatın orijinal + ters defter satırı silinir');
-        $this->assertSame(0, LedgerEntry::query()->where('source_type', 'payment')->count());
+        $this->assertSame($ledgerBefore - 2, LedgerEntry::withoutGlobalScope('visible')->count(), 'Tahsilatın orijinal + ters defter satırı silinir');
+        $this->assertSame(0, LedgerEntry::withoutGlobalScope('visible')->where('source_type', 'payment')->count());
         $this->assertSame($balanceBefore, $this->balance(), 'Net sıfır olduğundan bakiye aynı kalır');
         $this->assertDatabaseHas('audit_logs', ['auditable_type' => 'payment', 'auditable_id' => $payment->id, 'event' => 'deleted']);
     }
@@ -195,7 +197,7 @@ class TrashTest extends TestCase
         app(StayService::class)->trash($stay, $this->admin);
 
         $balanceBefore = $this->balance();
-        $ledgerBefore = LedgerEntry::query()->count();
+        $ledgerBefore = LedgerEntry::withoutGlobalScope('visible')->count();
         $this->assertGreaterThan(0, DB::table('payment_allocations')->where('stay_id', $stay->id)->count());
 
         $this->actingAs($this->admin)->delete(route('trash.destroy', ['stays', $stay->id]))
@@ -203,8 +205,8 @@ class TrashTest extends TestCase
 
         $this->assertDatabaseMissing('stays', ['id' => $stay->id]);
         $this->assertSame(0, DB::table('payment_allocations')->where('stay_id', $stay->id)->count());
-        $this->assertSame(0, LedgerEntry::query()->where('source_type', 'stay')->count());
-        $this->assertLessThan($ledgerBefore, LedgerEntry::query()->count());
+        $this->assertSame(0, LedgerEntry::withoutGlobalScope('visible')->where('source_type', 'stay')->count());
+        $this->assertLessThan($ledgerBefore, LedgerEntry::withoutGlobalScope('visible')->count());
         $this->assertSame($balanceBefore, $this->balance(), 'Net sıfır olduğundan bakiye aynı kalır');
         $this->assertDatabaseHas('payments', ['id' => $payment->id]);
     }
@@ -226,7 +228,7 @@ class TrashTest extends TestCase
     {
         $this->stay('1000.00', 'Ayşe A');
         $this->stay('2000.00', 'Burak B');
-        $ids = LedgerEntry::query()->orderBy('id')->pluck('id')->all();
+        $ids = LedgerEntry::withoutGlobalScope('visible')->orderBy('id')->pluck('id')->all();
         $this->assertCount(2, $ids);
 
         // Kapı kapalı: reddedilir.
@@ -251,7 +253,7 @@ class TrashTest extends TestCase
     public function admin_olmayan_aktor_icin_kapi_acilmaz(): void
     {
         $this->stay('1000.00');
-        $id = (int) LedgerEntry::query()->value('id');
+        $id = (int) LedgerEntry::withoutGlobalScope('visible')->value('id');
 
         $this->assertThrows(
             fn () => app(FinancialPurgeGate::class)->run($this->userWithRole(RoleName::Patron), [$id], [], fn () => null),
@@ -339,6 +341,45 @@ class TrashTest extends TestCase
 
         $this->actingAs($this->admin)->patch(route('trash.restore', ['users', $other->id]))->assertRedirect();
         $this->assertNotSoftDeleted('users', ['id' => $other->id]);
+    }
+
+    // ------------------------------------------------ çöpteki veri her yerden gizli
+
+    #[Test]
+    public function copteki_tahsilat_ve_konaklama_ekstre_toplam_ve_listelerden_gizlenir_bakiye_ayni_kalir(): void
+    {
+        $this->stay('1000.00', 'Kalan Misafir');
+        $trashedStay = $this->stay('2000.00', 'Silinen Misafir');
+        $trashedPayment = $this->payment('500.00');
+        app(StayService::class)->trash($trashedStay, $this->admin);
+        app(PaymentService::class)->trash($trashedPayment, $this->admin);
+
+        // Fiziksel satırlar durur (append-only), görünür sorgularda yalnızca kalan konaklama vardır.
+        $this->assertSame(5, LedgerEntry::withoutGlobalScope('visible')->count());
+        $this->assertSame(1, LedgerEntry::query()->count());
+        $this->assertSame('1000.00', $this->balance(), 'Net sıfır çiftler çıkınca bakiye değişmez');
+
+        $statement = app(LedgerStatementService::class)->forCompany($this->company->id, new StatementCriteria);
+        $this->assertCount(1, $statement->rows);
+        $this->assertSame('1000.00', $statement->summaries['TRY']->totalDebit->toDecimal());
+        $this->assertSame('0.00', $statement->summaries['TRY']->totalCredit->toDecimal());
+
+        $this->assertSame(0, Payment::query()->count());
+        $this->actingAs($this->admin)->get(route('payments.show', $trashedPayment))->assertNotFound();
+        $this->assertCount(0, $this->actingAs($this->admin)->get(route('payments.index'))->viewData('payments')->items());
+    }
+
+    #[Test]
+    public function geri_alinan_kayit_ekstrede_iptal_olarak_yeniden_gorunur(): void
+    {
+        $stay = $this->stay('2000.00', 'Geri Gelen');
+        app(StayService::class)->trash($stay, $this->admin);
+        $this->assertSame(0, LedgerEntry::query()->count());
+
+        app(StayService::class)->restoreFromTrash($stay->fresh(), $this->admin);
+
+        $this->assertSame(2, LedgerEntry::query()->count(), 'Orijinal + iptal ters kaydı');
+        $this->assertSame('0.00', $this->balance());
     }
 
     // -------------------------------------------------------- görünürlük

@@ -17,6 +17,7 @@ use App\Modules\Payments\Enums\PaymentMethod;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\PaymentFinancialFieldsAreImmutable;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -143,6 +144,12 @@ class Payment extends Model
      */
     protected static function booted(): void
     {
+        // Çöpteki tahsilat HİÇBİR listede/sorguda yoktur (7 Kasım 2026); çöp kutusu,
+        // geri alma ve kalıcı silme `withoutGlobalScopes()` kullanır.
+        static::addGlobalScope('notTrashed', function (Builder $builder): void {
+            $builder->whereNull($builder->getModel()->getTable().'.trashed_at');
+        });
+
         static::updating(function (Payment $payment): void {
             $changed = array_values(array_intersect(
                 self::IMMUTABLE_FIELDS,

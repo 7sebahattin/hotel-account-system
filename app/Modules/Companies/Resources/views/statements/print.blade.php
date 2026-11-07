@@ -28,6 +28,7 @@
                 <div class="summary">
                     <h2>{{ $summary->currency->value }} — {{ $summary->currency->label() }}</h2>
                     <dl>
+                        @unless ($criteria->isBalanceOnly())
                         @if ($summary->hasCarryForward())
                             <div class="line">
                                 <dt>Devreden</dt>
@@ -42,8 +43,9 @@
                             <dt>Toplam alacak</dt>
                             <dd class="num">{{ $summary->totalCredit->format($summary->currency) }}</dd>
                         </div>
+                        @endunless
                         <div class="line total">
-                            <dt>Bakiye</dt>
+                            <dt>{{ $criteria->isBalanceOnly() ? 'Cari bakiye' : 'Bakiye' }}</dt>
                             <dd class="num">
                                 {{ $summary->closing->format($summary->currency) }}
                                 @if ($closingFx && $closingFx['value'] !== null)
@@ -62,6 +64,7 @@
         </div>
     @endif
 
+    @unless ($criteria->isBalanceOnly())
     @foreach ($statement->carryForwards() as $summary)
         @php $carryFx = $fx['carryForward'][$summary->currency->value] ?? null; @endphp
         <div class="carry">
@@ -77,6 +80,7 @@
             </span>
         </div>
     @endforeach
+    @endunless
 
     <div class="scroll-x">
     <table>

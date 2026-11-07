@@ -58,11 +58,11 @@ class PaymentTrashProvider implements TrashProvider
 
     public function restore(int $id, User $actor): void
     {
-        $this->payments->restoreFromTrash(Payment::query()->findOrFail($id), $actor);
+        $this->payments->restoreFromTrash($this->payments->findIncludingTrashed($id), $actor);
     }
 
     public function forceDelete(int $id, User $actor): void
     {
-        $this->payments->forceDelete(Payment::query()->findOrFail($id), $actor);
+        $this->payments->forceDelete($this->payments->findIncludingTrashed($id), $actor);
     }
 }

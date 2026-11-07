@@ -12,6 +12,7 @@ use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Exceptions\CannotReverseEntry;
 use App\Modules\Ledger\Exceptions\InvalidLedgerEntry;
 use App\Modules\Ledger\Models\LedgerEntry;
+use App\Modules\Ledger\Support\LedgerVisibility;
 use DateTimeInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -191,7 +192,7 @@ class LedgerService
      */
     public function entryIdsForSource(string $sourceType, int $sourceId): array
     {
-        return LedgerEntry::query()
+        return LedgerEntry::withoutGlobalScope('visible')
             ->where('source_type', $sourceType)->where('source_id', $sourceId)
             ->orderBy('id')->pluck('id')->map(fn ($id): int => (int) $id)->all();
     }
@@ -239,7 +240,8 @@ class LedgerService
 
     public function hasEntriesForCompany(int $companyId): bool
     {
-        return LedgerEntry::query()->where('company_id', $companyId)->exists();
+        // Çöptekiler dahil: firmaya bağlı fiziksel defter satırı varsa firma kalıcı silinemez.
+        return LedgerEntry::withoutGlobalScope('visible')->where('company_id', $companyId)->exists();
     }
 
     public function isReversed(LedgerEntry $entry): bool
@@ -325,7 +327,7 @@ class LedgerService
     {
         // CAST ... AS CHAR: toplamlar her zaman metin olarak döner, sürücü
         // kaynaklı kayan nokta dönüşümü olasılığı ortadan kalkar.
-        return DB::table('ledger_entries')->selectRaw(
+        return LedgerVisibility::apply(DB::table('ledger_entries'))->selectRaw(
             'CAST(COALESCE(SUM(debit), 0) AS CHAR) AS total_debit, '.
             'CAST(COALESCE(SUM(credit), 0) AS CHAR) AS total_credit'
         );

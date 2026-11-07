@@ -9,6 +9,8 @@ use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Database\Factories\LedgerEntryFactory;
 use App\Modules\Ledger\Exceptions\LedgerEntryIsImmutable;
+use App\Modules\Ledger\Support\LedgerVisibility;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -68,6 +70,12 @@ class LedgerEntry extends Model
 
     protected static function booted(): void
     {
+        // Çöpteki kaynağın satırları görünür sorgularda yoktur (bkz. LedgerVisibility).
+        // Kalıcı silme hazırlığı `withoutGlobalScope('visible')` kullanır.
+        static::addGlobalScope('visible', function (Builder $builder): void {
+            LedgerVisibility::apply($builder->getQuery(), $builder->getModel()->getTable());
+        });
+
         static::updating(function (): void {
             throw LedgerEntryIsImmutable::cannotUpdate();
         });

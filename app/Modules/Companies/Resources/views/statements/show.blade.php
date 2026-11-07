@@ -21,8 +21,23 @@
         </x-slot:actions>
     </x-ui.page-header>
 
+    {{-- Hızlı dönem filtreleri: seçilince özet yalnızca CARİ BAKİYEYİ gösterir (7 Kasım 2026). --}}
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+        <span class="text-sm font-medium text-tx">Hızlı filtreler:</span>
+        @foreach (['' => 'Tümü'] + \App\Modules\Ledger\Support\StatementCriteria::QUICK_RANGES as $key => $label)
+            @php $active = ($criteria->quick ?? '') === $key; @endphp
+            <a href="{{ request()->fullUrlWithQuery(['hizli' => $key === '' ? null : $key, 'date_from' => null, 'date_to' => null]) }}"
+               @if ($active) aria-current="true" @endif
+               @class([
+                   'inline-flex min-h-11 items-center rounded-full border px-3 text-sm lg:min-h-8',
+                   'border-acc bg-acc font-semibold text-on-acc' => $active,
+                   'border-line bg-well text-tx hover:border-field' => ! $active,
+               ])>{{ $label }}</a>
+        @endforeach
+    </div>
+
     @if ($statement->hasSummaries())
-        <div class="mt-6">@include('companies::statements._summary', ['fx' => $fx])</div>
+        <div class="mt-4">@include('companies::statements._summary', ['fx' => $fx])</div>
     @endif
 
     {{-- Grid kapalı: bu ekranın gövdesi iki ANLAMLI gruba ayrılır (bakiyenin
@@ -34,9 +49,9 @@
         <p class="mt-0.5 text-xs text-mut">Bu üç alan hangi hareketlerin hesaba katılacağını belirler.</p>
 
         <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <x-ui.input label="Başlangıç tarihi" name="date_from" type="date" :value="request('date_from')"
+            <x-ui.input label="Başlangıç tarihi" name="date_from" type="date" :value="request('date_from') ?: $criteria->dateFrom?->toDateString()"
                         hint="Öncesi devreden bakiye olur" />
-            <x-ui.input label="Bitiş tarihi" name="date_to" type="date" :value="request('date_to')" />
+            <x-ui.input label="Bitiş tarihi" name="date_to" type="date" :value="request('date_to') ?: $criteria->dateTo?->toDateString()" />
 
             <x-ui.select label="Para birimi" name="currency"
                          hint="Para birimleri ayrı hesaplanır, toplanmaz">

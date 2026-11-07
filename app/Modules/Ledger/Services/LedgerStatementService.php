@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Currency;
 use App\Modules\Core\Support\Money;
 use App\Modules\Ledger\Models\LedgerEntry;
 use App\Modules\Ledger\Support\CurrencySummary;
+use App\Modules\Ledger\Support\LedgerVisibility;
 use App\Modules\Ledger\Support\Statement;
 use App\Modules\Ledger\Support\StatementCriteria;
 use App\Modules\Ledger\Support\StatementRow;
@@ -89,7 +90,7 @@ class LedgerStatementService
 
         // DB::table kullanılır: Eloquent cast'leri toplama sorgusunda `currency`
         // alanını enum'a çevirir ve dizi anahtarı olarak kullanılamaz hâle getirir.
-        $rows = DB::table('ledger_entries')
+        $rows = LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('company_id, currency')
             ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
             ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
@@ -122,7 +123,7 @@ class LedgerStatementService
             return [];
         }
 
-        return DB::table('ledger_entries')
+        return LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('company_id, MAX(entry_date) as last_date')
             ->whereIn('company_id', $companyIds)
             ->when($currency !== null, fn ($query) => $query->where('currency', $currency?->value))
@@ -147,7 +148,7 @@ class LedgerStatementService
      */
     public function openBalanceTotalsByCurrency(): array
     {
-        $inner = DB::table('ledger_entries')
+        $inner = LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('company_id, currency, (COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) as balance')
             ->groupBy('company_id', 'currency');
 
@@ -187,7 +188,7 @@ class LedgerStatementService
      */
     public function topDebtorCompanies(Currency $currency, int $limit = 10): array
     {
-        $rows = DB::table('ledger_entries')
+        $rows = LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('company_id')
             ->selectRaw('CAST((COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0)) AS CHAR) as balance')
             ->where('currency', $currency->value)
@@ -233,7 +234,7 @@ class LedgerStatementService
      */
     public function monthlyNetChanges(Currency $currency, string $from, string $to): array
     {
-        $rows = DB::table('ledger_entries')
+        $rows = LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw("CASE WHEN entry_date < ? THEN 'opening' ELSE DATE_FORMAT(entry_date, '%Y-%m') END as bucket", [$from])
             ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
             ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
@@ -283,7 +284,7 @@ class LedgerStatementService
 
         $running = $currentNet;
         if ($running === null) {
-            $totals = DB::table('ledger_entries')
+            $totals = LedgerVisibility::apply(DB::table('ledger_entries'))
                 ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
                 ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')
                 ->where('currency', $currency->value)
@@ -329,7 +330,7 @@ class LedgerStatementService
     {
         $expression = '(COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0))';
 
-        return DB::table('ledger_entries')
+        return LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('company_id')
             ->selectRaw("CAST({$expression} AS CHAR) as balance")
             ->where('currency', $currency->value)
@@ -361,7 +362,7 @@ class LedgerStatementService
             return [];
         }
 
-        $query = DB::table('ledger_entries')
+        $query = LedgerVisibility::apply(DB::table('ledger_entries'))
             ->selectRaw('currency')
             ->selectRaw('CAST(COALESCE(SUM(debit), 0) AS CHAR) as total_debit')
             ->selectRaw('CAST(COALESCE(SUM(credit), 0) AS CHAR) as total_credit')

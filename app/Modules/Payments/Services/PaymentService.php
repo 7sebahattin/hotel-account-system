@@ -223,7 +223,7 @@ class PaymentService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($payment, $user): Payment {
-            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $fresh = Payment::withoutGlobalScopes()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             $payment->setRawAttributes($fresh->getAttributes(), true);
             if ($payment->isTrashed()) {
                 return $payment;
@@ -256,7 +256,7 @@ class PaymentService
         $user = $this->resolveActor($actor);
 
         return DB::transaction(function () use ($payment, $user): Payment {
-            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $fresh = Payment::withoutGlobalScopes()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             $payment->setRawAttributes($fresh->getAttributes(), true);
             if (! $payment->isTrashed()) {
                 return $payment;
@@ -299,7 +299,7 @@ class PaymentService
 
         DB::transaction(function () use ($payment, $user): void {
             app(CompanyService::class)->lockAccounts([$payment->company_id]);
-            $fresh = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
+            $fresh = Payment::withoutGlobalScopes()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if (! $fresh->isTrashed() || ! $fresh->isCancelled()) {
                 throw new TrashActionFailed("#{$fresh->id} numaralı tahsilat çöp kutusunda değil; yalnızca çöpteki iptal edilmiş tahsilat kalıcı silinebilir.");
             }
@@ -347,7 +347,7 @@ class PaymentService
      */
     public function trashed(int $limit = 300): Collection
     {
-        return Payment::query()
+        return Payment::withoutGlobalScopes()
             ->with(['company', 'trasher'])
             ->whereNotNull('trashed_at')
             ->orderByDesc('trashed_at')
@@ -356,9 +356,15 @@ class PaymentService
             ->get();
     }
 
+    /** Çöpteki dahil tek tahsilat (çöp kutusu sağlayıcısı için). */
+    public function findIncludingTrashed(int $id): Payment
+    {
+        return Payment::withoutGlobalScopes()->findOrFail($id);
+    }
+
     public function trashedCount(): int
     {
-        return Payment::query()->whereNotNull('trashed_at')->count();
+        return Payment::withoutGlobalScopes()->whereNotNull('trashed_at')->count();
     }
 
     /**
