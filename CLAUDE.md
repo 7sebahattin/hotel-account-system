@@ -2480,5 +2480,6 @@ php artisan serve
 - Bir kural bu dosyayla çelişiyorsa önce bu dosyayı güncellemeyi öner.
 - V1'i bitirmeye hizmet etmeyen bir iş öneriliyorsa "bu V1 sonrası" diyerek not düş.
 - Kararlarını `docs/` altına kısa notlar olarak yaz (mimari kararlar, veri göçü notları).
+- **Her iş (yayına gidecek değişiklik paketi) sonunda `config/release.php` içindeki `version` değerini 1 artır** (7 Kasım 2026, kullanıcı talimatı): kenar çubuğunda "Cari Takip · vN" olarak görünür ve canlı sitenin güncel olup olmadığını anlamanın tek yoludur.
 
 **Bu dosya güncel tutulur.** Şema, rol matrisi veya kapsam değişirse aynı commit'te CLAUDE.md da güncellenir.
