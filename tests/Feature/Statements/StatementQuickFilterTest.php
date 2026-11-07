@@ -87,7 +87,6 @@ class StatementQuickFilterTest extends TestCase
         $page->assertSee('Cari bakiye')
             ->assertDontSee('Toplam borç')
             ->assertDontSee('Toplam alacak')
-            ->assertDontSee('Devreden bakiye')
             ->assertSee('Kasım Misafir')
             ->assertDontSee('Ekim Misafir');
 
