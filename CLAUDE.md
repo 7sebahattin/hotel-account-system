@@ -1,5 +1,15 @@
 # CLAUDE.md
 
+## KURAL: Roller/yetkiler deploy ile sıfırlanmaz — 7 Kasım 2026
+
+Kullanıcı talimatı: "roller yetkiler alanında bir güncelleme yapılmadıkça burası
+değişmesin". `RolePermissionSeeder` her deploy'da koşar (§15) ama **yıkıcı değildir**:
+mevcut rolün yetkilerine `syncPermissions` UYGULANMAZ; varsayılan matris yalnızca
+(1) rol ilk kez kurulurken ve (2) kodla yeni eklenen (DB'de henüz olmayan) yetki için,
+o yetkiyi varsayılan olarak taşıyan rollere uygulanır. "Roller / Yetkiler" ekranından
+yapılan değişiklikler korunur. Seeder'a `syncPermissions` GERİ EKLENMEZ.
+Test: `SeederPreservesRoleChangesTest`.
+
 ## Onaylı ortak Çöp Kutusu ve Konaklama fatura işareti — 4–6 Kasım 2026
 
 Kullanıcı açık sorulara şu yanıtları vererek onayladı: **tek ve ayrı bir "Çöp Kutusu"
