@@ -57,7 +57,7 @@
     </x-ui.page-header>
 
     {{-- ===================================================== ÖZET KARTLARI --}}
-    <section class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-stay-totals aria-label="Filtreye göre özet">
+    <section class="mt-4 grid gap-3 grid-cols-[repeat(auto-fit,minmax(15rem,1fr))]" data-stay-totals aria-label="Filtreye göre özet">
         <x-ui.kpi-card variant="plain" tone="purple" icon="bed" label="Toplam konaklama"
                        :value="number_format($stays->total(), 0, ',', '.')" hint="kayıt bulundu" />
 

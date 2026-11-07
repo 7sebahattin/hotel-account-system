@@ -61,7 +61,7 @@
 
     {{-- ===================================================== ÖZET KARTLARI --}}
     {{-- Arama/para birimi/hesap türü kapsamını özetler; durum hızlı filtreleri kartları değiştirmez. --}}
-    <section class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-statement-stats aria-label="Cari özet">
+    <section class="mt-4 grid gap-3 grid-cols-[repeat(auto-fit,minmax(15rem,1fr))]" data-statement-stats aria-label="Cari özet">
         <x-ui.kpi-card variant="plain" tone="purple" icon="building" label="Toplam firma"
                        :value="number_format($stats['total'], 0, ',', '.')" hint="kayıt bulundu" />
 
