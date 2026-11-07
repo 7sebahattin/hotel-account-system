@@ -52,13 +52,13 @@
 
         /* Konaklama raporu: tarih ve başlık hizalarını net, kompakt ve tutarlı tut. */
         .stays-print-table { table-layout: fixed; font-size: 9.5pt; }
-        .stays-print-table col.stay-col-date { width: 10%; }
-        .stays-print-table col.stay-col-guest { width: 20%; }
-        .stays-print-table col.stay-col-room { width: 10%; }
-        .stays-print-table col.stay-col-company { width: 18%; }
+        .stays-print-table col.stay-col-date { width: 11%; }
+        .stays-print-table col.stay-col-guest { width: 18%; }
+        .stays-print-table col.stay-col-room { width: 9%; }
+        .stays-print-table col.stay-col-company { width: 17%; }
         .stays-print-table col.stay-col-amount { width: 11%; }
-        .stays-print-table col.stay-col-status { width: 8%; }
-        .stays-print-table col.stay-col-transaction { width: 13%; }
+        .stays-print-table col.stay-col-status { width: 7%; }
+        .stays-print-table col.stay-col-transaction { width: 16%; }
         .stays-print-table th,
         .stays-print-table td { padding: 5px 6px; vertical-align: middle; }
         .stays-print-table thead th {

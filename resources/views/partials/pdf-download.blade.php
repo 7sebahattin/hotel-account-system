@@ -14,8 +14,7 @@
     if (!printButtons.length) { return; }
 
     var style = document.createElement('style');
-    style.textContent = '.pdf-capturing .toolbar,.pdf-capturing .receipt-toolbar,.pdf-capturing .offer-actions{display:none!important}'
-        + '.pdf-capturing body{width:794px;margin:0 auto}';
+    style.textContent = '.pdf-capturing .toolbar,.pdf-capturing .receipt-toolbar,.pdf-capturing .offer-actions{display:none!important}';
     document.head.appendChild(style);
 
     var readyFile = null;
@@ -51,16 +50,30 @@
         setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     }
 
+    // Gövdeyi (body) kopyalamak html2pdf'te yerleşimi kaydırıyordu: sabit A4 genişlikli
+    // (794px) bir kapsayıcıya içerik kopyalanır; araç çubukları ve betikler çıkarılır.
+    function buildSource() {
+        var cs = window.getComputedStyle(document.body);
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'width:794px;box-sizing:border-box;padding:16mm 12mm;background:white;'
+            + 'color:' + cs.color + ';font-family:' + cs.fontFamily + ';line-height:' + cs.lineHeight + ';'
+            + 'font-size:' + (window.innerWidth <= 640 ? '11pt' : cs.fontSize) + ';';
+        wrap.innerHTML = document.body.innerHTML;
+        wrap.querySelectorAll('.toolbar,.receipt-toolbar,.offer-actions,script,[data-pdf-skip]').forEach(function (n) { n.remove(); });
+        return wrap;
+    }
+
     function build() {
+        window.scrollTo(0, 0);
         document.documentElement.classList.add('pdf-capturing');
         return window.html2pdf().set({
             margin: [8, 6, 8, 6],
             filename: fileName(),
             image: { type: 'jpeg', quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, windowWidth: 794, backgroundColor: 'white' },
+            html2canvas: { scale: 2, useCORS: true, windowWidth: Math.max(794, window.innerWidth), scrollX: 0, scrollY: 0, backgroundColor: 'white' },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
             pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.summary', '.carry'] }
-        }).from(document.body).outputPdf('blob').then(function (blob) {
+        }).from(buildSource()).outputPdf('blob').then(function (blob) {
             document.documentElement.classList.remove('pdf-capturing');
             return new File([blob], fileName(), { type: 'application/pdf' });
         }, function (e) {
