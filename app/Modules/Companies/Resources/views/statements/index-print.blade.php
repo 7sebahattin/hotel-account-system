@@ -323,5 +323,6 @@
             <span>Oluşturulma: {{ $generatedAt->format('d.m.Y H:i') }}</span>
         </footer>
     </main>
+@include('partials.pdf-download')
 </body>
 </html>
