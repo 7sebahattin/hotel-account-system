@@ -12,7 +12,6 @@
             'label' => null, // ana grup başlıksızdır
             'items' => [
                 ['route' => 'home', 'label' => 'Ana Sayfa', 'can' => null, 'icon' => 'home'],
-                ['route' => 'trash.index', 'label' => 'Çöp Kutusu', 'can' => Permission::TrashView->value, 'icon' => 'trash'],
             ],
         ],
         [
@@ -62,6 +61,9 @@
     ];
 
     $user = auth()->user();
+
+    // Çöp Kutusu menünün EN ALTINDA, gruplardan ayrı ve kırmızı ikonla durur (7 Kasım 2026, kullanıcı talimatı).
+    $trashItem = ['route' => 'trash.index', 'label' => 'Çöp Kutusu', 'can' => Permission::TrashView->value, 'icon' => 'trash'];
 
     $visibleGroups = [];
 
@@ -161,6 +163,12 @@
         @endif
     @endforeach
 </nav>
+
+@if ($user->can($trashItem['can']))
+    <ul class="border-t border-nav-line px-3 py-2">
+        @include('partials.sidebar-link', ['item' => $trashItem, 'active' => $isActive($trashItem['route']), 'iconClass' => 'text-nav-danger'])
+    </ul>
+@endif
 
 <div>
     {{--
