@@ -11,7 +11,6 @@ use App\Modules\Core\Trash\FinancialPurgeGate;
 use App\Modules\Core\Trash\TrashActionFailed;
 use App\Modules\Ledger\Models\LedgerEntry;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -141,12 +140,8 @@ class ReversalCleanupService
                 continue;
             }
 
-            $query = $class::query()->withoutGlobalScopes();
-            if (in_array(SoftDeletes::class, class_uses_recursive($class), true)) {
-                $query->withTrashed();
-            }
-
-            $existing[$type] = $query->whereIn('id', $entries->pluck('source_id')->filter()->unique()->all())
+            // withoutGlobalScopes() SoftDeletes kapsamını da kaldırır: çöpteki kaynak "var" sayılır.
+            $existing[$type] = $class::query()->withoutGlobalScopes()->whereIn('id', $entries->pluck('source_id')->filter()->unique()->all())
                 ->pluck('id')->map(fn ($id): int => (int) $id)->all();
         }
 
