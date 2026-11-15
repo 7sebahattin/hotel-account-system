@@ -1,5 +1,27 @@
 # CLAUDE.md
 
+## GEÇİCİ "Ters Kayıt Temizliği" ekranı — 15 Kasım 2026
+
+Kullanıcı talimatı: çöp kutusundan ÖNCE ters kayıtla düzeltilmiş (ör. yanlış firmaya
+işlenip iptal edilmiş, kaynak konaklaması artık olmayan) hareketler ekstrede
+"orijinal + [İPTAL]" olarak kalıyor, tıklanamıyor ve çöpe taşınamıyor; "bu kaydı,
+hatta tüm ters kayıtları elle silebileceğim geçici bir alan istiyorum". §6/L1 ve §18'e
+bilerek açılmış dar istisnadır:
+
+- `/trash/ters-kayitlar` (`trash.reversals.index|destroy`), Çöp Kutusu sayfasından
+  bağlantılı; **yalnızca aktif Admin** (`trash.force_delete` + rol kontrolü).
+- Silinen birim her zaman **ÇİFTTİR**: orijinal hareket + onun ters kaydı
+  (`Ledger\Services\ReversalCleanupService`). Çift aynı firma/para biriminde net sıfır
+  olmak zorundadır → **hiçbir bakiye değişmez**. Ters kaydı olmayan (geçerli) hareket bu
+  yoldan silinemez; istekte tek geçersiz kimlik varsa hiçbir satır silinmez.
+- Varsayılan görünüm yalnız **kaynak kaydı silinmiş** çiftlerdir; "Tüm ters kayıtlar"
+  kaynağı duran (iptal/düzeltme geçmişi) çiftleri de gösterir. Çöpteki kaynağın satırları
+  listelenmez (çöp kutusunun kendi akışı).
+- Kapı mevcut `FinancialPurgeGate`tir (yeni migration/tetikleyici YOK); silinen iki
+  satırın tüm değerleri denetim kaydına yazılır. UPDATE korumaları değişmez.
+- Ekran geçicidir; kullanıcı temizliğin bittiğini bildirince controller, view, rota,
+  servis ve test kaldırılır. Test: `ReversalCleanupTest`.
+
 ## KURAL: Roller/yetkiler deploy ile sıfırlanmaz — 7 Kasım 2026
 
 Kullanıcı talimatı: "roller yetkiler alanında bir güncelleme yapılmadıkça burası
