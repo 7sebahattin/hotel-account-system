@@ -15,6 +15,12 @@
         @endif
     </p>
 
+    @if ($canForceDelete && auth()->user()->hasRole('admin'))
+        <p class="mt-3">
+            <x-ui.button :href="route('trash.reversals.index')" variant="secondary">Ters Kayıt Temizliği (geçici)</x-ui.button>
+        </p>
+    @endif
+
     @if ($groups === [])
         <x-ui.card class="mt-4 p-6"><p class="text-sm text-mut">Görüntüleyebileceğiniz bir çöp kutusu grubu yok.</p></x-ui.card>
     @else
